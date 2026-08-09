@@ -7,6 +7,7 @@
     browsergraph sample --pairwise            covering-array sample
     browsergraph run graph.yaml               run a graph from config
     browsergraph serve --port 8800            HTTP API
+    browsergraph bootstrap                    get a working browser, whatever it takes
     browsergraph nodes                        every node kind and its contract
     browsergraph graph graph.yaml --mermaid   draw a graph, audit its contracts
 """
@@ -259,6 +260,16 @@ def cmd_envs(args) -> int:
     return 2
 
 
+def cmd_bootstrap(args) -> int:
+    """Install whatever is needed until a browser actually launches."""
+    from browsergraph.bootstrap import ensure_browser
+    rep = ensure_browser(Engine(args.engine), install=not args.no_install,
+                         apt=not args.no_apt, verbose=True)
+    print()
+    print(rep.text())
+    return 0 if rep.ok else 1
+
+
 def cmd_nodes(args) -> int:
     """The contract table — what every node kind promises."""
     from browsergraph.contracts import describe_all
@@ -347,6 +358,12 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--name")
     ev.add_argument("--no-browsers", action="store_true")
     ev.set_defaults(fn=cmd_envs)
+
+    bs = sub.add_parser("bootstrap", help="install until a browser launches")
+    bs.add_argument("--engine", default="playwright")
+    bs.add_argument("--no-install", action="store_true", help="do not pip/download anything")
+    bs.add_argument("--no-apt", action="store_true", help="do not install system libraries")
+    bs.set_defaults(fn=cmd_bootstrap)
 
     sub.add_parser("nodes", help="node kinds and their contracts").set_defaults(fn=cmd_nodes)
 

@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Core deps: none](https://img.shields.io/badge/core%20deps-stdlib--only-brightgreen)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-516%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-532%20passing-brightgreen)](tests/)
 [![Kaggle](https://img.shields.io/badge/Kaggle-live%20demo-20BEFF?logo=kaggle)](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 
 Composable browser automation. Any engine × binary × transport × display ×
@@ -319,6 +319,47 @@ Adding an engine means writing one adapter and touching no nodes.
 
 `browsergraph doctor` checks all of these and prints the fix for each miss.
 
+## Getting a browser to actually run
+
+The commonest first failure is not a bug in your graph — it is a browser that installed
+and will not start. `ensure_browser` never trusts an installer's exit code; it re-launches
+after every step, because launching is the only evidence that counts.
+
+```bash
+browsergraph bootstrap        # probe -> pip -> binary -> system libs -> system Chrome
+```
+
+```
+[ok  ] browser already launches
+browser ready: playwright (playwright-bundled)
+```
+
+On a slim container the same command installs the shared libraries Chromium needs,
+falls back to a Chrome already on `PATH`, and — if all of it fails — says exactly what
+is missing and which command fixes it. Container flags (`--no-sandbox`,
+`--disable-dev-shm-usage`) are added automatically when running as root, because
+Chrome's sandbox cannot initialise there at all.
+
+## When a configuration fails, the next one is tried
+
+```python
+from browsergraph.strategy import escalate
+result = escalate(graph, ladder(Spec()), build, url=url)
+```
+
+```
+  1. http        ok=False  timeout        wait_retry
+  2. http        ok=False  timeout        wait_retry
+  3. playwright  ok=True
+succeeded on attempt 3
+```
+
+Each failure is *diagnosed*, and the diagnosis chooses what to try next: a missing
+element on an engine with no JavaScript runtime suggests a different engine, not a longer
+wait. Retries are bounded per spec — an unbounded retry never reaches the rest of the
+ladder. A terminal diagnosis (challenge, block) stops immediately rather than escalating
+into a ban, and `SiteMemory` puts the winner first next time.
+
 ## Contracts
 
 Every check in this library reads a node's own declarations — the linter trusts
@@ -361,7 +402,7 @@ video included. There is a [runnable tour notebook](notebooks/browsergraph-tour.
 
 ```bash
 pip install -e ".[dev]"
-pytest -q          # 516 tests; no browser required, browser suites skip when absent
+pytest -q          # 532 tests; no browser required, browser suites skip when absent
 mypy browsergraph --ignore-missing-imports
 ruff check browsergraph
 ```

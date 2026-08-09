@@ -56,35 +56,20 @@ code("""
 """)
 
 code("""
-import subprocess, sys, time
-t0 = time.time()
-log = subprocess.run([sys.executable, '-m', 'playwright', 'install', 'chromium'],
-                     capture_output=True, text=True)
-print(f'installer exit={log.returncode}  ({time.time()-t0:.0f}s)')
-
-# Decide by launching one, not by trusting the installer's exit code. An install
-# can succeed while the browser cannot start — a missing shared library is the
-# usual reason — and every cell below branches on this flag, so it needs to mean
-# "a browser actually runs here".
+# The installer's exit code is not evidence. `ensure_browser` probes, installs
+# the binary, installs the system libraries a slim image omits, falls back to a
+# Chrome already on PATH — and re-launches after every step, because launching
+# is the only proof that counts. It prints exactly what it tried.
 from browsergraph import Engine, Spec
-from browsergraph.dimensions import Display
+from browsergraph.bootstrap import ensure_browser
+from browsergraph.dimensions import Display, Stealth
 from browsergraph.drivers import build
-from browsergraph.drivers.playwright_driver import container_args, in_container
 
-# Kaggle runs as root, where Chrome's setuid sandbox cannot initialise. The
-# failure is 'TargetClosedError: Target page, context or browser has been
-# closed', which names neither the cause nor the fix, so browsergraph detects
-# the situation and adds the flags itself.
-print('container detected:', in_container(), '->', container_args())
-
-try:
-    _b = build(Spec(engine=Engine.PLAYWRIGHT, display=Display.HEADLESS))
-    _b.start(); _b.goto('about:blank'); _b.stop()
-    HAVE_BROWSER = True
-except Exception as e:
-    HAVE_BROWSER = False
-    print('browser unavailable:', type(e).__name__, str(e)[:300])
-print('HAVE_BROWSER =', HAVE_BROWSER)
+boot = ensure_browser(verbose=True)
+print()
+print(boot.text())
+HAVE_BROWSER = boot.ok
+EXEC_PATH = boot.executable_path        # '' means the playwright-bundled build
 """)
 
 # ---------------------------------------------------------------- doctor ---
@@ -130,7 +115,8 @@ TMP = pathlib.Path(tempfile.mkdtemp(prefix='bg-'))
  <div class=card><h2>Request a quote</h2>
   <button id=quote>Request quote</button><div id=out></div></div>
  <div class=card><h2>About</h2><p>We are a general contractor specialising in
-  commercial roofing, gutters and sheet metal fabrication.</p></div>
+  commercial roofing, gutters and sheet metal fabrication.</p>
+  <p><a id=more href="/index.html">More about us</a></p></div>
 </main>
 <script>quote.onclick=()=>{out.textContent='Quote requested — we will call you back.'}</script>
 </body></html>""", encoding='utf-8')
@@ -310,17 +296,25 @@ exactly the lie that makes BG003 pass on a graph that is not safe.
 
 code("""
 from browsergraph.nodes.checked import Checked, ContractViolation, checked
+from browsergraph.dimensions import Stealth
 
 class SneakyClick(Node):
     kind = 'sneaky_click'
     mutates = False                       # the lie
+    TARGET = '#quote'
     def run(self, ctx):
-        ctx.page.click('#quote')          # the truth
+        ctx.page.click(self.TARGET)       # the truth
         return ctx
 
-# A real chromium against the real page above — the violation is detected from
-# what the node actually did, not from anything declared or simulated.
-spec = Spec(engine=Engine.PLAYWRIGHT, display=Display.HEADLESS)
+# A real engine against the real page above — the violation is detected from
+# what the node actually did, not from anything declared or simulated. With a
+# browser it clicks a button; without one, engine=http follows a link. Either
+# way `click` is a mutating call, and the recorder saw it.
+if HAVE_BROWSER:
+    spec = Spec(engine=Engine.PLAYWRIGHT, display=Display.HEADLESS)
+else:
+    spec = Spec(engine=Engine.HTTP, stealth=Stealth.UNDETECTED)
+    SneakyClick.TARGET = '#more'
 g = Graph('sneaky').add(Navigate(f'{BASE}/index.html')).add(Checked(SneakyClick()))
 try:
     run(g, spec, build(spec))
@@ -592,7 +586,86 @@ print('\\nNothing invented where there was nothing to find — an empty field is
 
 
 md("""
-## 9. Token reduction: eight strategies, then focus
+## 9. When one configuration fails, try the others — automatically
+
+A graph is portable, but not every *spec* can run it. The page below renders its
+price with JavaScript, so the browser-less engine cannot possibly succeed no matter
+how long it waits.
+
+`escalate` walks a ladder of specs, and after each failure a **diagnosis** decides what
+to try next — this is the part that makes it more than a retry loop. It also stops dead
+on a terminal diagnosis: escalating harder against a site that has already flagged you
+is how accounts are lost.
+""")
+
+code("""
+from browsergraph.strategy import escalate, ladder, suggest
+from browsergraph.errors import classify as classify_error
+
+(TMP / 'app.html').write_text(
+    '<!doctype html><html><head><title>App</title></head><body><div id=root></div>'
+    '<script>document.getElementById("root").innerHTML ='
+    ' "<h1 id=price>$49.00</h1>";</script></body></html>', encoding='utf-8')
+
+price_graph = (Graph('price')
+               .add(Navigate(f'{BASE}/app.html'))
+               .add(WaitFor('#price'))
+               .add(Extract('#price', into='price')))
+
+rungs = [Spec(engine=Engine.HTTP, stealth=Stealth.UNDETECTED)]     # cannot run JS
+if HAVE_BROWSER:
+    rungs.append(Spec(engine=Engine.PLAYWRIGHT, display=Display.HEADLESS))
+
+esc = escalate(price_graph, rungs, build, url=f'{BASE}/app.html',
+               sleep=lambda s: None)
+print(esc.summary(), '\\n')
+for i, a in enumerate(esc.attempts, 1):
+    d = a.diagnosis
+    print(f"  {i}. {a.spec.engine.value:<11} ok={str(a.ok):<6}"
+          f"{(d.failure.value if d else '-'):<15}{(d.response.value if d else '')}")
+if esc.ok:
+    print('\\nextracted after escalating:', esc.attempts[-1].result.context.data['price'])
+""")
+
+md("""
+Two details worth pointing at.
+
+**The retry is bounded.** A timeout is a retryable failure, so the browser-less engine is
+tried again — but only so many times. An unbounded retry is not a retry policy; it is a
+way to never reach the rest of the ladder. (This was a real bug: the escalator spent all
+six attempts re-trying the engine that could never work, and never reached the browser.)
+
+**The suggestion is targeted, not random.** A missing element on an engine with no
+JavaScript runtime cannot be waited into existence, so the suggested next step is a
+different engine rather than a longer dwell.
+""")
+
+code("""
+no_js = Spec(engine=Engine.HTTP, stealth=Stealth.UNDETECTED)
+diag = classify_error('timeout waiting for #price')
+print('diagnosis :', diag.failure.value, '->', diag.response.value,
+      f'(terminal={diag.terminal})')
+print('suggested next, for an engine that cannot run JavaScript:')
+for s in suggest(no_js, diag)[:3]:
+    print('   ', s.describe())
+
+print('\\nand for a blocked browser — evasion, not repetition:')
+blocked = classify_error('403 Forbidden')
+print('diagnosis :', blocked.failure.value, '->', blocked.response.value,
+      f'(terminal={blocked.terminal})  <- stops, never escalates into a ban')
+for s in suggest(Spec(engine=Engine.PLAYWRIGHT), classify_error('429 too many requests'))[:3]:
+    print('   ', s.describe())
+""")
+
+md("""
+And once something works, it is remembered: `SiteMemory` puts the winning spec first for
+that domain next time, so escalation is a one-off cost rather than a per-run tax. The
+learning system in section 13 generalises the same idea across *similar* sites.
+""")
+
+
+md("""
+## 10. Token reduction: eight strategies, then focus
 
 Raw HTML is mostly framework noise. Preprocessing trades structure against size; `focus`
 then keeps only the chunks that answer the question **plus their neighbours** — because
@@ -630,7 +703,7 @@ plt.tight_layout(); plt.show()
 
 # -------------------------------------------------------------- the linter -
 md("""
-## 10. The linter, and the failure that motivated it
+## 11. The linter, and the failure that motivated it
 
 **BG003 — a graph that changes remote state but never verifies the outcome.**
 
@@ -661,7 +734,7 @@ plt.tight_layout(); plt.show()
 
 # ------------------------------------------------------------ combinations -
 md("""
-## 11. Don't enumerate the space — sample it
+## 12. Don't enumerate the space — sample it
 
 Incompatible combinations are rejected *with reasons*. Full enumeration explodes, so
 `sample` builds a pairwise covering array: most failures are two-value interactions, and
@@ -707,7 +780,7 @@ plt.tight_layout(); plt.show()
 
 # ------------------------------------------------------------- learning ----
 md("""
-## 12. Self-tuning: learn from similar sites
+## 13. Self-tuning: learn from similar sites
 
 Outcomes generalise `site -> org -> sector -> platform -> global`, weighted by
 specificity. Evidence is reported honestly: one success is *p≈0.67, n=1* after smoothing,
@@ -780,7 +853,7 @@ print('failure            :', Outcome(ok=False, tokens=10).utility(),
 
 # --------------------------------------------------------------- errors ----
 md("""
-## 13. A CAPTCHA is not a missing element
+## 14. A CAPTCHA is not a missing element
 
 Retrying is not a universal remedy. A bot wall must **abort** — retrying into one is how
 accounts get banned. Classification reads the page, not just the error string, because a
@@ -821,7 +894,7 @@ plt.tight_layout(); plt.show()
 
 # -------------------------------------------------------------- throttle ---
 md("""
-## 14. Politeness belongs where the contention is
+## 15. Politeness belongs where the contention is
 
 A per-crawler delay lets ten concurrent tasks make ten requests per second at one host.
 The limiter is **per-domain and process-wide**, and honours a robots `Crawl-delay` when
@@ -850,7 +923,7 @@ print('robots delay honoured:', lim.policy_for('slow.example').min_interval)
 
 # ------------------------------------------------------------ extraction ---
 md("""
-## 15. Deterministic extraction — conservative on purpose
+## 16. Deterministic extraction — conservative on purpose
 
 No model involved. A false positive silently poisons a dataset; a miss is a visible empty
 field. So dates, repeated digits and asset filenames are rejected rather than guessed at.
@@ -885,7 +958,7 @@ for label, text in [('this page', page.text),
 
 # ------------------------------------------------------------- the rest ----
 md("""
-## 16. Tasks, control flow and model routing
+## 17. Tasks, control flow and model routing
 
 Control flow lives *inside* the graph — `branch`, `for_each`, `subgraph`, `frontier`,
 `retry_until` are nodes, so healing, supervision and the linter apply to crawling too.
@@ -920,7 +993,7 @@ than being silently substituted.
 """)
 
 md("""
-## 17. Real models, on real pages
+## 18. Real models, on real pages
 
 Everything so far is deterministic. The LLM nodes are not, and they are the ones where a
 wrong answer is most expensive: a model asked to confirm an outcome will confirm it, if

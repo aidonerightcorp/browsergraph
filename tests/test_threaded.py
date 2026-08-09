@@ -209,3 +209,55 @@ def test_container_args_can_be_switched_off(server):
         assert browser.goto(f"{server}/p.html").title == "Threaded"
     finally:
         browser.stop()
+
+
+# --- bootstrap --------------------------------------------------------------
+
+def test_missing_library_is_parsed_from_a_real_launch_log():
+    """The Kaggle failure this module exists for."""
+    from browsergraph.bootstrap import missing_library
+    log = ("chrome-headless-shell: error while loading shared libraries: "
+           "libatk-1.0.so.0: cannot open shared object file: No such file")
+    assert missing_library(log) == "libatk-1.0.so.0"
+    assert missing_library("TargetClosedError: browser has been closed") == ""
+    assert missing_library("") == ""
+
+
+def test_bootstrap_does_nothing_when_a_browser_already_works():
+    """It must not reinstall on every call."""
+    from browsergraph.bootstrap import ensure_browser
+    rep = ensure_browser(install=False, apt=False)
+    assert len(rep.steps) <= 3, "a working browser should short-circuit"
+    if rep.ok:
+        assert rep.steps[0].ok
+
+
+def test_bootstrap_never_installs_when_asked_not_to(monkeypatch):
+    import browsergraph.bootstrap as bs
+    calls = []
+    monkeypatch.setattr(bs, "_run", lambda cmd, timeout=900: calls.append(cmd) or (0, ""))
+    monkeypatch.setattr(bs, "launches", lambda *a, **k: (False, "TargetClosedError: x"))
+    rep = bs.ensure_browser(install=False, apt=False)
+    assert calls == [], f"ran commands despite install=False: {calls}"
+    assert not rep.ok
+
+
+def test_bootstrap_reports_the_browser_less_route_when_all_else_fails(monkeypatch):
+    """engine=http needs none of this, and the report should say so."""
+    import browsergraph.bootstrap as bs
+    monkeypatch.setattr(bs, "launches", lambda *a, **k: (False, "TargetClosedError: x"))
+    monkeypatch.setattr(bs, "shutil", type("S", (), {"which": staticmethod(lambda n: None)}))
+    rep = bs.ensure_browser(install=False, apt=False)
+    assert "engine=http" in rep.text()
+    assert "apt-get install" in rep.text(), "should print an actionable command"
+
+
+def test_bootstrap_uses_a_system_browser_when_the_bundled_one_fails(monkeypatch):
+    import browsergraph.bootstrap as bs
+    monkeypatch.setattr(bs, "shutil",
+                        type("S", (), {"which": staticmethod(
+                            lambda n: "/usr/bin/google-chrome" if n == "google-chrome" else None)}))
+    monkeypatch.setattr(bs, "launches",
+                        lambda engine=None, executable_path="": (bool(executable_path), "no"))
+    rep = bs.ensure_browser(install=False, apt=False)
+    assert rep.ok and rep.executable_path == "/usr/bin/google-chrome"

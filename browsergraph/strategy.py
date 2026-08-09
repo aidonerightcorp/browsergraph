@@ -20,6 +20,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from browsergraph.dimensions import (
+    ENGINE_RUNS_JS,
     Behavior,
     Display,
     Engine,
@@ -49,6 +50,18 @@ def suggest(spec: Spec, diagnosis: Diagnosis) -> list[Spec]:
             out.append(cand)
 
     f = diagnosis.failure
+
+    # An element that is missing or late on a JavaScript-rendered page cannot be
+    # waited into existence by an engine that has no JavaScript runtime. When
+    # engine=http misses a selector, the useful next move is a browser — not a
+    # longer dwell, which is what every generic timeout rule would suggest.
+    # `mock` is excluded deliberately: it has no JavaScript runtime either, but
+    # it is a test double serving fixtures, so a real browser would not find the
+    # missing element any more than it did.
+    if f in (Failure.SELECTOR_MISS, Failure.TIMEOUT, Failure.VERIFY) \
+            and not ENGINE_RUNS_JS.get(spec.engine, True) \
+            and spec.engine is not Engine.MOCK:
+        add(engine=Engine.PLAYWRIGHT, stealth=Stealth.NONE)
 
     if f in (Failure.SELECTOR_MISS, Failure.VERIFY):
         # let the model resolve selectors / confirm outcomes
@@ -192,16 +205,21 @@ class EscalationResult:
 def escalate(graph: Graph, specs: list[Spec], browser_factory,
              url: str = "", memory: SiteMemory | None = None,
              adaptive: bool = True, max_attempts: int = 6,
-             sleep=time.sleep) -> EscalationResult:
+             per_spec_retries: int = 1, sleep=time.sleep) -> EscalationResult:
     """Try specs until one succeeds.
 
     `adaptive` lets a diagnosis insert targeted suggestions ahead of the
     remaining ladder — a timeout should try a longer dwell before it tries a
     different engine.
+
+    `per_spec_retries` bounds how often one spec may be retried after a
+    retryable failure. It exists because an unbounded retry is not a retry
+    policy, it is a way to never reach the rest of the ladder.
     """
     queue = list(memory.reorder(url, specs) if (memory and url) else specs)
     attempts: list[Attempt] = []
     tried: set[str] = set()
+    retries: dict[str, int] = {}
 
     while queue and len(attempts) < max_attempts:
         spec = queue.pop(0)
@@ -242,11 +260,20 @@ def escalate(graph: Graph, specs: list[Spec], browser_factory,
             return EscalationResult(False, attempts, stopped_early=str(diag))
 
         if diag.response is Response.WAIT_RETRY:
-            sleep(diag.backoff())
-            if spec.describe() in tried:
+            # Retry the same spec, but a bounded number of times. Without a cap
+            # this starves the ladder: a timeout re-queues the failing spec at
+            # the front and un-tries it, so an engine that can never succeed
+            # (no JavaScript runtime, say) consumes every attempt and the
+            # alternatives below it are never reached — which defeats the entire
+            # point of escalating.
+            used = retries.get(spec.describe(), 0)
+            if used < per_spec_retries:
+                retries[spec.describe()] = used + 1
+                sleep(diag.backoff())
                 tried.discard(spec.describe())
-            queue.insert(0, spec)
-            continue
+                queue.insert(0, spec)
+                continue
+            # give up on this spec and fall through to the alternatives
 
         if adaptive:
             for cand in reversed(suggest(spec, diag)):

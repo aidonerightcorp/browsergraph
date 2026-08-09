@@ -16,6 +16,7 @@ from browsergraph.dimensions.capability import (
     ENGINE_FAMILY,
     ENGINE_IMPORT,
     ENGINE_REQUIREMENT,
+    ENGINE_RUNS_JS,
     NATIVELY_UNDETECTED,
 )
 from browsergraph.dimensions.enums import (
@@ -38,6 +39,6 @@ __all__ = [
     "Transport", "Vision",
     "Behavior", "Identity", "LLMConfig", "Spec",
     "validate", "is_valid",
-    "ENGINE_BINARIES", "ENGINE_FAMILY", "ENGINE_IMPORT", "ENGINE_REQUIREMENT",
+    "ENGINE_BINARIES", "ENGINE_FAMILY", "ENGINE_RUNS_JS", "ENGINE_IMPORT", "ENGINE_REQUIREMENT",
     "NATIVELY_UNDETECTED",
 ]

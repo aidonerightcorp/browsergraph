@@ -25,6 +25,16 @@ ENGINE_FAMILY: dict[str, str] = {
     Engine.MOCK: "mock",
 }
 
+#: Does this engine execute JavaScript?
+#:
+#: The distinction is not cosmetic: on a JavaScript-rendered page, an engine
+#: without a runtime cannot be made to succeed by waiting longer, retrying, or
+#: any other tuning. Escalation reads this to know that the useful next move is
+#: a different engine rather than a different setting.
+ENGINE_RUNS_JS: dict[str, bool] = {
+    engine: family not in ("http", "mock") for engine, family in ENGINE_FAMILY.items()
+}
+
 #: pip requirement per engine, surfaced by `browsergraph doctor`.
 ENGINE_REQUIREMENT: dict[str, str] = {
     Engine.PLAYWRIGHT: "playwright",
