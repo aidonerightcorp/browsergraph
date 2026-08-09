@@ -16,7 +16,12 @@ ENGINE_FAMILY: dict[str, str] = {
     Engine.SELENIUM_UC: "selenium",
     Engine.SELENIUMBASE: "selenium",
     Engine.NODRIVER: "cdp",
+    Engine.ZENDRIVER: "cdp",
+    Engine.PYDOLL: "cdp",
+    Engine.BOTASAURUS: "selenium",
+    Engine.REBROWSER: "playwright",
     Engine.CDP: "cdp",
+    Engine.HTTP: "http",
     Engine.MOCK: "mock",
 }
 
@@ -30,7 +35,12 @@ ENGINE_REQUIREMENT: dict[str, str] = {
     Engine.SELENIUM_UC: "selenium undetected-chromedriver",
     Engine.SELENIUMBASE: "seleniumbase",
     Engine.NODRIVER: "nodriver",
+    Engine.ZENDRIVER: "zendriver",
+    Engine.PYDOLL: "pydoll-python",
+    Engine.BOTASAURUS: "botasaurus",
+    Engine.REBROWSER: "rebrowser-playwright",
     Engine.CDP: "websockets",
+    Engine.HTTP: "curl-cffi selectolax",
     Engine.MOCK: "",
 }
 
@@ -44,7 +54,12 @@ ENGINE_IMPORT: dict[str, str] = {
     Engine.SELENIUM_UC: "undetected_chromedriver",
     Engine.SELENIUMBASE: "seleniumbase",
     Engine.NODRIVER: "nodriver",
+    Engine.ZENDRIVER: "zendriver",
+    Engine.PYDOLL: "pydoll-python",
+    Engine.BOTASAURUS: "botasaurus",
+    Engine.REBROWSER: "rebrowser-playwright",
     Engine.CDP: "websockets",
+    Engine.HTTP: "curl-cffi selectolax",
     Engine.MOCK: "",
 }
 
@@ -66,9 +81,20 @@ ENGINE_BINARIES: dict[str, tuple] = {
     Engine.NODRIVER: (Binary.SYSTEM_CHROME, Binary.CHROME_FOR_TESTING, Binary.BRAVE),
     Engine.CDP: (Binary.BUNDLED_CHROMIUM, Binary.SYSTEM_CHROME,
                  Binary.CHROME_FOR_TESTING, Binary.BRAVE),
+    Engine.ZENDRIVER: (Binary.SYSTEM_CHROME, Binary.CHROME_FOR_TESTING, Binary.BRAVE),
+    Engine.PYDOLL: (Binary.SYSTEM_CHROME, Binary.CHROME_FOR_TESTING, Binary.BRAVE),
+    Engine.BOTASAURUS: (Binary.SYSTEM_CHROME, Binary.CHROME_FOR_TESTING),
+    Engine.REBROWSER: (Binary.BUNDLED_CHROMIUM, Binary.SYSTEM_CHROME,
+                       Binary.CHROME_FOR_TESTING, Binary.BRAVE),
+    # No browser is launched, so the binary axis does not apply.
+    Engine.HTTP: tuple(Binary),
     Engine.MOCK: tuple(Binary),
 }
 
 #: Engines that already provide undetected-grade evasion themselves.
 NATIVELY_UNDETECTED = (Engine.PATCHRIGHT, Engine.SELENIUM_UC, Engine.SELENIUMBASE,
-                        Engine.NODRIVER, Engine.CAMOUFOX)
+                       Engine.NODRIVER, Engine.CAMOUFOX, Engine.ZENDRIVER,
+                       Engine.PYDOLL, Engine.BOTASAURUS, Engine.REBROWSER,
+                       # curl_cffi impersonates a real TLS/HTTP2 fingerprint,
+                       # which is the layer checked before any JS runs.
+                       Engine.HTTP)

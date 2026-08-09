@@ -22,6 +22,22 @@ def _requirement(engine: Engine) -> str:
     return f"pip install {req}" if req else ""
 
 
+def _loop_is_running() -> bool:
+    """True when this thread already has a running asyncio loop.
+
+    Playwright's sync API refuses to start in that case, and the loop cannot
+    simply be replaced — a running loop is not swappable. Some CDP-based
+    libraries leave one behind, which would otherwise make playwright
+    unusable for the rest of the process through no fault of the caller.
+    """
+    import asyncio
+    try:
+        asyncio.get_running_loop()
+        return True
+    except RuntimeError:
+        return False
+
+
 def build(spec: Spec, **kwargs) -> BrowserPort:
     """Construct the BrowserPort for this spec.
 
@@ -34,6 +50,20 @@ def build(spec: Spec, **kwargs) -> BrowserPort:
         return IsolatedBrowser(spec, **kwargs)
 
     family = ENGINE_FAMILY.get(spec.engine)
+
+    if family == "playwright" and _loop_is_running():
+        # Route through a worker process rather than failing: the adapter is
+        # identical, and the alternative is an error the caller cannot act on.
+        from browsergraph.isolate import env_for
+        env = env_for(spec.engine)
+        if env.exists:
+            from browsergraph.drivers.isolated import IsolatedBrowser
+            return IsolatedBrowser(spec, **kwargs)
+        raise DriverUnavailable(
+            f"{spec.engine.value} cannot start: another library left a running "
+            f"asyncio loop in this thread, and playwright's sync API refuses "
+            f"to run inside one. Build an isolated environment to work around "
+            f"it: browsergraph envs create --name {env.name}")
 
     if family == "mock":
         from browsergraph.drivers.mock import MockBrowser
@@ -56,6 +86,15 @@ def build(spec: Spec, **kwargs) -> BrowserPort:
                 f"{spec.engine.value} adapter unavailable: {e}. {_requirement(spec.engine)}"
             ) from e
         return SeleniumBrowser(spec, **kwargs)
+
+    if family == "http":
+        try:
+            from browsergraph.drivers.http_driver import HttpBrowser
+        except ImportError as e:  # pragma: no cover - depends on env
+            raise DriverUnavailable(
+                f"engine=http needs curl-cffi: {e}. {_requirement(spec.engine)}"
+            ) from e
+        return HttpBrowser(spec, **kwargs)
 
     if family == "cdp":
         raise DriverUnavailable(

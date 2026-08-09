@@ -22,7 +22,12 @@ class Engine(str, Enum):
     SELENIUM_UC = "selenium_uc"              # undetected-chromedriver
     SELENIUMBASE = "seleniumbase"            # seleniumbase UC mode + tooling
     NODRIVER = "nodriver"                    # uc successor, no webdriver binary
+    ZENDRIVER = "zendriver"                  # async-first undetectable, nodriver fork
+    PYDOLL = "pydoll"                        # chromium via CDP, no webdriver binary
+    BOTASAURUS = "botasaurus"                # batteries-included scraping framework
+    REBROWSER = "rebrowser"                  # patched playwright runtime
     CDP = "cdp"                              # raw DevTools protocol
+    HTTP = "http"                            # no browser: TLS-impersonated fetch
     MOCK = "mock"                            # in-memory, for tests and dry runs
 
 

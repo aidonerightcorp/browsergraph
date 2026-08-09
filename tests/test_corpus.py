@@ -26,7 +26,9 @@ from browsergraph.tasks import make as make_task
 
 from tests.corpus import CORPUS, by_category
 
-TMP = pathlib.Path(tempfile.gettempdir()) / "bg_corpus"
+# Disk-backed, not /tmp: on this host /tmp is a RAM tmpfs, so browser
+# downloads, videos and screenshots consume memory and hit its quota.
+TMP = pathlib.Path(__file__).resolve().parent.parent / ".artifacts" / "bg_corpus"
 TMP.mkdir(exist_ok=True)
 
 

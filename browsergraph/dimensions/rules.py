@@ -35,6 +35,13 @@ def validate(spec: Spec) -> list[str]:
         problems.append(
             f"stealth=undetected needs an evasion engine "
             f"({', '.join(e.value for e in NATIVELY_UNDETECTED)}), not {spec.engine.value}")
+    if spec.engine is Engine.HTTP:
+        if spec.vision is not Vision.NONE:
+            problems.append("engine=http renders nothing, so vision has no image")
+        if spec.capture in (Capture.VIDEO, Capture.TRACE, Capture.VIDEO_AND_TRACE):
+            problems.append(f"engine=http cannot produce {spec.capture.value}")
+        if spec.display in (Display.HEADED, Display.VNC):
+            problems.append("engine=http has no display")
     if spec.engine is Engine.CAMOUFOX and spec.transport is not Transport.LOCAL:
         problems.append("camoufox runs locally only")
     if spec.engine in (Engine.SELENIUM_UC, Engine.NODRIVER) and \

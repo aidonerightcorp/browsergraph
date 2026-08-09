@@ -79,6 +79,17 @@ def _strip_noise(html: str) -> str:
     return _COMMENT.sub(" ", _SCRIPTY.sub(" ", html or ""))
 
 
+def backends() -> dict[str, bool]:
+    """Which optional extraction backends are available on this machine."""
+    import importlib.util as _u
+    return {name: _u.find_spec(mod) is not None for name, mod in (
+        ("trafilatura", "trafilatura"),      # readability upgrade
+        ("selectolax", "selectolax"),        # fast CSS over served HTML
+        ("resiliparse", "resiliparse"),      # very fast text extraction
+        ("markdownify", "markdownify"),      # richer html->markdown
+    )}
+
+
 def clean_html(html: str) -> str:
     """Drop scripts/styles/comments and every attribute except the useful ones."""
     def prune(m: re.Match) -> str:
@@ -169,12 +180,34 @@ def accessibility(html: str, limit: int = 300) -> str:
     return "\n".join(rows)
 
 
+def _trafilatura(html: str) -> str | None:
+    """Best-in-class boilerplate removal, when installed.
+
+    Optional on purpose: the built-in density heuristic keeps the core
+    stdlib-only, and a missing extra must degrade rather than crash.
+    """
+    try:
+        import trafilatura
+    except ImportError:
+        return None
+    try:
+        out = trafilatura.extract(html, include_comments=False,
+                                  include_tables=True, favor_precision=True)
+    except Exception:
+        return None
+    return out or None
+
+
 def readability(html: str) -> str:
     """The densest text block — an approximation of 'the article'.
 
     Picks the container with the best text-to-markup ratio rather than the
     longest, so a nav sidebar full of links does not win.
     """
+    best_effort = _trafilatura(html)
+    if best_effort and len(best_effort) > 80:
+        return best_effort
+
     src = _strip_noise(html)
     # A page that marks its own main content is telling us where it is; density
     # scoring is the fallback for pages that do not.
