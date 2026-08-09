@@ -140,13 +140,17 @@ def test_unknown_node_kind_is_400_not_a_crash(api):
 
 
 def test_missing_engine_reports_503(api):
-    """An engine that cannot launch is unavailable, not a bad request."""
+    """An engine that cannot launch is unavailable, not a bad request.
+
+    `cdp` is the raw protocol with no client library behind it, so its refusal
+    must name what to use instead rather than merely declining.
+    """
     status, body = post(api, "/run", {
         "spec": {"engine": "cdp"},
         "nodes": [{"kind": "navigate", "url": "https://example.com"}],
     })
     assert status == 503, body
-    assert "adapter" in body["error"] or "not implemented" in body["error"]
+    assert "remote_cdp" in body["error"] or "nodriver" in body["error"], body["error"]
 
 
 def test_post_to_unknown_path_is_404(api):

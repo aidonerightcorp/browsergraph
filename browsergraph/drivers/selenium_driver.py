@@ -53,39 +53,69 @@ class SeleniumBrowser:
         from selenium import webdriver  # type: ignore
 
         ident = self.spec.identity
+        firefox = self.spec.binary is Binary.FIREFOX
         opts: Any     # Firefox and Chrome option objects are unrelated types
-        if self.spec.binary is Binary.FIREFOX:
-            opts = webdriver.FirefoxOptions()
-        else:
-            opts = webdriver.ChromeOptions()
+        opts = webdriver.FirefoxOptions() if firefox else webdriver.ChromeOptions()
 
         # undetected-chromedriver injects its own headless handling; adding
         # --headless=new as well makes Chrome start in a mode the patched
         # driver cannot attach to ("cannot connect to chrome").
         wants_uc_early = (self.spec.engine in (Engine.SELENIUM_UC, Engine.SELENIUMBASE)
                           or self.spec.stealth is Stealth.UNDETECTED)
-        if self.spec.display is Display.HEADLESS and not wants_uc_early:
-            opts.add_argument("--headless=new")
-        opts.add_argument(f"--window-size={ident.viewport[0]},{ident.viewport[1]}")
 
-        # Chrome will not start as root in a container without these; the
-        # failure otherwise is an opaque "cannot connect to chrome". Firefox
-        # needs neither. See drivers.playwright_driver.container_args.
-        if self.spec.binary is not Binary.FIREFOX:
+        if firefox:
+            # Firefox takes none of Chrome's flag syntax. `--headless=new` and
+            # `--window-size=W,H` are silently useless at best; geckodriver
+            # rejects the launch at worst.
+            if self.spec.display is Display.HEADLESS:
+                opts.add_argument("-headless")
+            # Firefox takes the value as a separate argument, not `--width=N`.
+            opts.add_argument("--width")
+            opts.add_argument(str(ident.viewport[0]))
+            opts.add_argument("--height")
+            opts.add_argument(str(ident.viewport[1]))
+            if ident.user_agent:
+                opts.set_preference("general.useragent.override", ident.user_agent)
+            if ident.locale:
+                opts.set_preference("intl.accept_languages", ident.locale)
+            if ident.proxy:
+                opts.set_preference("network.proxy.type", 1)
+            if ident.profile_dir and self.spec.transport is Transport.LOCAL:
+                opts.add_argument("-profile")
+                opts.add_argument(ident.profile_dir)
+        else:
+            if self.spec.display is Display.HEADLESS and not wants_uc_early:
+                opts.add_argument("--headless=new")
+            opts.add_argument(f"--window-size={ident.viewport[0]},{ident.viewport[1]}")
+            # Chrome will not start as root in a container without these; the
+            # failure otherwise is an opaque "cannot connect to chrome".
             from browsergraph.drivers.playwright_driver import container_args, in_container
             for arg in list(self.spec.extra.get("launch_args", [])):
                 opts.add_argument(arg)
             if self.spec.extra.get("container_args", in_container()):
                 for arg in container_args():
                     opts.add_argument(arg)
-        if ident.user_agent:
-            opts.add_argument(f"--user-agent={ident.user_agent}")
-        if ident.proxy:
-            opts.add_argument(f"--proxy-server={ident.proxy}")
-        if ident.profile_dir and self.spec.transport is Transport.LOCAL:
-            opts.add_argument(f"--user-data-dir={ident.profile_dir}")
+            if ident.user_agent:
+                opts.add_argument(f"--user-agent={ident.user_agent}")
+            if ident.proxy:
+                opts.add_argument(f"--proxy-server={ident.proxy}")
+            if ident.profile_dir and self.spec.transport is Transport.LOCAL:
+                opts.add_argument(f"--user-data-dir={ident.profile_dir}")
+
+        # Resolve the binary ourselves. What is on PATH is frequently a wrapper
+        # script — Ubuntu's /usr/bin/firefox is the snap launcher, and Chrome and
+        # Brave ship the same shape — and a driver needs the real program. See
+        # browsergraph.binaries.
         if self.executable_path:
             opts.binary_location = self.executable_path
+        else:
+            from browsergraph.binaries import resolve
+            found = resolve(self.spec.binary)
+            if found.ok:
+                opts.binary_location = found.path
+            elif found.wrapper:
+                raise RuntimeError(
+                    f"{found.explain()}. selenium cannot drive a wrapper script.")
 
         # The engine decides the launcher; stealth alone is not enough, since
         # engine=selenium_uc must use undetected-chromedriver whatever the

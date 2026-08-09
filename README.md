@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Core deps: none](https://img.shields.io/badge/core%20deps-stdlib--only-brightgreen)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-532%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-559%20passing-brightgreen)](tests/)
 [![Kaggle](https://img.shields.io/badge/Kaggle-live%20demo-20BEFF?logo=kaggle)](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 
 Composable browser automation. Any engine × binary × transport × display ×
@@ -319,6 +319,56 @@ Adding an engine means writing one adapter and touching no nodes.
 
 `browsergraph doctor` checks all of these and prints the fix for each miss.
 
+## Every engine, every browser, headless and headed
+
+Measured, not declared — this is a real launch matrix against a served page, one row per
+combination that the validator accepts. `browsergraph doctor` reports the same for your
+machine.
+
+| engine | chromium | chrome | firefox | brave | headless | headed | xvfb |
+|---|---|---|---|---|---|---|---|
+| playwright | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| playwright_stealth | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ |
+| patchright | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ |
+| selenium | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| selenium_uc | — | ✅ | — | ✅ | ✅ | ✅ | ✅ |
+| zendriver *(CDP)* | — | ✅ | — | ✅ | ✅ | ✅ | ✅ |
+| pydoll *(CDP)* | — | ✅ | — | ✅ | ✅ | ✅ | ✅ |
+| http *(no browser)* | n/a | n/a | n/a | n/a | ✅ | — | ✅ |
+
+WebKit runs through playwright once its system libraries are present
+(`sudo playwright install-deps webkit`). `nodriver` is implemented and routed, but a
+published build of that package ships non-UTF-8 source and cannot be imported — the error
+says so and points at `zendriver`, a maintained fork of the same design.
+
+### Finding a browser a driver will accept
+
+`shutil.which("firefox")` is not an answer. On Ubuntu it returns `/usr/bin/firefox`, a
+**shell script** wrapping the snap, and geckodriver rejects it:
+
+```
+InvalidArgumentException: binary is not a Firefox executable
+```
+
+That message names neither the cause nor the fix, and the fix —
+`/snap/firefox/current/usr/lib/firefox/firefox` — is not guessable. On the machine this
+was developed on, **three of four** installed browsers are wrappers on PATH.
+`browsergraph.binaries` resolves the real program and says what it did:
+
+```
+[ok] binary:firefox   using /snap/firefox/current/usr/lib/firefox/firefox
+                      (PATH had /usr/bin/firefox, a wrapper script a driver cannot use)
+```
+
+### CDP-native engines
+
+`nodriver`, `zendriver` and `pydoll` speak the DevTools protocol directly — no WebDriver,
+no `navigator.webdriver`, no driver binary whose version must track the browser. They are
+all **async**, and `BrowserPort` is deliberately synchronous, so each instance owns a
+private event loop on its own thread. That is the mirror image of the notebook fix below:
+one exists because these engines *need* a loop, the other because Playwright's sync API
+refuses to run inside one.
+
 ## Getting a browser to actually run
 
 The commonest first failure is not a bug in your graph — it is a browser that installed
@@ -402,7 +452,7 @@ video included. There is a [runnable tour notebook](notebooks/browsergraph-tour.
 
 ```bash
 pip install -e ".[dev]"
-pytest -q          # 532 tests; no browser required, browser suites skip when absent
+pytest -q          # 559 tests; no browser required, browser suites skip when absent
 mypy browsergraph --ignore-missing-imports
 ruff check browsergraph
 ```

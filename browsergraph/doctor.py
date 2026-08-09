@@ -53,13 +53,23 @@ class Report:
         return "\n".join(lines)
 
 
-def _importable(mod: str) -> bool:
-    if not mod:
-        return True
-    try:
-        return importlib.util.find_spec(mod) is not None
-    except (ImportError, ValueError):
-        return False
+def _importable(mods: tuple[str, ...] | str) -> bool:
+    """True when every named module can be found.
+
+    Takes a tuple because some engines need more than one — `engine=http` needs
+    both curl_cffi and selectolax, and reporting it usable with only one of them
+    would be a lie in the direction that costs the most.
+    """
+    names = (mods,) if isinstance(mods, str) else tuple(mods)
+    for mod in names:
+        if not mod:
+            continue
+        try:
+            if importlib.util.find_spec(mod) is None:
+                return False
+        except (ImportError, ValueError):
+            return False
+    return True
 
 
 def check_python() -> Check:
@@ -74,26 +84,27 @@ def check_engines() -> list[Check]:
     for engine in Engine:
         if engine is Engine.MOCK:
             continue
-        mod = ENGINE_IMPORT.get(engine, "")
-        ok = _importable(mod)
+        mods = ENGINE_IMPORT.get(engine, ())
+        ok = _importable(mods)
         out.append(Check(
             f"engine:{engine.value}", ok,
-            f"import {mod}" if mod else "",
+            ("import " + " ".join(mods)) if mods else "",
             f"pip install {ENGINE_REQUIREMENT.get(engine, engine.value)}"))
     return out
 
 
 def check_browsers() -> list[Check]:
-    candidates = {
-        "google-chrome": "system chrome",
-        "chromium": "chromium",
-        "firefox": "firefox",
-        "brave-browser": "brave",
-    }
     out = []
-    for exe, label in candidates.items():
-        path = shutil.which(exe)
-        out.append(Check(f"binary:{label}", bool(path), path or "not on PATH",
+    # Resolved rather than `which`, because what is on PATH is very often a
+    # wrapper script a driver cannot launch — Ubuntu's /usr/bin/firefox is the
+    # snap launcher, and Chrome and Brave ship the same shape. Reporting those
+    # as present is exactly the kind of confident-but-wrong answer this project
+    # exists to avoid. See browsergraph.binaries.
+    from browsergraph.binaries import report as binary_report
+    for res in binary_report():
+        label = res.binary.replace("_", " ")
+        out.append(Check(f"binary:{label}", res.ok,
+                         res.explain().split(": ", 1)[-1],
                          f"install {label} or set executable_path"))
     pw_cache = os.path.expanduser("~/.cache/ms-playwright")
     have = os.path.isdir(pw_cache) and bool(os.listdir(pw_cache))
@@ -183,5 +194,5 @@ def available_engines() -> list[Engine]:
     """Engines usable right now — what a sweep should actually run."""
     return [Engine.MOCK] + [
         e for e in Engine
-        if e is not Engine.MOCK and _importable(ENGINE_IMPORT.get(e, ""))
+        if e is not Engine.MOCK and _importable(ENGINE_IMPORT.get(e, ()))
     ]

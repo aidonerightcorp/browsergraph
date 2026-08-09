@@ -101,9 +101,21 @@ def build(spec: Spec, **kwargs) -> BrowserPort:
         return HttpBrowser(spec, **kwargs)
 
     if family == "cdp":
-        raise DriverUnavailable(
-            f"{spec.engine.value} has no adapter yet — the raw CDP/nodriver "
-            f"family is declared but not implemented. Use engine=playwright "
-            f"with transport=remote_cdp for a DevTools connection.")
+        if spec.engine is Engine.CDP:
+            # `cdp` is the bare protocol with no library behind it. Playwright
+            # already speaks it, so pointing at that is a real answer rather
+            # than a second implementation of the same wire format.
+            raise DriverUnavailable(
+                "engine=cdp is the raw protocol with no client library. Use "
+                "engine=playwright with transport=remote_cdp and endpoint=..., "
+                "or engine=nodriver/zendriver/pydoll for a CDP-native driver. "
+                "pip install nodriver")
+        try:
+            from browsergraph.drivers.cdp_driver import CdpBrowser
+        except (ImportError, SyntaxError) as e:  # pragma: no cover - depends on env
+            raise DriverUnavailable(
+                f"{spec.engine.value} adapter unavailable: {e}. "
+                f"{_requirement(spec.engine)}") from e
+        return CdpBrowser(spec, **kwargs)
 
     raise DriverUnavailable(f"no adapter for engine {spec.engine.value}")

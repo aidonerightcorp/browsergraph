@@ -150,7 +150,8 @@ def is_root() -> bool:
 
 
 def ensure_browser(engine: Engine = Engine.PLAYWRIGHT, *, install: bool = True,
-                   apt: bool = True, verbose: bool = False) -> Bootstrap:
+                   apt: bool = True, verbose: bool = False,
+                   browsers: tuple[str, ...] = ("chromium",)) -> Bootstrap:
     """Do whatever is needed, here, to make `engine` launch.
 
     `install` and `apt` exist because "install packages onto this machine" is
@@ -174,24 +175,28 @@ def ensure_browser(engine: Engine = Engine.PLAYWRIGHT, *, install: bool = True,
 
     # 2. The engine package itself.
     from browsergraph.dimensions import ENGINE_IMPORT, ENGINE_REQUIREMENT
-    module = ENGINE_IMPORT.get(engine, "")
-    if module:
+    modules = ENGINE_IMPORT.get(engine, ())
+    if modules:
         import importlib.util
-        have = importlib.util.find_spec(module.split(".")[0]) is not None
+        have = all(importlib.util.find_spec(m.split(".")[0]) is not None for m in modules)
         if not have and install:
-            req = ENGINE_REQUIREMENT.get(engine, module)
+            req = ENGINE_REQUIREMENT.get(engine, " ".join(modules))
             code, out = _run([sys.executable, "-m", "pip", "install", "-q", *req.split()])
             s = report.add(Step(f"pip install {req}", ran=req, ok=code == 0,
                                 detail="" if code == 0 else out[-160:]))
             say(str(s))
         else:
-            report.add(Step(f"engine package {module}", ok=have))
+            report.add(Step(f"engine package {' '.join(modules)}", ok=have))
 
     # 3. The browser binary — a download, no privileges needed.
     if install and engine in (Engine.PLAYWRIGHT, Engine.PLAYWRIGHT_STEALTH,
                               Engine.PATCHRIGHT, Engine.REBROWSER):
-        code, out = _run([sys.executable, "-m", "playwright", "install", "chromium"])
-        s = report.add(Step("playwright install chromium", ok=code == 0,
+        # `browsers` is a tuple because firefox and webkit are separate
+        # downloads: a caller who wants Binary.FIREFOX and gets only chromium
+        # sees "Executable doesn't exist", which reads like a bug rather than a
+        # missing download.
+        code, out = _run([sys.executable, "-m", "playwright", "install", *browsers])
+        s = report.add(Step(f"playwright install {' '.join(browsers)}", ok=code == 0,
                             detail="" if code == 0 else out[-160:]))
         say(str(s))
         ok, log = launches(engine)
@@ -213,8 +218,8 @@ def ensure_browser(engine: Engine = Engine.PLAYWRIGHT, *, install: bool = True,
                             detail="needs root; re-run with sudo, or install: "
                                    + " ".join(APT_PACKAGES[:4]) + " ..."))
         else:
-            code, out = _run([sys.executable, "-m", "playwright", "install-deps", "chromium"])
-            s = report.add(Step("playwright install-deps chromium", ok=code == 0,
+            code, out = _run([sys.executable, "-m", "playwright", "install-deps", *browsers])
+            s = report.add(Step(f"playwright install-deps {' '.join(browsers)}", ok=code == 0,
                                 detail="" if code == 0 else out[-160:]))
             say(str(s))
             if code != 0:

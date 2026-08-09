@@ -55,22 +55,29 @@ ENGINE_REQUIREMENT: dict[str, str] = {
 }
 
 #: Import name to probe when checking whether an engine is usable.
-ENGINE_IMPORT: dict[str, str] = {
-    Engine.PLAYWRIGHT: "playwright",
-    Engine.PLAYWRIGHT_STEALTH: "playwright_stealth",
-    Engine.PATCHRIGHT: "patchright",
-    Engine.CAMOUFOX: "camoufox",
-    Engine.SELENIUM: "selenium",
-    Engine.SELENIUM_UC: "undetected_chromedriver",
-    Engine.SELENIUMBASE: "seleniumbase",
-    Engine.NODRIVER: "nodriver",
-    Engine.ZENDRIVER: "zendriver",
-    Engine.PYDOLL: "pydoll-python",
-    Engine.BOTASAURUS: "botasaurus",
-    Engine.REBROWSER: "rebrowser-playwright",
-    Engine.CDP: "websockets",
-    Engine.HTTP: "curl-cffi selectolax",
-    Engine.MOCK: "",
+#: Module(s) that must import for an engine to be usable.
+#:
+#: A tuple of *importable module names*, deliberately separate from
+#: ENGINE_REQUIREMENT (the pip string). Conflating them made `doctor` report
+#: engine:http as missing on a machine where it demonstrably worked, because
+#: "curl-cffi selectolax" is a pip argument, not a module — and doctor is the
+#: one component whose whole job is to be believed.
+ENGINE_IMPORT: dict[str, tuple[str, ...]] = {
+    Engine.PLAYWRIGHT: ("playwright",),
+    Engine.PLAYWRIGHT_STEALTH: ("playwright", "playwright_stealth"),
+    Engine.PATCHRIGHT: ("patchright",),
+    Engine.CAMOUFOX: ("camoufox",),
+    Engine.SELENIUM: ("selenium",),
+    Engine.SELENIUM_UC: ("selenium", "undetected_chromedriver"),
+    Engine.SELENIUMBASE: ("seleniumbase",),
+    Engine.NODRIVER: ("nodriver",),
+    Engine.ZENDRIVER: ("zendriver",),
+    Engine.PYDOLL: ("pydoll",),                 # distributed as pydoll-python
+    Engine.BOTASAURUS: ("botasaurus",),
+    Engine.REBROWSER: ("rebrowser_playwright",),
+    Engine.CDP: ("websockets",),
+    Engine.HTTP: ("curl_cffi", "selectolax"),
+    Engine.MOCK: (),
 }
 
 
