@@ -32,7 +32,7 @@ from browsergraph.nodes.actions import Click, Extract, Navigate, WaitFor
 # Disk-backed, not /tmp: on this host /tmp is a RAM tmpfs, so browser
 # downloads, videos and screenshots consume memory and hit its quota.
 TMP = pathlib.Path(__file__).resolve().parent.parent / ".artifacts" / "bg_isolation"
-TMP.mkdir(exist_ok=True)
+TMP.mkdir(parents=True, exist_ok=True)
 
 PAGE = ("<!doctype html><html lang=en><head><title>Isolated</title></head><body>"
         "<h1 id=h>Isolated Engine</h1><button id=go>Go</button><div id=out></div>"

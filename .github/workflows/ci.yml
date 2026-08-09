@@ -49,6 +49,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - run: pip install -e ".[dev]"
+      # Build the isolated env the live tests need; the rest skip without it.
       - run: python -m browsergraph.cli envs create --name playwright
       - run: pytest tests/test_isolation.py -q
 

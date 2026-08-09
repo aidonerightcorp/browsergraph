@@ -35,7 +35,7 @@ needs_http = pytest.mark.skipif(not (HAVE_CURL and HAVE_SELECTOLAX),
 # Disk-backed, not /tmp: on this host /tmp is a RAM tmpfs, so browser
 # downloads, videos and screenshots consume memory and hit its quota.
 TMP = pathlib.Path(__file__).resolve().parent.parent / ".artifacts" / "bg_http"
-TMP.mkdir(exist_ok=True)
+TMP.mkdir(parents=True, exist_ok=True)
 
 PAGE = """<!doctype html><html lang=en><head><title>Server Rendered</title>
 <meta name=description content="no javascript needed"></head><body>
