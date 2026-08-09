@@ -140,18 +140,64 @@ class SeleniumBrowser:
                 kwargs["version_main"] = major
             self._driver = uc.Chrome(**kwargs)
         elif self.spec.binary is Binary.FIREFOX:
-            self._driver = webdriver.Firefox(options=opts)
+            # Point at a geckodriver we are permitted to terminate. Ubuntu ships
+            # a snap-confined one, and a snap process cannot be signalled even by
+            # its own user — so selenium's teardown fails and every session
+            # leaks a driver. See browsergraph.binaries.resolve_driver.
+            from browsergraph.binaries import resolve_driver
+            found = resolve_driver(Binary.FIREFOX)
+            if found.ok:
+                from selenium.webdriver.firefox.service import Service  # type: ignore
+                self._driver = webdriver.Firefox(
+                    options=opts, service=Service(executable_path=found.path))
+            else:
+                self._driver = webdriver.Firefox(options=opts)
         else:
             self._driver = webdriver.Chrome(options=opts)
 
         self._driver.set_page_load_timeout(60)
 
     def stop(self) -> None:
+        """Quit the session, then make sure the driver process is really gone.
+
+        `quit()` is not always enough: selenium logs and swallows a failure to
+        terminate its own service, so a driver that refuses SIGTERM survives
+        silently. Checking afterwards is the difference between a clean run and
+        one that leaks a process per session.
+        """
+        driver, self._driver = self._driver, None
+        if driver is None:
+            return
+        service = getattr(driver, "service", None)
+        pid = getattr(getattr(service, "process", None), "pid", None)
         try:
-            if self._driver:
-                self._driver.quit()
+            driver.quit()
         except Exception:
             pass
+        self._reap(pid)
+
+    @staticmethod
+    def _reap(pid: int | None) -> None:
+        """Kill a driver process that outlived its session, if we are allowed to.
+
+        A snap-confined driver cannot be signalled and is left alone rather than
+        raising — nothing here should turn a successful run into a failure at
+        teardown.
+        """
+        if not pid:
+            return
+        import os
+        import time
+        for sig in (15, 9):
+            try:
+                os.kill(pid, 0)
+            except (ProcessLookupError, PermissionError):
+                return              # gone, or not ours to signal
+            try:
+                os.kill(pid, sig)
+            except (ProcessLookupError, PermissionError):
+                return
+            time.sleep(0.3)
 
     def goto(self, url: str) -> PageState:
         self._driver.get(url)

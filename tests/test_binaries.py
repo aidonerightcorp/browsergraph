@@ -149,19 +149,48 @@ def test_selenium_drives_every_installed_binary(server, binary, display):
 
 
 @pytest.mark.skipif(not have(Engine.PLAYWRIGHT), reason="playwright not installed")
-@pytest.mark.parametrize("binary", [Binary.BUNDLED_CHROMIUM, Binary.FIREFOX],
+@pytest.mark.parametrize("binary", [Binary.BUNDLED_CHROMIUM, Binary.FIREFOX,
+                                    Binary.WEBKIT],
                          ids=lambda b: b.value)
-def test_playwright_drives_chromium_and_firefox(server, binary):
+def test_playwright_drives_all_three_rendering_engines(server, binary):
+    """Blink, Gecko and WebKit — three engines, one graph, no code change.
+
+    WebKit needs 79 system packages that Chromium does not, so it skips rather
+    than fails where they are absent: `playwright install-deps webkit`.
+    """
     spec = Spec(engine=Engine.PLAYWRIGHT, binary=binary, display=Display.HEADLESS)
     try:
         browser = build(spec)
         browser.start()
     except Exception as e:
-        pytest.skip(f"{binary.value} not downloaded: {type(e).__name__}")
+        pytest.skip(f"{binary.value} unavailable: {type(e).__name__}: {str(e)[:70]}")
     try:
         assert browser.goto(f"{server}/p.html").title == "Binaries"
+        assert "Every Browser" in browser.text_of("#h")
     finally:
         browser.stop()
+
+
+@pytest.mark.skipif(not have(Engine.PLAYWRIGHT), reason="playwright not installed")
+@pytest.mark.parametrize("display", [Display.HEADLESS, Display.HEADED, Display.XVFB],
+                         ids=lambda d: d.value)
+def test_webkit_runs_a_whole_graph_in_every_display_mode(server, display):
+    if display is Display.HEADED and not os.environ.get("DISPLAY"):
+        pytest.skip("no X display")
+    spec = Spec(engine=Engine.PLAYWRIGHT, binary=Binary.WEBKIT, display=display)
+    shot = TMP / f"webkit-{display.value}.png"
+    graph = (Graph(f"webkit-{display.value}").add(Navigate(f"{server}/p.html"))
+             .add(WaitFor("#go")).add(Click("#go"))
+             .add(WaitFor("#out", name="confirm"))
+             .add(Extract("#out", into="result")).add(Screenshot(str(shot))))
+    try:
+        browser = build(spec)
+        result = run(graph, spec, browser)
+    except Exception as e:
+        pytest.skip(f"webkit unavailable: {type(e).__name__}: {str(e)[:70]}")
+    assert result.ok, result.context.error
+    assert result.context.data["result"] == "clicked"
+    assert shot.exists() and shot.stat().st_size > 1000
 
 
 # --- the CDP family ---------------------------------------------------------
@@ -247,3 +276,62 @@ def test_cdp_surfaces_a_javascript_exception():
     from browsergraph.drivers.cdp_driver import _unwrap
     with pytest.raises(RuntimeError):
         _unwrap({"result": {"exceptionDetails": {"text": "ReferenceError"}}})
+
+
+# --- process hygiene --------------------------------------------------------
+
+def _driver_count(name: str = "geckodriver") -> int:
+    import subprocess
+    out = subprocess.run(["ps", "-eo", "comm"], capture_output=True, text=True)
+    return sum(1 for line in out.stdout.splitlines() if name in line)
+
+
+@pytest.mark.skipif(not have(Engine.SELENIUM), reason="selenium not installed")
+def test_firefox_sessions_do_not_leak_a_driver_process(server):
+    """Every Firefox session used to leave a geckodriver behind.
+
+    Ubuntu ships geckodriver as a snap, and a snap-confined process cannot be
+    signalled even by the user who owns it: `os.kill(pid, 0)` succeeds while
+    `os.kill(pid, SIGTERM)` raises PermissionError. Selenium logs and swallows
+    that failure, so the leak is silent. Forty-six accumulated during one test
+    run before a headed launch failed for want of resources.
+    """
+    if not resolve(Binary.FIREFOX).ok:
+        pytest.skip("no firefox")
+
+    import time
+    before = _driver_count()
+    for _ in range(2):
+        spec = Spec(engine=Engine.SELENIUM, binary=Binary.FIREFOX,
+                    display=Display.HEADLESS)
+        browser = build(spec)
+        try:
+            browser.start()
+        except Exception as e:
+            pytest.skip(f"firefox unavailable: {type(e).__name__}: {str(e)[:70]}")
+        browser.goto(f"{server}/p.html")
+        browser.stop()
+    time.sleep(2)
+
+    assert _driver_count() <= before, \
+        f"leaked {_driver_count() - before} geckodriver process(es)"
+
+
+def test_a_confined_driver_is_recognised():
+    from browsergraph.binaries import is_confined
+    assert is_confined("/snap/bin/geckodriver")
+    assert not is_confined("/usr/local/bin/geckodriver")
+    assert not is_confined("")
+
+
+def test_a_killable_driver_is_preferred_for_firefox():
+    from browsergraph.binaries import is_confined, resolve_driver
+    got = resolve_driver(Binary.FIREFOX, fetch=False)
+    if got.ok:
+        assert not is_confined(got.path), "resolved a driver we cannot terminate"
+
+
+def test_chrome_needs_no_driver_resolution():
+    """chromedriver is not shipped as a snap and its teardown works."""
+    from browsergraph.binaries import resolve_driver
+    assert resolve_driver(Binary.SYSTEM_CHROME, fetch=False).path == ""

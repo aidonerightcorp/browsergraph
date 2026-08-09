@@ -131,3 +131,92 @@ def report() -> list[Resolved]:
     """Every resolvable binary on this machine — used by `doctor`."""
     return [resolve(b) for b in (Binary.SYSTEM_CHROME, Binary.CHROME_FOR_TESTING,
                                  Binary.FIREFOX, Binary.BRAVE)]
+
+
+# --- drivers ----------------------------------------------------------------
+#
+# The same problem as browsers, with a sharper edge. Ubuntu's geckodriver is a
+# snap, and a snap-confined process **cannot be signalled by its own user**:
+# `os.kill(pid, 0)` is permitted and `os.kill(pid, SIGTERM)` raises
+# PermissionError, so selenium's teardown fails and the process survives.
+#
+# Every Firefox session therefore leaks one geckodriver. Measured: 46 of them
+# accumulated across one test run, until a headed Firefox launch failed for
+# want of resources. A long crawl would exhaust the machine.
+#
+# Selenium Manager will not help — it prefers whatever is on PATH and its own
+# advice is "delete the driver in PATH", which is not available for a
+# system-managed snap. So a killable driver is fetched and cached instead.
+
+#: Where fetched drivers live. Under the user's cache, never the system.
+DRIVER_CACHE = "~/.cache/browsergraph/drivers"
+
+GECKODRIVER_VERSION = "0.37.1"
+GECKODRIVER_URL = ("https://github.com/mozilla/geckodriver/releases/download/"
+                   "v{v}/geckodriver-v{v}-linux64.tar.gz")
+
+
+def is_confined(path: str) -> bool:
+    """Is this executable snap-confined, and therefore unkillable by us?"""
+    return "/snap/" in (path or "")
+
+
+def cached_driver(name: str = "geckodriver") -> str:
+    import os
+    path = os.path.expanduser(f"{DRIVER_CACHE}/{name}")
+    return path if is_real_program(path) else ""
+
+
+def fetch_geckodriver(version: str = GECKODRIVER_VERSION) -> str:
+    """Download a geckodriver we are allowed to terminate.
+
+    Returns the path, or "" if it could not be fetched — in which case the
+    caller falls back to whatever is on PATH and accepts the leak, because a
+    leaked process is much better than no browser.
+    """
+    import io
+    import os
+    import tarfile
+    import urllib.request
+
+    dest = os.path.expanduser(DRIVER_CACHE)
+    os.makedirs(dest, exist_ok=True)
+    try:
+        with urllib.request.urlopen(GECKODRIVER_URL.format(v=version), timeout=120) as r:
+            blob = r.read()
+        with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tf:
+            tf.extractall(dest, filter="data")
+        exe = os.path.join(dest, "geckodriver")
+        os.chmod(exe, 0o755)
+        return exe if is_real_program(exe) else ""
+    except Exception:
+        return ""
+
+
+def resolve_driver(binary: Binary | str, *, fetch: bool = True) -> Resolved:
+    """A driver executable that can be started *and stopped*.
+
+    Only Firefox needs this: chromedriver is not shipped as a snap, and its
+    teardown works.
+    """
+    key = getattr(binary, "value", binary)
+    out = Resolved(binary=f"{key}-driver")
+    if key != Binary.FIREFOX.value:
+        return out
+
+    cached = cached_driver()
+    if cached:
+        out.path = cached
+        return out
+
+    found = shutil.which("geckodriver")
+    if found and not is_confined(found) and is_real_program(found):
+        out.path = found
+        return out
+
+    out.wrapper = found or ""
+    if fetch:
+        fetched = fetch_geckodriver()
+        if fetched:
+            out.path = fetched
+    return out

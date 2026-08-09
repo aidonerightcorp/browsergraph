@@ -380,21 +380,38 @@ Measured, not declared — this is a real launch matrix against a served page, o
 combination that the validator accepts. `browsergraph doctor` reports the same for your
 machine.
 
-| engine | chromium | chrome | firefox | brave | headless | headed | xvfb |
-|---|---|---|---|---|---|---|---|
-| playwright | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| playwright_stealth | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ |
-| patchright | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ |
-| selenium | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| selenium_uc | — | ✅ | — | ✅ | ✅ | ✅ | ✅ |
-| zendriver *(CDP)* | — | ✅ | — | ✅ | ✅ | ✅ | ✅ |
-| pydoll *(CDP)* | — | ✅ | — | ✅ | ✅ | ✅ | ✅ |
-| http *(no browser)* | n/a | n/a | n/a | n/a | ✅ | — | ✅ |
+| engine | chromium | chrome | firefox | webkit | brave | headless | headed | xvfb |
+|---|---|---|---|---|---|---|---|---|
+| playwright | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| playwright_stealth | ✅ | ✅ | — | — | ✅ | ✅ | ✅ | ✅ |
+| patchright | ✅ | ✅ | — | — | ✅ | ✅ | ✅ | ✅ |
+| rebrowser | ✅ | ✅ | — | — | ✅ | ✅ | ✅ | ✅ |
+| selenium | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ |
+| selenium_uc | — | ✅ | — | — | ✅ | ✅ | ✅ | ✅ |
+| seleniumbase | — | ✅ | — | — | ✅ | ✅ | ✅ | ✅ |
+| botasaurus | — | ✅ | — | — | ✅ | ✅ | ✅ | ✅ |
+| camoufox *(isolated)* | — | — | ✅ | — | — | ✅ | ✅ | ✅ |
+| nodriver *(CDP)* | — | ✅ | — | — | ✅ | ✅ | ✅ | ✅ |
+| zendriver *(CDP)* | — | ✅ | — | — | ✅ | ✅ | ✅ | ✅ |
+| pydoll *(CDP)* | — | ✅ | — | — | ✅ | ✅ | ✅ | ✅ |
+| http *(no browser)* | n/a | n/a | n/a | n/a | n/a | ✅ | — | ✅ |
 
-WebKit runs through playwright once its system libraries are present
-(`sudo playwright install-deps webkit`). `nodriver` is implemented and routed, but a
-published build of that package ships non-UTF-8 source and cannot be imported — the error
-says so and points at `zendriver`, a maintained fork of the same design.
+**126 verified combinations**, and no unexplained failures. What does not work, and why:
+
+* `engine=cdp` is the bare protocol with no client library — it refuses and names
+  `transport=remote_cdp` or a CDP-native engine instead.
+* `selenium_uc` and `botasaurus` against **snap** Chromium: snap keeps the browser current
+  while the matching chromedriver lags, so a session cannot be created. Not a library
+  problem — both drive system Chrome fine.
+* `camoufox` pins its own Playwright build, so it runs in a per-engine virtualenv
+  (`spec.isolated=True`). Playwright still works in-process afterwards, which is the
+  entire point of that mechanism.
+* `nodriver` 0.48–0.50.3 ship non-UTF-8 source and cannot be imported; the requirement
+  pins `nodriver<0.48`, and the error names `zendriver` if you hit it.
+
+WebKit needs 79 system packages Chromium does not
+(`sudo playwright install-deps webkit`); with them it runs headless, headed and under
+xvfb like anything else.
 
 ### Finding a browser a driver will accept
 
