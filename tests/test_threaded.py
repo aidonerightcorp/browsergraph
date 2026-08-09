@@ -169,3 +169,43 @@ def test_stop_is_safe_to_call_twice(server):
         return True
 
     assert in_a_loop(go)
+
+
+# --- container launch flags -------------------------------------------------
+
+def test_container_args_are_the_ones_chrome_cannot_start_without():
+    from browsergraph.drivers.playwright_driver import container_args
+    assert "--no-sandbox" in container_args()
+    assert "--disable-dev-shm-usage" in container_args()
+
+
+def test_container_detection_is_boolean():
+    from browsergraph.drivers.playwright_driver import in_container
+    assert isinstance(in_container(), bool)
+
+
+@needs_pw
+def test_explicit_launch_args_reach_the_browser(server):
+    """Kaggle installs chromium fine and then cannot launch it without these."""
+    spec = Spec(engine=Engine.PLAYWRIGHT, display=Display.HEADLESS,
+                extra={"container_args": True,
+                       "launch_args": ["--window-size=900,700"]})
+    browser = build(spec)
+    browser.start()
+    try:
+        assert browser.goto(f"{server}/p.html").title == "Threaded"
+    finally:
+        browser.stop()
+
+
+@needs_pw
+def test_container_args_can_be_switched_off(server):
+    """A caller who knows the sandbox works must be able to keep it."""
+    spec = Spec(engine=Engine.PLAYWRIGHT, display=Display.HEADLESS,
+                extra={"container_args": False})
+    browser = build(spec)
+    browser.start()
+    try:
+        assert browser.goto(f"{server}/p.html").title == "Threaded"
+    finally:
+        browser.stop()

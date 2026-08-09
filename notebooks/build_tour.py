@@ -69,6 +69,14 @@ print(f'installer exit={log.returncode}  ({time.time()-t0:.0f}s)')
 from browsergraph import Engine, Spec
 from browsergraph.dimensions import Display
 from browsergraph.drivers import build
+from browsergraph.drivers.playwright_driver import container_args, in_container
+
+# Kaggle runs as root, where Chrome's setuid sandbox cannot initialise. The
+# failure is 'TargetClosedError: Target page, context or browser has been
+# closed', which names neither the cause nor the fix, so browsergraph detects
+# the situation and adds the flags itself.
+print('container detected:', in_container(), '->', container_args())
+
 try:
     _b = build(Spec(engine=Engine.PLAYWRIGHT, display=Display.HEADLESS))
     _b.start(); _b.goto('about:blank'); _b.stop()

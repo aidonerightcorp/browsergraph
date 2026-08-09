@@ -33,6 +33,37 @@ window.chrome = window.chrome || {runtime: {}};
 """
 
 
+def in_container() -> bool:
+    """Best-effort: are we root inside a container?
+
+    Docker, Kubernetes, CI runners, Kaggle and Colab all run as root, and
+    Chrome's setuid sandbox cannot initialise as root. The failure is
+    `TargetClosedError: Target page, context or browser has been closed`, which
+    names neither the cause nor the fix.
+    """
+    import os
+    if os.path.exists("/.dockerenv"):
+        return True
+    try:
+        return os.geteuid() == 0
+    except AttributeError:      # pragma: no cover - non-POSIX
+        return False
+
+
+def container_args() -> list[str]:
+    """Chromium flags without which it will not start in a container.
+
+    `--no-sandbox` looks alarming and is worth being precise about: Chrome's
+    sandbox relies on user namespaces that are unavailable to a root process in
+    a default container, so it is not a protection being given up — it is one
+    that was never available. Without the flag Chrome exits immediately.
+
+    `--disable-dev-shm-usage` moves shared memory off /dev/shm, which containers
+    default to 64 MB; exceeding it crashes tabs unpredictably under load.
+    """
+    return ["--no-sandbox", "--disable-dev-shm-usage"]
+
+
 class PlaywrightBrowser:
     def __init__(self, spec: Spec, executable_path: str = "") -> None:
         self.spec = spec
@@ -94,6 +125,15 @@ class PlaywrightBrowser:
             kwargs["channel"] = _CHANNEL[self.spec.binary]
         if self.spec.identity.proxy:
             kwargs["proxy"] = {"server": self.spec.identity.proxy}
+
+        # Launch flags: caller-supplied, plus the ones a container cannot start
+        # without. Firefox and WebKit take neither, so this is chromium-only.
+        if launcher is self._pw.chromium:
+            args = list(self.spec.extra.get("launch_args", []))
+            if self.spec.extra.get("container_args", in_container()):
+                args += [a for a in container_args() if a not in args]
+            if args:
+                kwargs["args"] = args
 
         if self.spec.transport is Transport.REMOTE_CDP:
             self._browser = launcher.connect_over_cdp(self.spec.endpoint)

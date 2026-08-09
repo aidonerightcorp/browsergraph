@@ -67,6 +67,17 @@ class SeleniumBrowser:
         if self.spec.display is Display.HEADLESS and not wants_uc_early:
             opts.add_argument("--headless=new")
         opts.add_argument(f"--window-size={ident.viewport[0]},{ident.viewport[1]}")
+
+        # Chrome will not start as root in a container without these; the
+        # failure otherwise is an opaque "cannot connect to chrome". Firefox
+        # needs neither. See drivers.playwright_driver.container_args.
+        if self.spec.binary is not Binary.FIREFOX:
+            from browsergraph.drivers.playwright_driver import container_args, in_container
+            for arg in list(self.spec.extra.get("launch_args", [])):
+                opts.add_argument(arg)
+            if self.spec.extra.get("container_args", in_container()):
+                for arg in container_args():
+                    opts.add_argument(arg)
         if ident.user_agent:
             opts.add_argument(f"--user-agent={ident.user_agent}")
         if ident.proxy:
