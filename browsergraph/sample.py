@@ -12,13 +12,13 @@ and typically within a few rows of optimal.
 from __future__ import annotations
 
 import itertools
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import replace
 
 from browsergraph.dimensions import Spec, is_valid
 
 
-def all_pairs(axes: dict[str, Iterable]) -> list[dict]:
+def all_pairs(axes: Mapping[str, Iterable]) -> list[dict]:
     """Rows covering every value-pair across axes at least once."""
     axis = {k: list(v) for k, v in axes.items() if list(v)}
     names = list(axis)
@@ -57,7 +57,7 @@ def all_pairs(axes: dict[str, Iterable]) -> list[dict]:
     return rows
 
 
-def sample_specs(axes: dict[str, Iterable], base: Spec | None = None,
+def sample_specs(axes: Mapping[str, Iterable], base: Spec | None = None,
                  valid_only: bool = True, top_up: bool = True) -> list[Spec]:
     """Pairwise-covering specs, restricted to runnable ones.
 
@@ -115,7 +115,7 @@ def _find_valid_with(axis: dict[str, list], base: Spec, fixed: dict) -> Spec | N
     return None
 
 
-def coverage(axes: dict[str, Iterable], specs: list[Spec]) -> tuple[int, int]:
+def coverage(axes: Mapping[str, Iterable], specs: list[Spec]) -> tuple[int, int]:
     """(pairs covered, pairs possible) — report this rather than implying full coverage."""
     axis = {k: list(v) for k, v in axes.items() if list(v)}
     names = list(axis)

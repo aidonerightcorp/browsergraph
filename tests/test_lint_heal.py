@@ -1,5 +1,5 @@
 from browsergraph import Engine, Graph, Spec, run
-from browsergraph.dimensions import Behavior, LLMConfig, LLMControl
+from browsergraph.dimensions import LLMConfig, LLMControl
 from browsergraph.drivers.mock import MockBrowser
 from browsergraph.heal import Healer, Healing, Ledger
 from browsergraph.lint import ERROR, WARN, has_errors, lint, report

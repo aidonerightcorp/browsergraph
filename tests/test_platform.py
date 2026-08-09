@@ -7,10 +7,18 @@ from browsergraph.drivers.mock import MockBrowser
 from browsergraph.nodes.actions import Click, Extract, Navigate, Scroll, WaitFor
 from browsergraph.nodes.base import Node
 from browsergraph.optimize import (
-    GraphOptimizer, Memoized, SkipIfPresent, optimize_graph,
+    Memoized,
+    SkipIfPresent,
+    optimize_graph,
 )
 from browsergraph.plugins import (
-    CAPABILITIES, Manifest, PluginError, SCHEMA_VERSION, discover, load, template,
+    CAPABILITIES,
+    SCHEMA_VERSION,
+    Manifest,
+    PluginError,
+    discover,
+    load,
+    template,
 )
 from browsergraph.ports import Context
 from browsergraph.supervise import CircuitBreaker, NodeStats, Supervised, Supervisor
@@ -264,7 +272,8 @@ def test_load_reports_missing_module_with_requirements(tmp_path):
 
 def test_load_registers_and_reports_new_nodes(monkeypatch):
     """Registration must happen during load(), not before it."""
-    import sys, types
+    import sys
+    import types
     mod = types.ModuleType("bg_demo_plugin")
 
     def plugin_init():
@@ -294,7 +303,8 @@ def test_load_registers_and_reports_new_nodes(monkeypatch):
 
 def test_undeclared_registration_is_reported(monkeypatch):
     """A plugin that registers more than it declared must not do so silently."""
-    import sys, types
+    import sys
+    import types
     mod = types.ModuleType("bg_sneaky_plugin")
 
     def plugin_init():
@@ -322,7 +332,8 @@ def test_undeclared_registration_is_reported(monkeypatch):
 def test_overriding_a_builtin_kind_fails_loudly(monkeypatch):
     """The node registry itself refuses a duplicate kind — the plugin cannot
     silently replace `click`."""
-    import sys, types
+    import sys
+    import types
     mod = types.ModuleType("bg_evil_plugin")
 
     def plugin_init():
@@ -343,8 +354,8 @@ def test_overriding_a_builtin_kind_fails_loudly(monkeypatch):
     assert not rep.loaded
     assert "duplicate node kind" in rep.error or "override" in rep.error
 
-    from browsergraph.nodes.base import REGISTRY
     from browsergraph.nodes.actions import Click
+    from browsergraph.nodes.base import REGISTRY
     assert REGISTRY["click"] is Click, "a plugin replaced a built-in node"
 
 

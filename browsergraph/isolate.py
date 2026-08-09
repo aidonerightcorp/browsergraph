@@ -169,10 +169,13 @@ class Worker:
     def call(self, op: str, **kwargs) -> dict:
         if self.proc is None or self.proc.poll() is not None:
             raise IsolationError("worker is not running")
+        stdin, stdout = self.proc.stdin, self.proc.stdout
+        if stdin is None or stdout is None:      # only if spawned without pipes
+            raise IsolationError("worker has no stdio pipes")
         try:
-            self.proc.stdin.write(encode({"op": op, **kwargs}))
-            self.proc.stdin.flush()
-            line = self.proc.stdout.readline()
+            stdin.write(encode({"op": op, **kwargs}))
+            stdin.flush()
+            line = stdout.readline()
         except (BrokenPipeError, OSError) as e:
             err = (self.proc.stderr.read() or b"").decode()[-400:] if self.proc.stderr else ""
             raise IsolationError(f"worker died during {op}: {e}. {err}") from e
@@ -187,7 +190,8 @@ class Worker:
         try:
             if self.proc.poll() is None:
                 self.call("close")
-                self.proc.stdin.close()
+                if self.proc.stdin is not None:
+                    self.proc.stdin.close()
                 self.proc.wait(timeout=15)
         except Exception:
             pass

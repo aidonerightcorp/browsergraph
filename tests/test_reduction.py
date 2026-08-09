@@ -3,13 +3,22 @@ import json
 
 import pytest
 
-from browsergraph.dimensions import Preprocess as PreDim, Spec, Vision as VisionDim, validate
+from browsergraph.dimensions import Preprocess as PreDim
+from browsergraph.dimensions import Spec, validate
+from browsergraph.dimensions import Vision as VisionDim
 from browsergraph.focus import (
-    Chunk, chunk, estimate_tokens, focus, score, select, strip_boilerplate, tokenize,
+    Chunk,
+    chunk,
+    estimate_tokens,
+    focus,
+    score,
+    select,
+    strip_boilerplate,
+    tokenize,
 )
-from browsergraph.models import Catalog, ModelInfo, ModelUnavailable, VISION
+from browsergraph.models import VISION, Catalog, ModelInfo, ModelUnavailable
 from browsergraph.preprocess import Preprocess, compare, recommend, reduce
-from browsergraph.vision import Vision, VisionLocate, VisionVerify, annotate, selector_for
+from browsergraph.vision import VisionLocate, VisionVerify, selector_for
 
 BIG_PAGE = """<!doctype html><html lang="en"><head>
 <title>Acme Corp | Contact</title>

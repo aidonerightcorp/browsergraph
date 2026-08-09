@@ -7,7 +7,7 @@ from browsergraph.drivers import DriverUnavailable, build
 from browsergraph.drivers.mock import MockBrowser
 from browsergraph.graph import GraphError
 from browsergraph.nodes import make
-from browsergraph.nodes.actions import Click, Extract, Navigate, Screenshot, Type, WaitFor
+from browsergraph.nodes.actions import Click, Extract, Navigate, Type, WaitFor
 from browsergraph.nodes.llm import LLMSelector, LLMVerify
 
 PAGES = {

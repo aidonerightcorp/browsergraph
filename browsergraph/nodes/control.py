@@ -204,7 +204,7 @@ class Frontier(Node):
             ctx.fail(f"{self.name}: no seed url in ctx.data[{self.seed_key!r}]")
             return ctx
 
-        crawler = Crawler(ctx.browser, seed, CrawlLimits(
+        crawler = Crawler(ctx.page, seed, CrawlLimits(
             max_pages=self.max_pages, max_depth=self.max_depth,
             delay=self.delay, respect_robots=self.respect_robots))
 

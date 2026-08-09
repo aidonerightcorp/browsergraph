@@ -4,13 +4,11 @@ from __future__ import annotations
 import threading
 import time
 
-import pytest
-
 from browsergraph import Engine, Graph, Spec, run
 from browsergraph.dimensions import Preprocess
 from browsergraph.drivers.mock import MockBrowser
 from browsergraph.learn import Features, Knowledge, Outcome, best_axis_value
-from browsergraph.nodes.actions import Click, Extract, Navigate, WaitFor
+from browsergraph.nodes.actions import Click, Extract, Navigate
 from browsergraph.nodes.base import Node
 from browsergraph.nodes.control import Branch, ForEach, Frontier, Retry, Subgraph
 from browsergraph.ports import Context

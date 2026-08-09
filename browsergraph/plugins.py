@@ -149,10 +149,9 @@ def discover_entry_points() -> list[Manifest]:
     except ImportError:  # pragma: no cover
         return []
     out: list[Manifest] = []
-    try:
-        eps = entry_points(group=ENTRY_POINT_GROUP)
-    except TypeError:  # pragma: no cover - older API
-        eps = entry_points().get(ENTRY_POINT_GROUP, [])
+    # entry_points(group=...) is available on every Python this package
+    # supports (>=3.10); the old mapping API it replaced was removed in 3.12.
+    eps = entry_points(group=ENTRY_POINT_GROUP)
     for ep in eps:
         out.append(Manifest(name=ep.name, module=ep.value,
                             description=f"entry point {ep.value}"))

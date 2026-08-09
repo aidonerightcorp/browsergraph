@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import random
 import time
+from typing import Any
 
 from browsergraph.dimensions import (
     Binary,
@@ -36,16 +37,38 @@ class PlaywrightBrowser:
     def __init__(self, spec: Spec, executable_path: str = "") -> None:
         self.spec = spec
         self.executable_path = executable_path
-        self._pw = None
-        self._browser = None
-        self._ctx = None
-        self._page = None
+        # Typed Any, not Optional[Playwright]: playwright is an optional
+        # dependency imported inside start(), so its real types are not
+        # importable at check time on an install that never uses this engine.
+        self._pw: Any = None
+        self._browser: Any = None
+        self._ctx: Any = None
+        self._page: Any = None
         self.video_path = ""
         self.trace_path = ""
-        self._camoufox = None
+        self._camoufox: Any = None
 
     # lifecycle
     def start(self) -> None:
+        """Start the browser, or leave nothing behind.
+
+        A *partial* start is worse than a failed one. `sync_playwright().start()`
+        parks a greenlet inside its own asyncio loop, which marks this thread as
+        "inside a running loop" for as long as it lives. If the launch then fails
+        — a missing binary, a bad channel, a timeout — the greenlet is never
+        unwound, and every subsequent sync-playwright call *anywhere in the
+        process* fails with "Sync API inside the asyncio loop", through no fault
+        of the caller. One unlucky launch poisons the whole interpreter.
+
+        So a failure here must unwind everything this method created.
+        """
+        try:
+            self._start()
+        except BaseException:
+            self.stop()      # idempotent; safe on a half-built object
+            raise
+
+    def _start(self) -> None:
         if self.spec.engine is Engine.PATCHRIGHT:
             from patchright.sync_api import sync_playwright  # type: ignore
         elif self.spec.engine is Engine.CAMOUFOX:
@@ -156,6 +179,10 @@ class PlaywrightBrowser:
                 self._pw.stop()
         except Exception:
             pass
+        # Cleared so stop() is idempotent and a half-built object is left inert:
+        # start() calls stop() on failure, and the caller will usually call it
+        # again from its own finally.
+        self._pw = self._browser = self._ctx = self._page = None
 
     # navigation
     def goto(self, url: str) -> PageState:

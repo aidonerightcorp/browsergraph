@@ -122,10 +122,10 @@ class Router:
                                        requested=self.overrides[job]).name
         if job in self._chosen:
             return self._chosen[job]
-        spec = JOBS.get(job)
-        if spec is None:
+        job_spec = JOBS.get(job)
+        if job_spec is None:
             raise ModelUnavailable(f"unknown job {job!r}; known: {sorted(JOBS)}")
-        name = self.catalog.best(spec["capability"], role=spec["role"]).name
+        name = self.catalog.best(job_spec["capability"], role=job_spec["role"]).name
         self._chosen[job] = name
         return name
 

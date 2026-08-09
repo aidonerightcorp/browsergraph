@@ -70,6 +70,22 @@ class Context:
     failed: bool = False
     error: str = ""
 
+    @property
+    def page(self) -> BrowserPort:
+        """The browser, or a clear explanation of why there isn't one.
+
+        Nodes that declare `needs_browser` reach for it unconditionally. Without
+        this, a graph run with no browser attached dies on `'NoneType' object has
+        no attribute 'goto'` — a message that names neither the node nor the
+        cause, three frames below the code the caller actually wrote.
+        """
+        if self.browser is None:
+            raise RuntimeError(
+                "this node needs a browser but the run context has none. "
+                "Pass one to run(graph, spec, browser=...), or use a node "
+                "with needs_browser = False.")
+        return self.browser
+
     def note(self, msg: str) -> None:
         self.log.append(msg)
 

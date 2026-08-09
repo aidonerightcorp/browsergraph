@@ -142,7 +142,7 @@ class Healer:
     def resolve(self, selector: str, ctx: Context, node_name: str = "") -> str | None:
         for name, strategy in self.strategies:
             for candidate in strategy(selector, ctx):
-                if candidate and ctx.browser.find(candidate) is not None:
+                if candidate and ctx.page.find(candidate) is not None:
                     self.ledger.add(HealEvent(selector, candidate, name, node_name))
                     return candidate
 
@@ -150,12 +150,12 @@ class Healer:
             try:
                 raw = self.llm_client.complete(
                     "Return ONE CSS selector and nothing else.\n"
-                    f"Goal: {self.goal_hint or selector}\n\n{ctx.browser.html()[:6000]}",
+                    f"Goal: {self.goal_hint or selector}\n\n{ctx.page.html()[:6000]}",
                     system="You output only a CSS selector.")
             except Exception:
                 return None
             cand = (raw or "").strip().splitlines()[0].strip().strip("`") if raw else ""
-            if cand and ctx.browser.find(cand) is not None:
+            if cand and ctx.page.find(cand) is not None:
                 self.ledger.add(HealEvent(selector, cand, "llm", node_name))
                 return cand
         return None

@@ -7,6 +7,8 @@
     browsergraph sample --pairwise            covering-array sample
     browsergraph run graph.yaml               run a graph from config
     browsergraph serve --port 8800            HTTP API
+    browsergraph nodes                        every node kind and its contract
+    browsergraph graph graph.yaml --mermaid   draw a graph, audit its contracts
 """
 from __future__ import annotations
 
@@ -14,6 +16,7 @@ import argparse
 import json
 import os
 import sys
+from typing import Any
 
 from browsergraph.dimensions import (
     Behavior,
@@ -99,7 +102,7 @@ def cmd_dimensions(args) -> int:
 
 def cmd_combos(args) -> int:
     from browsergraph.combos import count, enumerate_specs, rejected
-    axes = None
+    axes: dict[str, list[Any]] | None = None
     if args.engine:
         axes = {"engine": [Engine(args.engine)], "binary": list(Binary),
                 "transport": list(Transport), "display": list(Display),
@@ -117,7 +120,7 @@ def cmd_combos(args) -> int:
 
 def cmd_sample(args) -> int:
     from browsergraph.sample import coverage, sample_specs
-    axes = {"engine": list(Engine), "binary": list(Binary),
+    axes: dict[str, list[Any]] = {"engine": list(Engine), "binary": list(Binary),
             "transport": list(Transport), "display": list(Display),
             "stealth": list(Stealth)}
     specs = sample_specs(axes)
@@ -256,6 +259,36 @@ def cmd_envs(args) -> int:
     return 2
 
 
+def cmd_nodes(args) -> int:
+    """The contract table — what every node kind promises."""
+    from browsergraph.contracts import describe_all
+    from browsergraph.nodes import REGISTRY
+    print(f"{len(REGISTRY)} node kinds\n")
+    print(describe_all(REGISTRY.values()))
+    return 0
+
+
+def cmd_graph(args) -> int:
+    """Draw a graph and check its contracts fit together."""
+    from browsergraph.config import load_graph
+    graph, _spec = load_graph(args.config)
+    if args.mermaid:
+        print(graph.to_mermaid())
+        return 0
+    if args.json:
+        print(json.dumps(graph.to_dict(), indent=2, default=str))
+        return 0
+    print(f"{graph.name}: {len(graph.nodes)} nodes, {len(graph.edges)} edges")
+    for lvl_no, level in enumerate(graph.levels(), 1):
+        print(f"  level {lvl_no}: {', '.join(level)}")
+    print("\ncontracts:")
+    for c in graph.contracts():
+        print(f"  {c.describe()}")
+    result = graph.audit()
+    print(f"\naudit: {result.text()}")
+    return 0 if result.ok else 1
+
+
 def cmd_serve(args) -> int:
     from browsergraph.server import serve
     serve(port=args.port)
@@ -314,6 +347,14 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--name")
     ev.add_argument("--no-browsers", action="store_true")
     ev.set_defaults(fn=cmd_envs)
+
+    sub.add_parser("nodes", help="node kinds and their contracts").set_defaults(fn=cmd_nodes)
+
+    gr = sub.add_parser("graph", help="draw a graph and audit its contracts")
+    gr.add_argument("config")
+    gr.add_argument("--mermaid", action="store_true", help="emit a Mermaid diagram")
+    gr.add_argument("--json", action="store_true", help="emit the structure as JSON")
+    gr.set_defaults(fn=cmd_graph)
 
     v = sub.add_parser("serve", help="HTTP API")
     v.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8800)))

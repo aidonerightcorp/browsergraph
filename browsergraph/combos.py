@@ -7,7 +7,7 @@ of hand-writing a config per setup.
 from __future__ import annotations
 
 import itertools
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import replace
 
 from browsergraph.dimensions import (
@@ -34,7 +34,7 @@ DEFAULT_AXES: dict[str, tuple] = {
 
 
 def enumerate_specs(
-    axes: dict[str, Iterable] | None = None,
+    axes: Mapping[str, Iterable] | None = None,
     base: Spec | None = None,
     valid_only: bool = True,
 ) -> Iterator[Spec]:
@@ -53,17 +53,17 @@ def enumerate_specs(
         yield spec
 
 
-def count(axes: dict[str, Iterable] | None = None, base: Spec | None = None) -> tuple[int, int]:
+def count(axes: Mapping[str, Iterable] | None = None, base: Spec | None = None) -> tuple[int, int]:
     """(total combinations, runnable combinations)."""
-    axes = {k: tuple(v) for k, v in (axes or DEFAULT_AXES).items()}
+    resolved = {k: tuple(v) for k, v in (axes or DEFAULT_AXES).items()}
     total = 1
-    for v in axes.values():
+    for v in resolved.values():
         total *= len(v)
-    ok = sum(1 for _ in enumerate_specs(axes, base, valid_only=True))
+    ok = sum(1 for _ in enumerate_specs(resolved, base, valid_only=True))
     return total, ok
 
 
-def rejected(axes: dict[str, Iterable] | None = None,
+def rejected(axes: Mapping[str, Iterable] | None = None,
              base: Spec | None = None) -> list[tuple[str, list[str]]]:
     """Combinations that were filtered out, with the reasons.
 

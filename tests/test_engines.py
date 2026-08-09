@@ -13,7 +13,6 @@ import functools
 import http.server
 import pathlib
 import socketserver
-import tempfile
 import threading
 
 import pytest
@@ -302,3 +301,48 @@ def test_every_declared_engine_can_be_routed():
                 f"{engine.value}: unhelpful error {e}"
             unrouted.append(engine.value)
     assert "playwright" not in unrouted and "selenium" not in unrouted
+
+
+# --- lifecycle atomicity ----------------------------------------------------
+
+@pytest.mark.skipif(Engine.PLAYWRIGHT not in available_engines(),
+                    reason="playwright not installed")
+def test_a_failed_start_does_not_poison_the_interpreter():
+    """A partial start must unwind, or one bad launch breaks every later one.
+
+    `sync_playwright().start()` parks a greenlet inside its own asyncio loop.
+    If the launch then fails, an un-unwound greenlet leaves this thread marked
+    "inside a running loop" forever, and every subsequent sync-playwright call
+    in the process dies with "Sync API inside the asyncio loop" — including in
+    unrelated code that never touched the failing engine.
+
+    This is the bug that made the test suite need auto-isolation to survive.
+    """
+    import asyncio
+
+    def loop_running() -> bool:
+        try:
+            asyncio.get_running_loop()
+            return True
+        except RuntimeError:
+            return False
+
+    assert not loop_running(), "a previous test already leaked a loop"
+
+    browser = build(Spec(engine=Engine.PLAYWRIGHT, display=Display.HEADLESS),
+                    executable_path="/nonexistent/chrome")
+    with pytest.raises(Exception):
+        browser.start()
+
+    assert not loop_running(), "failed start left a running asyncio loop"
+    assert browser._pw is None, "failed start leaked the playwright object"
+
+    browser.stop()      # the caller's own finally: must be a no-op, not a crash
+
+    after = build(Spec(engine=Engine.PLAYWRIGHT, display=Display.HEADLESS))
+    after.start()
+    try:
+        assert after.goto("about:blank") is not None
+    finally:
+        after.stop()
+    assert not loop_running()

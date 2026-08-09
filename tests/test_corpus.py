@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import pathlib
-import tempfile
 
 import pytest
 
@@ -20,10 +19,9 @@ from browsergraph.errors import classify
 from browsergraph.extract.content import parse_page
 from browsergraph.extract.patterns import extract_contacts
 from browsergraph.focus import chunk, focus
-from browsergraph.nodes.actions import Click, Extract, Navigate, Screenshot, Scroll, WaitFor
+from browsergraph.nodes.actions import Click, Navigate
 from browsergraph.preprocess import Preprocess, reduce
 from browsergraph.tasks import make as make_task
-
 from tests.corpus import CORPUS, by_category
 
 # Disk-backed, not /tmp: on this host /tmp is a RAM tmpfs, so browser
@@ -41,7 +39,10 @@ def server():
     by the url validator. Serving over HTTP exercises the same code paths a
     real site does.
     """
-    import functools, http.server, socketserver, threading
+    import functools
+    import http.server
+    import socketserver
+    import threading
     handler = functools.partial(http.server.SimpleHTTPRequestHandler,
                                 directory=str(TMP))
     handler.log_message = lambda *a, **k: None

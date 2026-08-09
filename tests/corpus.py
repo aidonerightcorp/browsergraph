@@ -9,8 +9,9 @@ weight than navigation, because that is where silent wrongness lives.
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 HTML_HEAD = "<!doctype html><html lang=en><head><meta charset=utf-8>"
 

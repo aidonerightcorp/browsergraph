@@ -5,14 +5,21 @@ import pytest
 from browsergraph.cli import main
 from browsergraph.config import graph_from_list, spec_from_dict
 from browsergraph.dimensions import (
-    ENGINE_BINARIES, ENGINE_IMPORT, ENGINE_REQUIREMENT, Binary, Display,
-    Engine, Stealth, Transport, Spec, validate,
+    ENGINE_BINARIES,
+    ENGINE_IMPORT,
+    ENGINE_REQUIREMENT,
+    Binary,
+    Display,
+    Engine,
+    Spec,
+    Stealth,
+    Transport,
+    validate,
 )
 from browsergraph.doctor import available_engines, run_all
 from browsergraph.drivers.mock import MockBrowser
 from browsergraph.graph import run
 from browsergraph.sample import all_pairs, coverage, sample_specs
-
 
 # --- engine matrix ----------------------------------------------------------
 

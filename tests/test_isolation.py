@@ -11,10 +11,8 @@ from __future__ import annotations
 
 import functools
 import http.server
-import json
 import pathlib
 import socketserver
-import tempfile
 import threading
 
 import pytest
@@ -25,7 +23,14 @@ from browsergraph.drivers import build
 from browsergraph.drivers.isolated import IsolatedBrowser
 from browsergraph.drivers.mock import MockBrowser
 from browsergraph.isolate import (
-    DEFAULT_ROOT, ISOLATED_FAMILIES, Env, IsolationError, Worker, decode, encode, env_for,
+    DEFAULT_ROOT,
+    ISOLATED_FAMILIES,
+    Env,
+    IsolationError,
+    Worker,
+    decode,
+    encode,
+    env_for,
 )
 from browsergraph.nodes.actions import Click, Extract, Navigate, WaitFor
 

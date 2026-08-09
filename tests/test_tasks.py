@@ -4,8 +4,9 @@ import logging as _logging
 
 import pytest
 
-from browsergraph.classify.naics import SECTORS, classify as naics_classify, refine_with_llm
-from browsergraph.crawl import CrawlLimits, Crawler
+from browsergraph.classify.naics import SECTORS, refine_with_llm
+from browsergraph.classify.naics import classify as naics_classify
+from browsergraph.crawl import Crawler, CrawlLimits
 from browsergraph.extract.content import looks_like_article, parse_page, text_of
 from browsergraph.extract.links import Frontier, Robots, links_from_html, normalize, same_site
 from browsergraph.extract.patterns import addresses, emails, extract_contacts, phones, socials
@@ -101,9 +102,27 @@ def test_phones_parsed_with_country_and_extension():
     "Order 2026-03-04 shipped",       # a date
     "SKU 000000000",                  # repeated digits
     "id 12345",                       # too short
+    # Found by running against the live web rather than fixtures: python.org's
+    # homepage prints a Fibonacci series, and "... 233 377 610 987" was being
+    # reported as the phone number 377 610 987. Any page with a numeric table,
+    # a code sample or a list of statistics has the same shape.
+    "0 1 1 2 3 5 8 13 21 34 55 89 144 233 377 610 987",
+    "Q1 120 340 990 Q2 150 360 995",  # a stats table
+    "checksum 377 610 987",           # nine bare digits are not dialable
 ])
 def test_phone_false_positives_rejected(text):
     assert phones(text) == []
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("call (303) 555-0142 today", "(303) 555-0142"),
+    ("call 303 555 0142 today", "303 555 0142"),
+    ("tel. 303.555.0142", "303.555.0142"),
+    ("reach us on +44 20 7946 0958", "+44 20 7946 0958"),
+])
+def test_real_phone_numbers_still_extracted(text, expected):
+    """The rejection rules must not be paid for with misses."""
+    assert [p.raw for p in phones(text)] == [expected]
 
 
 def test_addresses_with_state_and_zip():

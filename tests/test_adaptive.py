@@ -3,7 +3,7 @@ import json
 import pytest
 
 from browsergraph import Engine, Graph, Spec
-from browsergraph.dimensions import Behavior, Display, LLMControl, Stealth
+from browsergraph.dimensions import LLMControl, Stealth
 from browsergraph.drivers.mock import MockBrowser
 from browsergraph.errors import Failure, Response, classify
 from browsergraph.nodes.actions import Click, Extract, Navigate

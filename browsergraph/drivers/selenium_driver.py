@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import random
 import time
+from typing import Any
 
 from browsergraph.dimensions import (
     Binary,
@@ -44,12 +45,15 @@ class SeleniumBrowser:
     def __init__(self, spec: Spec, executable_path: str = "") -> None:
         self.spec = spec
         self.executable_path = executable_path
-        self._driver = None
+        # Any, not Optional[WebDriver]: selenium is an optional dependency
+        # imported inside start(), so its types are unavailable at check time.
+        self._driver: Any = None
 
     def start(self) -> None:
         from selenium import webdriver  # type: ignore
 
         ident = self.spec.identity
+        opts: Any     # Firefox and Chrome option objects are unrelated types
         if self.spec.binary is Binary.FIREFOX:
             opts = webdriver.FirefoxOptions()
         else:

@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import sys
 import traceback
+from typing import Any
 
 
 def _build(spec_dict: dict):
@@ -43,15 +44,23 @@ def main() -> int:
 
         op = msg.get("op", "")
         try:
+            reply: dict[str, Any]
             if op == "open":
                 browser, _spec = _build(msg.get("spec") or {})
                 browser.start()
                 reply = {"ok": True}
             elif op == "close":
+                # Artifact paths only exist once the context has closed, so they
+                # are returned from the close itself. Asking afterwards is too
+                # late twice over: the browser is gone, and the `browser is None`
+                # guard below would reject the question anyway.
+                art = {"video_path": "", "trace_path": ""}
                 if browser is not None:
                     browser.stop()
+                    art = {"video_path": getattr(browser, "video_path", "") or "",
+                           "trace_path": getattr(browser, "trace_path", "") or ""}
                     browser = None
-                reply = {"ok": True}
+                reply = {"ok": True, "result": art}
             elif browser is None:
                 reply = {"ok": False, "error": "browser not open"}
             elif op == "goto":

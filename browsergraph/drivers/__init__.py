@@ -26,9 +26,17 @@ def _loop_is_running() -> bool:
     """True when this thread already has a running asyncio loop.
 
     Playwright's sync API refuses to start in that case, and the loop cannot
-    simply be replaced — a running loop is not swappable. Some CDP-based
-    libraries leave one behind, which would otherwise make playwright
-    unusable for the rest of the process through no fault of the caller.
+    simply be replaced — a running loop is not swappable.
+
+    The usual reason is legitimate and not a bug to fix: Jupyter and IPython
+    run every cell inside a loop, as does any caller in async code. Routing
+    those through a worker process is what makes `engine=playwright` usable
+    from a notebook at all.
+
+    (It was *also* caused by this library: a playwright launch that failed
+    partway left its greenlet parked in a loop and poisoned the thread. That
+    was a real bug and is fixed in PlaywrightBrowser.start, which now unwinds
+    itself — see test_a_failed_start_does_not_poison_the_interpreter.)
     """
     import asyncio
     try:
@@ -52,18 +60,14 @@ def build(spec: Spec, **kwargs) -> BrowserPort:
     family = ENGINE_FAMILY.get(spec.engine)
 
     if family == "playwright" and _loop_is_running():
-        # Route through a worker process rather than failing: the adapter is
-        # identical, and the alternative is an error the caller cannot act on.
-        from browsergraph.isolate import env_for
-        env = env_for(spec.engine)
-        if env.exists:
-            from browsergraph.drivers.isolated import IsolatedBrowser
-            return IsolatedBrowser(spec, **kwargs)
-        raise DriverUnavailable(
-            f"{spec.engine.value} cannot start: another library left a running "
-            f"asyncio loop in this thread, and playwright's sync API refuses "
-            f"to run inside one. Build an isolated environment to work around "
-            f"it: browsergraph envs create --name {env.name}")
+        # A worker *thread*, not a worker process. The sync API objects to a
+        # loop in the calling thread, and a fresh thread has none — so this
+        # needs no virtualenv and no setup, which matters because the common
+        # case here is a notebook (Jupyter, Kaggle, Colab all run cells inside
+        # a loop). The heavier per-engine venv stays available via
+        # spec.isolated for engines that genuinely conflict.
+        from browsergraph.drivers.threaded import ThreadedBrowser
+        return ThreadedBrowser(spec, **kwargs)
 
     if family == "mock":
         from browsergraph.drivers.mock import MockBrowser

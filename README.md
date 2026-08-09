@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Core deps: none](https://img.shields.io/badge/core%20deps-stdlib--only-brightgreen)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-428%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-516%20passing-brightgreen)](tests/)
 [![Kaggle](https://img.shields.io/badge/Kaggle-live%20demo-20BEFF?logo=kaggle)](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 
 Composable browser automation. Any engine × binary × transport × display ×
@@ -22,6 +22,48 @@ browsergraph` is small and the test suite runs anywhere — no browser, no netwo
 [Kaggle notebook](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 runs the whole tour in a browser-less environment.
 
+### How it fits together
+
+```mermaid
+flowchart LR
+  subgraph Author["you write this once"]
+    G["Graph<br/><i>nodes + typed edges</i>"]
+    S["Spec<br/><i>one point in the dimension space</i>"]
+  end
+  G --> R["run()"]
+  S --> R
+  R --> P{{"BrowserPort<br/><i>12 methods, structural</i>"}}
+  P --> PW["playwright<br/>patchright<br/>camoufox"]
+  P --> SE["selenium<br/>undetected-cd<br/>seleniumbase"]
+  P --> HT["http<br/><i>no browser — TLS impersonation</i>"]
+  P --> MK["mock<br/><i>no I/O</i>"]
+  R -.-> L["lint · contracts · learn<br/><i>read the nodes' declarations</i>"]
+  classDef seam fill:#e8f0fe,stroke:#2d6cb5,stroke-width:2px;
+  class P seam;
+```
+
+Nodes never touch an engine. They talk to `BrowserPort`, and that seam is the whole
+reason one graph runs everywhere — including on the engine that has no browser at all.
+
+### A graph, and the question a diagram should answer
+
+```mermaid
+flowchart TD
+  n1["navigate"] --> n2("wait_for<br/><i>verifies</i>")
+  n2 --> n3[["click<br/><i>mutates</i>"]]
+  n3 --> n4("confirm<br/><i>verifies the click landed</i>")
+  n4 --> n5["extract"]
+  n1 -.->|explicit dependency| n6["screenshot"]
+  classDef mutates fill:#fde2e2,stroke:#c33,stroke-width:2px;
+  classDef verifies fill:#e2f5e6,stroke:#2a2,stroke-width:2px;
+  class n3 mutates; class n2,n4 verifies;
+```
+
+Red changes remote state; green checks an outcome. A graph with red and no green after
+it is what **BG003** flags — and it is the shape that produced 551 "successful" sends and
+zero posts. `graph.to_mermaid()` emits this for any graph; `graph.to_html()` renders it
+interactively, hover-for-contract, in a notebook.
+
 ### One graph, or no browser at all
 
 Most pages are server-rendered and need no browser. `Engine.HTTP` fetches them
@@ -29,8 +71,9 @@ with a real browser's TLS fingerprint (`curl-cffi`), which is the layer anti-bot
 vendors check *before any JavaScript runs*:
 
 ```
-HTTP        0.35s   ->  playwright 1.62.0
-PLAYWRIGHT  2.72s   ->  playwright 1.62.0     # 7.8x slower, same answer
+                        https://www.python.org, best of 3
+HTTP        0.14s   ->  'Welcome to Python.org'
+PLAYWRIGHT  1.08s   ->  'Welcome to Python.org'     # 7.7x slower, same answer
 ```
 
 It refuses `eval_js`, `type` and `screenshot` rather than silently no-opping —
@@ -276,11 +319,51 @@ Adding an engine means writing one adapter and touching no nodes.
 
 `browsergraph doctor` checks all of these and prints the fix for each miss.
 
+## Contracts
+
+Every check in this library reads a node's own declarations — the linter trusts
+`mutates`, the scheduler trusts `reads`/`writes`. A node that misdeclares itself does not
+fail; it silently switches those checks off. So declarations are enforced at all three
+moments where that is possible: when the class is defined, when nodes are composed into a
+graph, and while the graph runs.
+
+```python
+class Bad(Node):
+    kind = "bad"
+    writes = ("url")     # ContractError at import: a missing comma — this is a str
+```
+
+```bash
+browsergraph nodes                    # every node kind and its contract
+browsergraph graph g.yaml --mermaid   # a diagram; mutating nodes red, verifying green
+```
+
+See [CONTRACTS.md](CONTRACTS.md).
+
+## Notebooks
+
+Jupyter, Kaggle and Colab run every cell inside an asyncio loop, which Playwright's sync
+API refuses to start in. `browsergraph` detects that and drives the adapter from a worker
+thread, so `engine=playwright` works in a notebook with no extra setup — screenshots and
+video included. There is a [runnable tour notebook](notebooks/browsergraph-tour.ipynb).
+
+## Documentation
+
+| | |
+|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | the Protocol-vs-base-class seam |
+| [CONTRACTS.md](CONTRACTS.md) | what a node promises, and the three moments it is checked |
+| [DIMENSIONS.md](DIMENSIONS.md) | axes worth adding, and why verification matters most |
+| [ISOLATION.md](ISOLATION.md) | conflicting engines in separate virtualenvs |
+| [PLUGINS.md](PLUGINS.md) | the open plugin format |
+
 ## Development
 
 ```bash
 pip install -e ".[dev]"
-pytest -q          # 47 tests, no browser required
+pytest -q          # 516 tests; no browser required, browser suites skip when absent
+mypy browsergraph --ignore-missing-imports
+ruff check browsergraph
 ```
 
 MIT.

@@ -182,7 +182,7 @@ class EscalationResult:
 
     def summary(self) -> str:
         head = (f"succeeded on attempt {len(self.attempts)} "
-                f"({self.winner.describe()})" if self.ok
+                f"({self.winner.describe()})" if self.ok and self.winner
                 else f"failed after {len(self.attempts)} attempt(s)")
         if self.stopped_early:
             head += f" — halted: {self.stopped_early}"

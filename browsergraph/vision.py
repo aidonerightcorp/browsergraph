@@ -62,7 +62,8 @@ class VisionClient:
     def ask(self, prompt: str, image_path: str, system: str = "") -> str:
         with open(image_path, "rb") as fh:
             b64 = base64.b64encode(fh.read()).decode()
-        messages = ([{"role": "system", "content": system}] if system else [])
+        messages: list[dict[str, Any]] = (
+            [{"role": "system", "content": system}] if system else [])
         messages.append({"role": "user", "content": prompt, "images": [b64]})
         payload = json.dumps({
             "model": self.cfg.model, "messages": messages, "stream": False,
@@ -142,7 +143,7 @@ class VisionLocate(Node):
     """
 
     kind: ClassVar[str] = "vision_locate"
-    uses_llm: ClassVar[bool] = True
+    uses_llm: bool = True
 
     def __init__(self, goal: str, into: str = "selector", fallback: str = "",
                  cfg: LLMConfig | None = None, client: Any = None,
@@ -158,15 +159,15 @@ class VisionLocate(Node):
         return (self.into,)
 
     def run(self, ctx: Context) -> Context:
-        if self.fallback and ctx.browser.find(self.fallback) is not None:
+        if self.fallback and ctx.page.find(self.fallback) is not None:
             ctx.data[self.into] = self.fallback
             ctx.note(f"vision skipped: {self.fallback!r} resolved from the DOM")
             return ctx
 
-        marks = annotate(ctx.browser) if self.annotated else []
+        marks = annotate(ctx.page) if self.annotated else []
         shot = os.path.join(tempfile.gettempdir(), f"bg_vision_{id(ctx)}.png")
         try:
-            ctx.browser.screenshot(shot)
+            ctx.page.screenshot(shot)
         except Exception as e:
             ctx.fail(f"vision: screenshot failed: {type(e).__name__}: {e}")
             return ctx
@@ -221,8 +222,8 @@ class VisionVerify(Node):
     """Confirm an expected outcome from what the page looks like."""
 
     kind: ClassVar[str] = "vision_verify"
-    uses_llm: ClassVar[bool] = True
-    verifies: ClassVar[bool] = True
+    uses_llm: bool = True
+    verifies: bool = True
     writes: ClassVar[tuple[str, ...]] = ("verified", "verdict")
 
     def __init__(self, expectation: str, cfg: LLMConfig | None = None,
@@ -235,7 +236,7 @@ class VisionVerify(Node):
     def run(self, ctx: Context) -> Context:
         shot = os.path.join(tempfile.gettempdir(), f"bg_verify_{id(ctx)}.png")
         try:
-            ctx.browser.screenshot(shot)
+            ctx.page.screenshot(shot)
         except Exception as e:
             ctx.fail(f"vision: screenshot failed: {type(e).__name__}: {e}")
             return ctx

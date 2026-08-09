@@ -30,10 +30,17 @@ class IsolatedBrowser:
         self._worker.start()
 
     def stop(self) -> None:
+        """Close the remote browser and collect what it produced.
+
+        The close and the artifact query are the same round trip on purpose:
+        `video_path` is only populated by the inner `stop()`, so asking before
+        the close always returned an empty string, and asking after it is too
+        late — the worker has dropped the browser.
+        """
         try:
-            art = self._worker.call("artifacts").get("result") or {}
-            self.video_path = art.get("video_path", "")
-            self.trace_path = art.get("trace_path", "")
+            art = self._worker.call("close").get("result") or {}
+            self.video_path = art.get("video_path", "") or ""
+            self.trace_path = art.get("trace_path", "") or ""
         except IsolationError:
             pass
         self._worker.stop()

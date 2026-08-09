@@ -10,6 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import ClassVar
 
+from browsergraph.contracts import Contract, ContractError, check_class, contract_of
 from browsergraph.ports import Context
 
 
@@ -19,20 +20,61 @@ class Node:
     kind: ClassVar[str] = "node"
     reads: ClassVar[tuple[str, ...]] = ()
     writes: ClassVar[tuple[str, ...]] = ()
-    needs_browser: ClassVar[bool] = True
+    #: Not ClassVar for the same reason as the flags below: wrappers and
+    #: composites take their value from what they wrap.
+    needs_browser: bool = True
 
     #: Semantics the linter reasons about.
-    mutates: ClassVar[bool] = False    # changes remote state (click, type, submit)
-    verifies: ClassVar[bool] = False   # checks an outcome
-    interacts: ClassVar[bool] = False  # touches an element, so needs it present
-    uses_llm: ClassVar[bool] = False
+    #:
+    #: Deliberately *not* ClassVar: composite nodes (Branch, Loop, Retry,
+    #: HealingNode) derive these per instance by aggregating their children, so
+    #: a wrapped Click still reports `mutates`. BG003 — "mutation without
+    #: verification" — reads these flags, and it would silently stop firing on
+    #: every wrapped node if the values could not vary per instance.
+    #: Subclasses still set class-level defaults; only the annotation changed.
+    mutates: bool = False              # changes remote state (click, type, submit)
+    verifies: bool = False             # checks an outcome
+    interacts: bool = False            # touches an element, so needs it present
+    uses_llm: bool = False
     selector: str = ""                 # set by nodes that target an element
+
+    #: Set on intermediate base classes that are not themselves runnable.
+    abstract: ClassVar[bool] = False
+
+    def __init_subclass__(cls, **kwargs) -> None:
+        """Enforce the node contract when the class is defined.
+
+        Deliberately at import time rather than at registration: an unregistered
+        node used directly in a graph is just as capable of lying about itself,
+        and a malformed declaration silently disables the linter rules built on
+        top of it. Failing here means the traceback points at the offending
+        `class` statement instead of at a browser session thirty seconds in.
+
+        Set `abstract = True` on a base class that exists only to be subclassed.
+        """
+        super().__init_subclass__(**kwargs)
+        cls.abstract = cls.__dict__.get("abstract", False)
+        problems = check_class(cls)
+        if problems:
+            raise ContractError(
+                f"{cls.__name__} violates the node contract:\n  - "
+                + "\n  - ".join(problems))
 
     def __init__(self, name: str = "") -> None:
         self.name = name or self.kind
 
+    def contract(self) -> Contract:
+        """This node's contract, read from the instance.
+
+        Instance-level because composite nodes derive their flags from their
+        children — see `contracts.contract_of`.
+        """
+        return contract_of(self)
+
     def run(self, ctx: Context) -> Context:  # pragma: no cover - abstract
         raise NotImplementedError
+
+    run.__isabstractnode__ = True    # type: ignore[attr-defined]
 
     def __repr__(self) -> str:
         return f"<{self.kind}:{self.name}>"
@@ -62,7 +104,7 @@ class FnNode(Node):
     fn: Callable[[Context], Context] = lambda c: c
     kind: ClassVar[str] = "fn"
     name: str = "fn"
-    needs_browser: ClassVar[bool] = False
+    needs_browser: bool = False
 
     def run(self, ctx: Context) -> Context:
         return self.fn(ctx)

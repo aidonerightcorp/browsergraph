@@ -55,7 +55,7 @@ class LLMSelector(Node):
     """
 
     kind: ClassVar[str] = "llm_selector"
-    uses_llm: ClassVar[bool] = True
+    uses_llm: bool = True
 
     def __init__(self, goal: str, into: str = "selector", fallback: str = "",
                  cfg: LLMConfig | None = None, client: Any = None, name: str = ""):
@@ -67,13 +67,13 @@ class LLMSelector(Node):
         self.client = client
 
     def run(self, ctx: Context) -> Context:
-        if self.fallback and ctx.browser.find(self.fallback) is not None:
+        if self.fallback and ctx.page.find(self.fallback) is not None:
             ctx.data[self.into] = self.fallback
             ctx.note(f"selector {self.fallback!r} resolved without the model")
             return ctx
 
         client = self.client or OllamaClient(self.cfg)
-        html = ctx.browser.html()[:6000]
+        html = ctx.page.html()[:6000]
         prompt = (
             "Return ONE CSS selector and nothing else.\n"
             f"Goal: {self.goal}\n\nHTML:\n{html}"
@@ -98,8 +98,8 @@ class LLMVerify(Node):
     """Ask the model whether the page shows the expected outcome."""
 
     kind: ClassVar[str] = "llm_verify"
-    uses_llm: ClassVar[bool] = True
-    verifies: ClassVar[bool] = True
+    uses_llm: bool = True
+    verifies: bool = True
     writes: ClassVar[tuple[str, ...]] = ("verified", "verdict")
 
     def __init__(self, expectation: str, cfg: LLMConfig | None = None,
@@ -111,12 +111,12 @@ class LLMVerify(Node):
 
     def run(self, ctx: Context) -> Context:
         client = self.client or OllamaClient(self.cfg)
-        state = ctx.browser.state()
+        state = ctx.page.state()
         prompt = (
             'Answer with JSON {"ok": true|false, "why": "..."} only.\n'
             f"Expectation: {self.expectation}\n"
             f"URL: {state.url}\nTitle: {state.title}\n"
-            f"Page text (truncated):\n{ctx.browser.html()[:4000]}"
+            f"Page text (truncated):\n{ctx.page.html()[:4000]}"
         )
         try:
             raw = client.complete(prompt, system="You reply with JSON only.")

@@ -109,7 +109,7 @@ def score(chunks: list[Chunk], query: str) -> list[Chunk]:
 
     docs = [Counter(tokenize(c.text + " " + c.heading)) for c in chunks]
     n = len(chunks)
-    df = Counter()
+    df: Counter[str] = Counter()
     for d in docs:
         for t in set(terms):
             if d.get(t):
@@ -226,7 +226,7 @@ def strip_boilerplate(pages: list[str], threshold: float = 0.6,
         return pages
     blocks = [[b.strip() for b in re.split(r"\n\s*\n", p or "") if b.strip()]
               for p in pages]
-    freq = Counter()
+    freq: Counter[str] = Counter()
     for bl in blocks:
         for b in set(bl):
             freq[b] += 1

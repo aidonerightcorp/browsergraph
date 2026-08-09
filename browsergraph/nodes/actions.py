@@ -34,7 +34,7 @@ class Navigate(Node):
         self.behavior = behavior
 
     def run(self, ctx: Context) -> Context:
-        state = ctx.browser.goto(self.url)
+        state = ctx.page.goto(self.url)
         ctx.data["url"] = state.url
         ctx.data["title"] = state.title
         ctx.note(f"navigate -> {state.url} ({state.title!r})")
@@ -46,8 +46,8 @@ class Navigate(Node):
 @register
 class Click(Node):
     kind: ClassVar[str] = "click"
-    mutates: ClassVar[bool] = True
-    interacts: ClassVar[bool] = True
+    mutates: bool = True
+    interacts: bool = True
 
     def __init__(self, selector: str, name: str = "", behavior: Behavior | None = None,
                  optional: bool = False):
@@ -58,13 +58,13 @@ class Click(Node):
 
     def run(self, ctx: Context) -> Context:
         _pause(self.behavior)
-        if ctx.browser.find(self.selector) is None:
+        if ctx.page.find(self.selector) is None:
             if self.optional:
                 ctx.note(f"click {self.selector!r} skipped (absent, optional)")
                 return ctx
             ctx.fail(f"click target not found: {self.selector}")
             return ctx
-        ctx.browser.click(self.selector)
+        ctx.page.click(self.selector)
         ctx.note(f"click {self.selector!r}")
         return ctx
 
@@ -72,8 +72,8 @@ class Click(Node):
 @register
 class Type(Node):
     kind: ClassVar[str] = "type"
-    mutates: ClassVar[bool] = True
-    interacts: ClassVar[bool] = True
+    mutates: bool = True
+    interacts: bool = True
 
     def __init__(self, selector: str, text: str, name: str = "",
                  behavior: Behavior | None = None):
@@ -85,7 +85,7 @@ class Type(Node):
     def run(self, ctx: Context) -> Context:
         _pause(self.behavior)
         cps = self.behavior.typing_cps if self.behavior else 0.0
-        ctx.browser.type(self.selector, self.text, cps=cps)
+        ctx.page.type(self.selector, self.text, cps=cps)
         ctx.note(f"type into {self.selector!r} ({len(self.text)} chars, cps={cps})")
         return ctx
 
@@ -93,7 +93,7 @@ class Type(Node):
 @register
 class WaitFor(Node):
     kind: ClassVar[str] = "wait_for"
-    verifies: ClassVar[bool] = True
+    verifies: bool = True
 
     def __init__(self, selector: str, timeout: float = 10.0, name: str = ""):
         super().__init__(name)
@@ -101,7 +101,7 @@ class WaitFor(Node):
         self.timeout = timeout
 
     def run(self, ctx: Context) -> Context:
-        ok = ctx.browser.wait_for(self.selector, timeout=self.timeout)
+        ok = ctx.page.wait_for(self.selector, timeout=self.timeout)
         ctx.note(f"wait_for {self.selector!r} -> {ok}")
         if not ok:
             ctx.fail(f"timeout waiting for {self.selector}")
@@ -111,7 +111,7 @@ class WaitFor(Node):
 @register
 class Extract(Node):
     kind: ClassVar[str] = "extract"
-    interacts: ClassVar[bool] = True
+    interacts: bool = True
 
     def __init__(self, selector: str, into: str, name: str = ""):
         super().__init__(name)
@@ -123,7 +123,7 @@ class Extract(Node):
         return (self.into,)
 
     def run(self, ctx: Context) -> Context:
-        value = ctx.browser.text_of(self.selector)
+        value = ctx.page.text_of(self.selector)
         ctx.data[self.into] = value
         ctx.note(f"extract {self.selector!r} -> {self.into} ({len(value)} chars)")
         return ctx
@@ -143,7 +143,7 @@ class Scroll(Node):
         dy = self.dy
         if self.behavior and self.behavior.scroll_jitter:
             dy = int(dy * random.uniform(0.75, 1.25))
-        ctx.browser.scroll(dy)
+        ctx.page.scroll(dy)
         ctx.note(f"scroll {dy}")
         return ctx
 
@@ -157,7 +157,7 @@ class Screenshot(Node):
         self.path = path
 
     def run(self, ctx: Context) -> Context:
-        saved = ctx.browser.screenshot(self.path)
+        saved = ctx.page.screenshot(self.path)
         ctx.artifacts.append(saved)
         ctx.note(f"screenshot -> {saved}")
         return ctx

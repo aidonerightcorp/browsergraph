@@ -15,14 +15,13 @@ import http.server
 import importlib.util
 import pathlib
 import socketserver
-import tempfile
 import threading
 
 import pytest
 
 from browsergraph import Engine, Graph, Spec, run
 from browsergraph.dimensions import Capture, Display, Stealth, Vision, validate
-from browsergraph.drivers import DriverUnavailable, build
+from browsergraph.drivers import build
 from browsergraph.extract.patterns import extract_contacts
 from browsergraph.nodes.actions import Extract, Navigate, WaitFor
 from browsergraph.preprocess import Preprocess, backends, reduce

@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import threading
-import time
 
 import pytest
 
 from browsergraph.dimensions import LLMConfig
-from browsergraph.models import COMPLETION, VISION, Catalog, ModelInfo, ModelUnavailable
+from browsergraph.models import Catalog, ModelInfo, ModelUnavailable
 from browsergraph.routing import JOBS, Call, Ledger, Router, plan_assignments
 from browsergraph.throttle import DomainPolicy, Gate, Limiter, domain_of
 
@@ -108,7 +107,7 @@ def test_limiter_reports_requests_and_waiting():
 
 
 def test_none_limiter_falls_back_to_per_crawler_delay():
-    from browsergraph.crawl import CrawlLimits, Crawler
+    from browsergraph.crawl import Crawler, CrawlLimits
     from browsergraph.drivers.mock import MockBrowser
     slept = []
     c = Crawler(MockBrowser(pages={"https://a.example": {"h1": "x"}}),

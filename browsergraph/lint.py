@@ -52,7 +52,7 @@ def lint(graph: Graph, spec: Spec | None = None) -> list[Finding]:
 
     # BG001 — nodes never reached
     reachable = {order[0]} if order else set()
-    for a, b in graph.edges:
+    for a, b, *_ in graph.edges:
         if a in reachable:
             reachable.add(b)
     for key in order:
@@ -86,9 +86,9 @@ def lint(graph: Graph, spec: Spec | None = None) -> list[Finding]:
     # BG004 — interacting without establishing presence
     seen_wait: set[str] = set()
     for n in nodes:
-        if n.verifies and getattr(n, "selector", ""):
+        if n.verifies and n.selector:
             seen_wait.add(n.selector)
-        if n.interacts and getattr(n, "selector", "") and not getattr(n, "optional", False):
+        if n.interacts and n.selector and not getattr(n, "optional", False):
             if n.selector not in seen_wait:
                 out.append(Finding("BG004", WARN, n.name,
                                    f"interacts with {n.selector!r} without waiting for it",

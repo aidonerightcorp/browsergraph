@@ -17,6 +17,7 @@ silently no-ops an interaction is worse than one that refuses it.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from browsergraph.dimensions import Spec, Stealth
 from browsergraph.ports import Element, PageState
@@ -41,7 +42,7 @@ class HttpBrowser:
     def __init__(self, spec: Spec, timeout: float = 30.0) -> None:
         self.spec = spec
         self.timeout = timeout
-        self._session = None
+        self._session: Any = None
         self._html = ""
         self._url = ""
         self._status = 0
@@ -59,7 +60,8 @@ class HttpBrowser:
         proxies = {"http": ident.proxy, "https": ident.proxy} if ident.proxy else None
         self._session = requests.Session(
             impersonate=_IMPERSONATE.get(self.spec.stealth, "chrome"),
-            headers=headers or None, proxies=proxies, timeout=self.timeout)
+            headers=headers or None, proxies=proxies,  # type: ignore[arg-type]
+            timeout=self.timeout)
 
     def stop(self) -> None:
         try:

@@ -71,10 +71,24 @@ class Phone:
         return f"{self.country}{self.digits}" if self.country else self.digits
 
 
+#: A bare number flanked by more bare numbers is part of a sequence, not a phone.
+#: Found on python.org, whose homepage prints a Fibonacci series: the run
+#: "... 233 377 610 987" yielded the "phone number" 377 610 987. Any page with a
+#: numeric table, a code sample or a list of statistics does the same thing.
+_ADJACENT_DIGITS = re.compile(r"\d[\s]*$")
+_LEADING_DIGITS = re.compile(r"^[\s]*\d")
+
+
 def phones(text: str, min_digits: int = 9, max_digits: int = 15) -> list[Phone]:
-    """Plausible phone numbers. Length-validated to exclude IDs and years."""
+    """Plausible phone numbers. Length-validated to exclude IDs and years.
+
+    Deliberately conservative, in the same direction as the rest of this module:
+    a false positive silently poisons a dataset, while a miss is a visible empty
+    field that someone notices.
+    """
+    text = text or ""
     out, seen = [], set()
-    for m in _PHONE.finditer(text or ""):
+    for m in _PHONE.finditer(text):
         raw = m.group(0).strip()
         country = (m.group(1) or "").strip()
         digits = re.sub(r"\D", "", raw[len(country):] if country else raw)
@@ -86,6 +100,18 @@ def phones(text: str, min_digits: int = 9, max_digits: int = 15) -> list[Phone]:
             continue
         if len(set(digits)) <= 2:                     # 000000000, 111111111
             continue
+
+        # Without a country code, nine bare digits is not a dialable number
+        # anywhere this library is likely to be pointed, and it is the single
+        # most common shape of numeric noise. Ten is the floor.
+        if not country and len(digits) < 10:
+            continue
+
+        # Part of a longer run of numbers -> a sequence, table or code output.
+        if not country and re.fullmatch(r"[\d\s]+", raw):
+            if _ADJACENT_DIGITS.search(text[max(0, m.start() - 12):m.start()]) or \
+                    _LEADING_DIGITS.match(text[m.end():m.end() + 12]):
+                continue
         key = country + digits
         if key not in seen:
             seen.add(key)
