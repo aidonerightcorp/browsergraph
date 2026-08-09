@@ -1,0 +1,129 @@
+# browsergraph on Kubernetes: a stateless HTTP service plus an optional Job
+# for one-off task runs. Applies the same limits the compose file does — a
+# browser will consume whatever it is given, so requests/limits are mandatory
+# rather than advisory.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: browsergraph-config
+data:
+  BG_ENGINE: "playwright"
+  BG_DISPLAY: "headless"
+  BG_STEALTH: "stealth_js"
+  BG_BEHAVIOR: "humanlike"
+  OLLAMA_HOST: "http://ollama:11434"
+  OLLAMA_MODEL: "glm-5.2"
+  LOG_LEVEL: "INFO"
+  LOG_SERVICE: "browsergraph"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: browsergraph-secrets
+type: Opaque
+stringData:
+  OLLAMA_API_KEY: ""          # set via sealed-secrets / external-secrets in real use
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: browsergraph
+  labels: {app: browsergraph}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: browsergraph}
+  template:
+    metadata:
+      labels: {app: browsergraph}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: browsergraph
+          image: ghcr.io/OWNER/browsergraph:0.1.0
+          imagePullPolicy: IfNotPresent
+          args: ["serve"]
+          ports: [{containerPort: 8800, name: http}]
+          envFrom:
+            - configMapRef: {name: browsergraph-config}
+            - secretRef: {name: browsergraph-secrets}
+          resources:
+            requests: {cpu: "250m", memory: "512Mi"}
+            limits:   {cpu: "2",    memory: "2Gi"}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            # Chrome needs writable /dev/shm and a temp dir; the root fs stays
+            # read-only. The 64Mi default for /dev/shm crashes Chromium.
+            - {name: dshm, mountPath: /dev/shm}
+            - {name: tmp, mountPath: /tmp}
+            - {name: profiles, mountPath: /profiles}
+      volumes:
+        - name: dshm
+          emptyDir: {medium: Memory, sizeLimit: 1Gi}
+        - name: tmp
+          emptyDir: {sizeLimit: 1Gi}
+        - name: profiles
+          emptyDir: {sizeLimit: 2Gi}     # swap for a PVC to persist logins
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: browsergraph
+spec:
+  selector: {app: browsergraph}
+  ports: [{port: 80, targetPort: http, name: http}]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: browsergraph
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: browsergraph}
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+---
+# One-off task run. `restartPolicy: Never` with a low backoffLimit is
+# deliberate: a task that failed on a challenge must not be retried by the
+# scheduler, which would defeat the in-process circuit breaker.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: browsergraph-research
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: task
+          image: ghcr.io/OWNER/browsergraph:0.1.0
+          args: ["task", "research", "--url", "https://example.com"]
+          envFrom:
+            - configMapRef: {name: browsergraph-config}
+            - secretRef: {name: browsergraph-secrets}
+          resources:
+            requests: {cpu: "250m", memory: "512Mi"}
+            limits:   {cpu: "2",    memory: "2Gi"}
+          volumeMounts:
+            - {name: dshm, mountPath: /dev/shm}
+      volumes:
+        - name: dshm
+          emptyDir: {medium: Memory, sizeLimit: 1Gi}

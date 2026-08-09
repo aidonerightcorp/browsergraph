@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push: {tags: ["v*"]}
+  workflow_dispatch:
+
+permissions: {contents: write, packages: write, id-token: write}
+
+jobs:
+  pypi:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install build
+      - run: python -m build
+      # Trusted publishing: no long-lived token stored in the repo.
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}:latest

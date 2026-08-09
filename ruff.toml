@@ -1,0 +1,12 @@
+line-length = 100
+target-version = "py310"
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E501",   # long lines are caught by review, not by a linter
+    "B008",   # dataclass defaults via field() are idiomatic here
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["E731"]

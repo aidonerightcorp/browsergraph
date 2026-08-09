@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push: {branches: [main]}
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # The core is stdlib-only, so it must pass with no browser and no network.
+  core:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ matrix.python }}"}
+      - run: pip install -e ".[dev]"
+      - name: Tests that need no browser
+        run: pytest tests -q --ignore=tests/test_corpus.py
+                            --ignore=tests/test_engines.py
+                            --ignore=tests/test_isolation.py
+
+  # The suites that exercise real drivers.
+  browsers:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [playwright, patchright, selenium]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -e ".[dev,${{ matrix.engine }}]"
+      - name: Install browser
+        run: |
+          if [ "${{ matrix.engine }}" = "playwright" ]; then playwright install --with-deps chromium; fi
+          if [ "${{ matrix.engine }}" = "patchright" ]; then patchright install --with-deps chromium; fi
+      - run: pytest tests/test_engines.py tests/test_corpus.py -q
+
+  # Camoufox conflicts with the shared playwright pin, so it only runs isolated.
+  isolated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -e ".[dev]"
+      - run: python -m browsergraph.cli envs create --name playwright
+      - run: pytest tests/test_isolation.py -q
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install ruff
+      - run: ruff check browsergraph

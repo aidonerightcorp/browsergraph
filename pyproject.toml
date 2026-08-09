@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "browsergraph"
+version = "0.1.0"
+description = "Composable browser automation: any engine x binary x transport x stealth x behaviour, driven by reusable nodes in a graph."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["browser", "automation", "playwright", "selenium", "graph", "nodes", "ollama", "llm"]
+dependencies = []
+
+[project.optional-dependencies]
+playwright = ["playwright>=1.40"]
+playwright_stealth = ["playwright>=1.40", "playwright-stealth>=1.0"]
+patchright = ["patchright>=1.40"]
+camoufox = ["camoufox[geoip]>=0.3"]
+selenium = ["selenium>=4.15", "undetected-chromedriver>=3.5"]
+seleniumbase = ["seleniumbase>=4.20"]
+nodriver = ["nodriver>=0.30"]
+cdp = ["websockets>=12.0"]
+yaml = ["PyYAML>=6.0"]
+all = ["playwright>=1.40", "patchright>=1.40", "selenium>=4.15",
+       "undetected-chromedriver>=3.5", "seleniumbase>=4.20", "nodriver>=0.30",
+       "websockets>=12.0", "PyYAML>=6.0"]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+browsergraph = "browsergraph.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/OWNER/browsergraph"
+Issues = "https://github.com/OWNER/browsergraph/issues"
+
+[project.entry-points."browsergraph.plugins"]
+# third-party packages advertise plugins here; see PLUGINS.md
+
+[tool.setuptools]
+packages = [
+    "browsergraph", "browsergraph.nodes", "browsergraph.drivers",
+    "browsergraph.dimensions", "browsergraph.extract", "browsergraph.classify",
+    "browsergraph.tasks",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

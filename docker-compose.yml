@@ -1,0 +1,32 @@
+services:
+  browsergraph:
+    build:
+      context: .
+      args:
+        EXTRAS: playwright          # playwright | selenium | patchright | all
+        INSTALL_BROWSERS: chromium  # chromium firefox webkit, or "" to skip
+    image: browsergraph:latest
+    ports: ["8800:8800"]
+    environment:
+      BG_ENGINE: playwright
+      BG_DISPLAY: headless
+      BG_STEALTH: stealth_js
+      BG_BEHAVIOR: humanlike
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-glm-5.2}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+    volumes:
+      - ./profiles:/profiles       # persistent browser profiles
+      - ./artifacts:/artifacts     # screenshots, traces
+    shm_size: 1gb                  # Chrome crashes on the 64MB default
+    mem_limit: 2g                  # this host is memory-tight; cap explicitly
+    depends_on: [ollama]
+
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: [ollama:/root/.ollama]
+    mem_limit: 8g
+
+volumes:
+  ollama:
