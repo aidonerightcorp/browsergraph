@@ -223,13 +223,25 @@ def test_missing_library_is_parsed_from_a_real_launch_log():
     assert missing_library("") == ""
 
 
-def test_bootstrap_does_nothing_when_a_browser_already_works():
-    """It must not reinstall on every call."""
+def test_bootstrap_short_circuits_or_reports_honestly():
+    """Both outcomes are correct; which one depends on the machine.
+
+    Written this way because the first version assumed a browser exists and
+    passed locally while failing on a clean CI runner that has no playwright —
+    where walking every fallback and reporting the browser-less route is exactly
+    the right behaviour.
+    """
     from browsergraph.bootstrap import ensure_browser
     rep = ensure_browser(install=False, apt=False)
-    assert len(rep.steps) <= 3, "a working browser should short-circuit"
+
     if rep.ok:
-        assert rep.steps[0].ok
+        assert rep.steps[0].ok, "a working browser must be found by the first probe"
+        assert len(rep.steps) <= 3, "a working browser should not walk the fallbacks"
+    else:
+        assert len(rep.steps) > 1, "a failure should show what was tried"
+        assert "engine=http" in rep.text(), "should name the route that needs no browser"
+        assert not any(s.name.startswith("pip install") for s in rep.steps), \
+            "install=False must not install anything"
 
 
 def test_bootstrap_never_installs_when_asked_not_to(monkeypatch):
