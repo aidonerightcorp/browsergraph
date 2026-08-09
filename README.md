@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Core deps: none](https://img.shields.io/badge/core%20deps-stdlib--only-brightgreen)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-559%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-590%20passing-brightgreen)](tests/)
 [![Kaggle](https://img.shields.io/badge/Kaggle-live%20demo-20BEFF?logo=kaggle)](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 
 Composable browser automation. Any engine × binary × transport × display ×
@@ -21,6 +21,61 @@ browsergraph` is small and the test suite runs anywhere — no browser, no netwo
 **Try it without installing anything:** the
 [Kaggle notebook](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 runs the whole tour in a browser-less environment.
+
+### What this is arguing
+
+Not a catalogue of browser features. The claim is that **a task decomposes into planes,
+each plane offers interchangeable ways to answer it, and the route through them should be
+chosen from evidence rather than fixed in advance.**
+
+```mermaid
+flowchart LR
+  subgraph R["reach"]
+    R1["http"]; R2["playwright"]; R3["patchright"]; R4["selenium"]; R5["camoufox"]
+  end
+  subgraph S["settle"]
+    S1["dwell"]; S2["wait_for"]; S3["retry_until"]
+  end
+  subgraph L["locate"]
+    L1["css"]; L2["healing"]; L3["llm_selector"]; L4["vision_locate"]
+  end
+  subgraph A["act"]
+    A1["click"]; A2["type"]; A3["scroll"]
+  end
+  subgraph V["verify"]
+    V1["wait_for"]; V2["screenshot"]; V3["llm_verify"]; V4["vision_verify"]
+  end
+  subgraph X["extract"]
+    X1["extract"]; X2["for_each"]; X3["frontier"]
+  end
+  R --> S --> L --> A --> V --> X
+  classDef plane fill:#f4f7fa,stroke:#9fb4cc;
+  class R,S,L,A,V,X plane;
+```
+
+Six planes, 3,024 candidate routes. With no evidence the cheapest wins —
+`http → dwell → css → click → screenshot → extract`: no browser, no model. After a few
+dozen runs against a defended, JavaScript-rendered site the same machinery picks
+`patchright → wait_for → healing → click → screenshot → extract`, and says why:
+*6/6 steps measured*.
+
+```bash
+browsergraph planes --demo                  # the planes and the chosen route
+browsergraph planes --html planes.html      # both routes drawn over all the others
+```
+
+The planes are **derived from the node contracts**, not written down. `click` is on *act*
+because it declares `mutates`; adding a node adds a candidate and the diagram changes
+without anyone editing it. That is what enforcing contracts buys — they are the thing the
+architecture reasons over.
+
+Two decisions keep the scoring honest:
+
+* **An untried candidate is a coin flip, not a free win.** Scoring a route over only its
+  *measured* steps made a route with one good step and five untried ones beat a route
+  measured end to end — so "after learning" recommended the parts nobody had ever run.
+* **A route is a product, not an average.** Every plane has to work, so one weak step
+  drags the route down instead of being averaged away by five strong ones.
 
 ### How it fits together
 
@@ -452,7 +507,7 @@ video included. There is a [runnable tour notebook](notebooks/browsergraph-tour.
 
 ```bash
 pip install -e ".[dev]"
-pytest -q          # 559 tests; no browser required, browser suites skip when absent
+pytest -q          # 590 tests; no browser required, browser suites skip when absent
 mypy browsergraph --ignore-missing-imports
 ruff check browsergraph
 ```

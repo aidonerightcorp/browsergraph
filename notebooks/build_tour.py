@@ -676,12 +676,12 @@ code("""
 from browsergraph.preprocess import Preprocess, compare, reduce, backends
 from browsergraph.focus import focus
 
-HTML = (TMP / 'index.html').read_text() + '<script>var pad="' + 'z'*6000 + '";</script>'
-rows = sorted(compare(HTML), key=lambda r: r.chars)
+PAGE_HTML = (TMP / 'index.html').read_text() + '<script>var pad="' + 'z'*6000 + '";</script>'
+rows = sorted(compare(PAGE_HTML), key=lambda r: r.chars)
 for r in rows:
     print(f'{r.strategy.value:<15} {r.chars:>7} chars   saved {r.saved_pct:5.1f}%')
 
-f = focus(reduce(HTML, Preprocess.MARKDOWN).content, 'sales email', budget=500)
+f = focus(reduce(PAGE_HTML, Preprocess.MARKDOWN).content, 'sales email', budget=500)
 print(f'\\nfocus -> {f.chars} chars (saved {f.saved_pct:.0f}%)   '
       f'answer kept: {"sales@acme.example" in f.content}')
 print('optional backends:', backends())
@@ -780,7 +780,117 @@ plt.tight_layout(); plt.show()
 
 # ------------------------------------------------------------- learning ----
 md("""
-## 13. Self-tuning: learn from similar sites
+## 13. Every dimension, every path
+
+A `Spec` is one point in a nine-dimensional space. Counting the combinations tells you
+almost nothing; what you actually want to know is **which choices are expensive** — and
+that is a shape, not a number.
+
+One vertical plane per dimension, values stacked inside it, and every runnable spec drawn
+as a line threading exactly one value per plane. Hover a value to trace its paths; click
+to lock a choice and watch what it eliminates.
+""")
+
+code("""
+from browsergraph.spacemap import explore, to_html, to_text
+
+space = explore(limit=1200)
+print(to_text(space))
+""")
+
+code("""
+HTML(to_html(space))     # hover a value; click to lock a choice
+""")
+
+md("""
+Click **stealth = undetected** and five engines grey out at once — playwright, selenium
+and mock among them. That is not a rendering quirk, it is the validator's rule made
+visible: `undetected` needs an engine capable of evasion, and the diagram says so before
+you write the spec rather than after the run fails.
+
+Two things this render is careful about, because a diagram that misleads is worse than
+none:
+
+* **The sample is uniform, not the first N.** An earlier version took the first runnable
+  paths in enumeration order; `itertools.product` varies the last axis fastest, so every
+  drawn path went through playwright/bundled_chromium and every other engine appeared
+  *unreachable*. They are reachable. The caption now states how the paths were chosen.
+* **A value that needs a sibling field is not "impossible".** `transport=remote_cdp`
+  needs an endpoint and `capture=video` an artifact directory; judged against a bare
+  `Spec()` they look unusable, which is false.
+""")
+
+
+md("""
+## 14. The actual architecture: planes, candidates, routes
+
+The dimension space above is a catalogue of settings. It is not the point.
+
+The point is that **a task decomposes into planes** — get the page, wait until it is
+usable, find the target, act, confirm, take the data — and **each plane offers several
+interchangeable ways to answer it**. A route through the planes is one candidate
+solution. Nothing about it is fixed.
+
+The planes below are *derived from the node contracts*, not written down. `click` appears
+under **act** because it declares `mutates`. Add a node and it appears; that is what
+enforcing contracts buys.
+""")
+
+code("""
+from browsergraph.planmap import planes, routes, score_routes, observe, to_html, to_text
+
+ps = planes()
+all_routes = routes(ps, limit=100000)
+naive = score_routes(ps, all_routes)[0]
+print(f'{len(all_routes):,} candidate routes through {len(ps)} planes\\n')
+print('with no evidence at all:')
+print('  ', ' -> '.join(naive.as_list(ps)))
+print('  ', naive.why)
+""")
+
+md("""
+Cheapest first — no browser, no model, a plain CSS selector. That is a *policy*, not a
+prediction, and the library says so rather than dressing it up as a recommendation.
+
+Now give it outcomes. These are the numbers a few dozen runs against a defended,
+JavaScript-rendered site would produce:
+""")
+
+code("""
+observe(ps, {'http': (1, 20), 'playwright': (6, 20), 'patchright': (18, 20),
+             'css': (4, 20), 'healing': (15, 18), 'llm_selector': (9, 10),
+             'wait_for': (19, 20), 'dwell': (6, 20), 'click': (18, 20),
+             'screenshot': (20, 20), 'extract': (17, 18)})
+
+learned = score_routes(ps, routes(ps, limit=100000))[0]
+print('after learning:')
+print('  ', ' -> '.join(learned.as_list(ps)))
+print('  ', learned.why)
+""")
+
+code("""
+HTML(to_html(ps, before=naive, after=learned,
+             title='one task, many routes — chosen, then re-chosen'))
+""")
+
+md("""
+The dashed line is the first guess; the solid line is where the evidence moved it. It
+abandoned the browser-less engine and the plain selector, and it can state why.
+
+Two details that decide whether this is honest:
+
+* **An untried candidate is a coin flip, not a free win.** Scoring a route over only its
+  *measured* steps meant a route with one good step and five untried ones beat a route
+  measured end to end — so "after learning" recommended the parts nobody had run. Every
+  step now contributes, unmeasured ones at the prior.
+* **A route is a product, not an average.** Every plane has to work for the task to work,
+  so one weak step drags the whole route down instead of being averaged away by five
+  strong ones.
+""")
+
+
+md("""
+## 15. Self-tuning: learn from similar sites
 
 Outcomes generalise `site -> org -> sector -> platform -> global`, weighted by
 specificity. Evidence is reported honestly: one success is *p≈0.67, n=1* after smoothing,
@@ -853,7 +963,7 @@ print('failure            :', Outcome(ok=False, tokens=10).utility(),
 
 # --------------------------------------------------------------- errors ----
 md("""
-## 14. A CAPTCHA is not a missing element
+## 16. A CAPTCHA is not a missing element
 
 Retrying is not a universal remedy. A bot wall must **abort** — retrying into one is how
 accounts get banned. Classification reads the page, not just the error string, because a
@@ -894,7 +1004,7 @@ plt.tight_layout(); plt.show()
 
 # -------------------------------------------------------------- throttle ---
 md("""
-## 15. Politeness belongs where the contention is
+## 17. Politeness belongs where the contention is
 
 A per-crawler delay lets ten concurrent tasks make ten requests per second at one host.
 The limiter is **per-domain and process-wide**, and honours a robots `Crawl-delay` when
@@ -923,7 +1033,7 @@ print('robots delay honoured:', lim.policy_for('slow.example').min_interval)
 
 # ------------------------------------------------------------ extraction ---
 md("""
-## 16. Deterministic extraction — conservative on purpose
+## 18. Deterministic extraction — conservative on purpose
 
 No model involved. A false positive silently poisons a dataset; a miss is a visible empty
 field. So dates, repeated digits and asset filenames are rejected rather than guessed at.
@@ -940,7 +1050,7 @@ from browsergraph.extract.patterns import extract_contacts
 from browsergraph.extract.content import parse_page
 from browsergraph.classify.naics import classify
 
-page = parse_page(HTML, BASE)
+page = parse_page(PAGE_HTML, BASE)
 found = extract_contacts(page.text, page.links, page.mailtos)
 print('emails :', found.emails)
 print('phones :', [p.raw for p in found.phones])
@@ -958,7 +1068,7 @@ for label, text in [('this page', page.text),
 
 # ------------------------------------------------------------- the rest ----
 md("""
-## 17. Tasks, control flow and model routing
+## 19. Tasks, control flow and model routing
 
 Control flow lives *inside* the graph — `branch`, `for_each`, `subgraph`, `frontier`,
 `retry_until` are nodes, so healing, supervision and the linter apply to crawling too.
@@ -993,7 +1103,7 @@ than being silently substituted.
 """)
 
 md("""
-## 18. Real models, on real pages
+## 20. Real models, on real pages
 
 Everything so far is deterministic. The LLM nodes are not, and they are the ones where a
 wrong answer is most expensive: a model asked to confirm an outcome will confirm it, if

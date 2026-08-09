@@ -15,7 +15,6 @@ import pytest
 from browsergraph import Engine, Graph, Spec, run
 from browsergraph.contracts import (
     FLAGS,
-    Contract,
     ContractError,
     audit,
     check_class,
@@ -327,8 +326,8 @@ def test_checked_is_transparent_to_the_linter():
 
     plain = (Graph("plain").add(Navigate("https://acme.example"))
              .add(WaitFor("#login")).add(Click("#login")))
-    wrapped = checked((Graph("wrapped").add(Navigate("https://acme.example"))
-                       .add(WaitFor("#login")).add(Click("#login"))))
+    wrapped = checked(Graph("wrapped").add(Navigate("https://acme.example"))
+                       .add(WaitFor("#login")).add(Click("#login")))
     assert ({f.code for f in lint(plain)} == {f.code for f in lint(wrapped)})
     assert "BG003" in {f.code for f in lint(wrapped)}
 

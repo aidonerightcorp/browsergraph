@@ -44,7 +44,9 @@ ENGINE_REQUIREMENT: dict[str, str] = {
     Engine.SELENIUM: "selenium",
     Engine.SELENIUM_UC: "selenium undetected-chromedriver",
     Engine.SELENIUMBASE: "seleniumbase",
-    Engine.NODRIVER: "nodriver",
+    # 0.48.0 through 0.50.3 ship cdp/network.py with a stray non-UTF-8 byte and
+    # raise SyntaxError on import. 0.46.2 is the newest build that works.
+    Engine.NODRIVER: "nodriver<0.48",
     Engine.ZENDRIVER: "zendriver",
     Engine.PYDOLL: "pydoll-python",
     Engine.BOTASAURUS: "botasaurus",

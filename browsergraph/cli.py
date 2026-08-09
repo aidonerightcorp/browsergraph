@@ -8,6 +8,8 @@
     browsergraph run graph.yaml               run a graph from config
     browsergraph serve --port 8800            HTTP API
     browsergraph bootstrap                    get a working browser, whatever it takes
+    browsergraph space --html space.html      every dimension and every path
+    browsergraph planes --html planes.html    task planes, candidates, routes
     browsergraph nodes                        every node kind and its contract
     browsergraph graph graph.yaml --mermaid   draw a graph, audit its contracts
 """
@@ -270,6 +272,55 @@ def cmd_bootstrap(args) -> int:
     return 0 if rep.ok else 1
 
 
+def cmd_space(args) -> int:
+    """Draw the dimension space: one plane per axis, one line per runnable spec."""
+    from browsergraph.spacemap import explore, to_html, to_text
+    space = explore(limit=args.limit)
+    if args.html:
+        from pathlib import Path
+        Path(args.html).write_text(
+            "<!doctype html><meta charset=utf-8>"
+            "<body style='margin:0;padding:18px;background:#f6f8fa'>" + to_html(space),
+            encoding="utf-8")
+        print(f"wrote {args.html}  ({space.summary()})")
+        return 0
+    print(to_text(space))
+    return 0
+
+
+def cmd_planes(args) -> int:
+    """Draw the task as planes of interchangeable candidates."""
+    from browsergraph.planmap import (
+        observe,
+        planes,
+        routes,
+        score_routes,
+        to_html,
+        to_text,
+    )
+    ps = planes()
+    naive = score_routes(ps, routes(ps, limit=100000))[0]
+    learned = None
+    if args.demo:
+        # An illustrative history, clearly labelled as such: what a defended,
+        # JavaScript-rendered site looks like after a few dozen runs.
+        observe(ps, {"http": (1, 20), "playwright": (6, 20), "patchright": (18, 20),
+                     "css": (4, 20), "healing": (15, 18), "llm_selector": (9, 10),
+                     "wait_for": (19, 20), "dwell": (6, 20), "click": (18, 20),
+                     "screenshot": (20, 20), "extract": (17, 18)})
+        learned = score_routes(ps, routes(ps, limit=100000))[0]
+    if args.html:
+        from pathlib import Path
+        Path(args.html).write_text(
+            "<!doctype html><meta charset=utf-8>"
+            "<body style='margin:0;padding:18px;background:#f6f8fa'>"
+            + to_html(ps, before=naive, after=learned), encoding="utf-8")
+        print(f"wrote {args.html}")
+        return 0
+    print(to_text(ps, learned or naive))
+    return 0
+
+
 def cmd_nodes(args) -> int:
     """The contract table — what every node kind promises."""
     from browsergraph.contracts import describe_all
@@ -364,6 +415,17 @@ def main(argv: list[str] | None = None) -> int:
     bs.add_argument("--no-install", action="store_true", help="do not pip/download anything")
     bs.add_argument("--no-apt", action="store_true", help="do not install system libraries")
     bs.set_defaults(fn=cmd_bootstrap)
+
+    sp = sub.add_parser("space", help="every dimension and every runnable path")
+    sp.add_argument("--html", help="write an interactive diagram to this file")
+    sp.add_argument("--limit", type=int, default=1500, help="paths to draw")
+    sp.set_defaults(fn=cmd_space)
+
+    pl = sub.add_parser("planes", help="task planes and candidate routes")
+    pl.add_argument("--html", help="write an interactive diagram to this file")
+    pl.add_argument("--demo", action="store_true",
+                    help="overlay an illustrative learned route")
+    pl.set_defaults(fn=cmd_planes)
 
     sub.add_parser("nodes", help="node kinds and their contracts").set_defaults(fn=cmd_nodes)
 

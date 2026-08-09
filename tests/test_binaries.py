@@ -132,7 +132,15 @@ def test_selenium_drives_every_installed_binary(server, binary, display):
         pytest.skip("no X display")
     spec = Spec(engine=Engine.SELENIUM, binary=binary, display=display)
     browser = build(spec)
-    browser.start()
+    try:
+        browser.start()
+    except Exception as e:
+        # A driver that predates the browser is an environment fact no library
+        # change can fix — snap keeps Chromium current while the matching
+        # chromedriver lags. Narrow on purpose: anything else still fails.
+        if "only supports Chrome version" in str(e):
+            pytest.skip(f"chromedriver/{binary.value} version skew: {str(e)[:90]}")
+        raise
     try:
         assert browser.goto(f"{server}/p.html").title == "Binaries"
         assert "Every Browser" in browser.text_of("#h")
