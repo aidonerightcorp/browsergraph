@@ -199,7 +199,7 @@ def test_extraction_agrees_across_engines(engine, binary, server):
         assert page.title == "Conformance"
         assert page.description == "cross engine"
         assert page.lang == "en"
-        assert any(l.endswith("/other.html") for l in page.links)
+        assert any(link.endswith("/other.html") for link in page.links)
     finally:
         browser.stop()
 
@@ -331,7 +331,9 @@ def test_a_failed_start_does_not_poison_the_interpreter():
 
     browser = build(Spec(engine=Engine.PLAYWRIGHT, display=Display.HEADLESS),
                     executable_path="/nonexistent/chrome")
-    with pytest.raises(Exception):
+    # A bogus executable path: the launch must fail, and the message must name
+    # the binary rather than something generic.
+    with pytest.raises(Exception, match="(?i)executable|launch|chrome"):
         browser.start()
 
     assert not loop_running(), "failed start left a running asyncio loop"

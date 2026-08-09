@@ -106,7 +106,8 @@ def test_timeout_marks_a_slow_success_as_failure():
 
 def test_circuit_breaker_opens_then_recovers():
     cb = CircuitBreaker(threshold=2, cooldown=10)
-    cb.record(False, 0); cb.record(False, 0)
+    cb.record(False, 0)
+    cb.record(False, 0)
     assert cb.is_open(1)
     assert not cb.is_open(11)         # cooldown elapsed
 
@@ -148,7 +149,8 @@ def test_memoize_serves_second_call_from_cache():
     inner = Flaky(fail_times=0)
     memo = Memoized(inner, name="m")
     ctx = Context(browser=mock(), data={"url": "https://example.com"})
-    memo.run(ctx); memo.run(ctx)
+    memo.run(ctx)
+    memo.run(ctx)
     assert inner.calls == 1 and memo.hits == 1
 
 

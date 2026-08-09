@@ -118,9 +118,6 @@ def test_branch_predicate_failure_is_explicit():
 
 
 def test_for_each_iterates_and_caps():
-    g = (Graph("fe")
-         .add(Navigate("https://example.com"))
-         .add(Extract("h1", into="items", name="seed")))
     ctx = Context(browser=mock(), data={"items": list(range(100))})
     node = ForEach("items", body=[Extract("h1", into="v")], max_items=5, name="fe")
     ctx = node.run(ctx)

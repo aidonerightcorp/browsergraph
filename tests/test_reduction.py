@@ -41,7 +41,9 @@ BIG_PAGE = """<!doctype html><html lang="en"><head>
 </form>
 </main>
 <footer><p>(c) Acme. Privacy. Terms.</p></footer>
-</body></html>""" % ("x" * 4000, "Filler about the company. " * 60,
+</body></html>""" % (  # noqa: UP031 - the page contains CSS braces,
+                       # so .format() would try to substitute {color:red}
+"x" * 4000, "Filler about the company. " * 60,
                      "Support hours are nine to five. " * 60)
 
 
@@ -243,7 +245,8 @@ def test_report_is_readable_and_serialises():
 
 
 def test_unreachable_catalog_reports_rather_than_raises():
-    cat = Catalog(host="http://127.0.0.1:1", api_key="")
+    direct = Catalog(host="http://127.0.0.1:1", api_key="")
+    assert not direct.reachable, "constructing it must not pretend to be connected"
     loaded = Catalog.load("http://127.0.0.1:1")
     assert not loaded.reachable and "unreachable" in loaded.report()
 
@@ -255,7 +258,9 @@ class FakeVisionBrowser:
         self.marks, self.has, self.shots = marks or [], set(has), []
     def find(self, s): return object() if s in self.has else None
     def eval_js(self, s): return json.dumps(self.marks)
-    def screenshot(self, p): self.shots.append(p); return p
+    def screenshot(self, p):
+        self.shots.append(p)
+        return p
 
 
 class FakeVisionClient:

@@ -112,10 +112,10 @@ add("x05", "extract", "headings collected",
     kind="page", check=lambda r: len(r["headings"]) >= 3)
 add("x06", "extract", "links normalised",
     page('<a href="/about/?utm_source=x#top">About</a>'),
-    kind="page", check=lambda r: any(l.endswith("/about") for l in r["links"]))
+    kind="page", check=lambda r: any(link.endswith("/about") for link in r["links"]))
 add("x07", "extract", "asset links excluded",
     page('<a href="/x.png">img</a><a href="/real">real</a>'),
-    kind="page", check=lambda r: not any(l.endswith(".png") for l in r["links"]))
+    kind="page", check=lambda r: not any(link.endswith(".png") for link in r["links"]))
 add("x08", "extract", "json-ld parsed",
     page('<script type="application/ld+json">{"@type":"Organization","name":"Acme"}</script>'),
     kind="page", check=lambda r: any(d.get("name") == "Acme" for d in r["structured"]))

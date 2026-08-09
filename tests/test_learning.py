@@ -209,8 +209,10 @@ def test_exploration_bonus_favours_untried_options():
 
 def test_budget_stops_on_attempts_time_and_llm():
     b = Budget(max_attempts=2, max_seconds=10, max_llm_calls=1)
-    b.spend(); assert not b.exhausted()
-    b.spend(); assert "attempt limit" in b.exhausted()
+    b.spend()
+    assert not b.exhausted()
+    b.spend()
+    assert "attempt limit" in b.exhausted()
     assert "time limit" in Budget(max_seconds=1, attempts=0, seconds=5).exhausted()
     assert "llm call limit" in Budget(max_llm_calls=1, llm_calls=1).exhausted()
 

@@ -161,7 +161,7 @@ def test_same_site_handles_subdomains():
 def test_links_skip_assets_and_mailto():
     links = links_from_html(HOME, "https://acme.example")
     assert "https://acme.example/about" in links
-    assert not any(l.endswith((".png", ".css")) for l in links)
+    assert not any(link.endswith((".png", ".css")) for link in links)
 
 
 def test_frontier_dedups_and_bounds():
