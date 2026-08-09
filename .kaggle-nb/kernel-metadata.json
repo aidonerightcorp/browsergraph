@@ -1,0 +1,14 @@
+{
+  "id": "taylorsamarel/browsergraph-composable-browser-automation",
+  "title": "browsergraph composable browser automation",
+  "code_file": "browsergraph-tour.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": false,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": []
+}

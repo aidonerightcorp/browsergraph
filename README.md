@@ -1,5 +1,12 @@
 # browsergraph
 
+[![CI](https://github.com/aidonerightcorp/browsergraph/actions/workflows/ci.yml/badge.svg)](https://github.com/aidonerightcorp/browsergraph/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![Core deps: none](https://img.shields.io/badge/core%20deps-stdlib--only-brightgreen)](pyproject.toml)
+[![Tests](https://img.shields.io/badge/tests-428%20passing-brightgreen)](tests/)
+[![Kaggle](https://img.shields.io/badge/Kaggle-live%20demo-20BEFF?logo=kaggle)](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
+
 Composable browser automation. Any engine × binary × transport × display ×
 stealth × behaviour, driven by reusable nodes in a graph, with optional
 Ollama-powered steps.
@@ -10,6 +17,24 @@ changing a line.
 
 **Core is stdlib-only.** Engines are optional extras, so `pip install
 browsergraph` is small and the test suite runs anywhere — no browser, no network.
+
+**Try it without installing anything:** the
+[Kaggle notebook](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
+runs the whole tour in a browser-less environment.
+
+### One graph, or no browser at all
+
+Most pages are server-rendered and need no browser. `Engine.HTTP` fetches them
+with a real browser's TLS fingerprint (`curl-cffi`), which is the layer anti-bot
+vendors check *before any JavaScript runs*:
+
+```
+HTTP        0.35s   ->  playwright 1.62.0
+PLAYWRIGHT  2.72s   ->  playwright 1.62.0     # 7.8x slower, same answer
+```
+
+It refuses `eval_js`, `type` and `screenshot` rather than silently no-opping —
+a driver that pretends surfaces later as missing data with no explanation.
 
 ---
 
