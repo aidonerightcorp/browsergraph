@@ -65,19 +65,23 @@ somewhere else. Each of these runs in seconds, installs nothing but the library,
 and touches no dataset or network. Every cell is executed and its output
 committed.
 
-| | Notebook | What it argues |
-|---|---|---|
-| 01 | [Express a problem as a graph](notebooks/01-build-a-graph.ipynb) | stages, ports, candidates, and the four checks |
-| 02 | [Search without enumerating](notebooks/02-search-and-learn.ipynb) | 3.8 trillion routes is 41.8 bits, not an obstacle |
-| 03 | [A domain that is not browsing](notebooks/03-a-new-domain.ipynb) | the same machinery on document work |
-| 04 | [A Kaggle pipeline is a graph](notebooks/04-tabular-pipeline.ipynb) | numeric ∥ categorical encoding is a join |
-| 05 | [Two readings of one document](notebooks/05-document-extraction.ipynb) | text and layout are independent extractions |
-| 06 | [A workflow with no data science](notebooks/06-service-workflow.ipynb) | effects, permissions, and one step that reaches outside |
-| 07 | [A gate that can say no](notebooks/07-data-quality-gate.ipynb) | schema and drift meeting at one decision |
-| 08 | [Build, verify, release](notebooks/08-release-pipeline.ipynb) | a gate with two inputs cannot be half-skipped |
-| 09 | [Retrieval is two searches](notebooks/09-retrieval-qa.ipynb) | dense and lexical recall, joined |
-| 10 | [The leak you cannot see in CV](notebooks/10-timeseries-forecast.ipynb) | the split as a node with two named outputs |
-| 11 | [The domain this started in](notebooks/11-web-harvest.ipynb) | completed ≠ worked |
+| | Notebook | What it argues | Run it |
+|---|---|---|---|
+| 01 | [Express a problem as a graph](notebooks/01-build-a-graph.ipynb) | stages, ports, candidates, and the four checks | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-1-express-a-problem-as-a-graph) |
+| 02 | [Search without enumerating](notebooks/02-search-and-learn.ipynb) | 3.8 trillion routes is 41.8 bits, not an obstacle | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-2-search-without-enumerating) |
+| 03 | [A domain that is not browsing](notebooks/03-a-new-domain.ipynb) | the same machinery on document work | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-3-a-domain-that-is-not-browsing) |
+| 04 | [A Kaggle pipeline is a graph](notebooks/04-tabular-pipeline.ipynb) | numeric ∥ categorical encoding is a join | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-4-a-kaggle-pipeline-is-a-graph) |
+| 05 | [Two readings of one document](notebooks/05-document-extraction.ipynb) | text and layout are independent extractions | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-5-two-readings-of-one-document) |
+| 06 | [A workflow with no data science](notebooks/06-service-workflow.ipynb) | effects, permissions, and one step that reaches outside | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-6-a-workflow-with-no-data-science) |
+| 07 | [A gate that can say no](notebooks/07-data-quality-gate.ipynb) | schema and drift meeting at one decision | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-7-a-gate-that-can-say-no) |
+| 08 | [Build, verify, release](notebooks/08-release-pipeline.ipynb) | a gate with two inputs cannot be half-skipped | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-8-build-verify-release) |
+| 09 | [Retrieval is two searches](notebooks/09-retrieval-qa.ipynb) | dense and lexical recall, joined | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-9-retrieval-is-two-searches) |
+| 10 | [The leak you cannot see in CV](notebooks/10-timeseries-forecast.ipynb) | the split as a node with two named outputs | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-10-the-leak-you-cannot-see) |
+| 11 | [The domain this started in](notebooks/11-web-harvest.ipynb) | completed ≠ worked | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-11-the-domain-this-started-in) |
+
+All eleven are published public on Kaggle and ran there to completion — the
+library is installed from this repository in cell one, so what you see rendered
+is what the code in `main` actually does.
 
 Regenerate and verify them with:
 
