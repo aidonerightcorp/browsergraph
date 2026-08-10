@@ -58,26 +58,34 @@ candidates across 14 sub-steps, five synchronized views, one offline file.
 [Kaggle notebook](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 installs a browser, drives it, and shows the screenshots and video it captured.
 
-### Five notebooks that solve a real job
+### Eleven notebooks that solve a real job
 
-Start here. Each one takes real input, runs real code, and writes real files you
-can open afterwards. They need nothing but the standard library, numpy and
-Pillow, so they run anywhere.
+Start here. Each takes real input, runs real code, and writes real files you can
+open afterwards. Standard library plus numpy and Pillow, so they run anywhere.
 
 | | Notebook | The job | Run it |
 |---|---|---|---|
-| 12 | [Browse and scrape](notebooks/12-browse-and-scrape.ipynb) | a web page in, clean product rows out | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-1-browse-and-scrape) |
-| 13 | [Ingest into a schema](notebooks/13-ingest-into-schema.ipynb) | mixed-format records in, typed rows plus rejects with reasons | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-2-ingest-into-a-schema) |
+| 12 | [Browse and scrape](notebooks/12-browse-and-scrape.ipynb) | a live page in, clean product rows out | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-1-browse-and-scrape) |
+| 13 | [Ingest into a schema](notebooks/13-ingest-into-schema.ipynb) | mixed formats in, typed rows plus rejects with reasons | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-2-ingest-into-a-schema) |
 | 14 | [Check and process an image](notebooks/14-check-and-process-image.ipynb) | images in, a report and resized copies out | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-3-check-and-process-an-image) |
 | 15 | [Clean up messy data](notebooks/15-clean-up-data.ipynb) | a messy table in, a clean one plus every change recorded | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-4-clean-up-messy-data) |
 | 16 | [Fit a model](notebooks/16-fit-a-model.ipynb) | a dataset in, regression and classification scores out | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-5-fit-a-model) |
+| 17 | [Batch many files](notebooks/17-batch-many-files.ipynb) | forty files in, a total and the broken ones named | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-6-batch-process-many-files) |
+| 18 | [Retry and fall back](notebooks/18-retry-and-fall-back.ipynb) | a flaky source, and a run that succeeds anyway | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-7-retry-and-fall-back) |
+| 19 | [Find duplicates](notebooks/19-find-duplicates.ipynb) | one customer list in, matched pairs out | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-8-find-duplicate-records) |
+| 20 | [Forecast next month](notebooks/20-forecast-next-month.ipynb) | two years of sales in, three months out | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-9-forecast-next-month) |
+| 21 | [Watch for changes](notebooks/21-watch-for-changes.ipynb) | a thing to check, and noise only when it moved | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-10-watch-for-changes) |
+| 22 | [Sort text into categories](notebooks/22-sort-text.ipynb) | support messages in, the right team out | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-11-sort-text-into-categories) |
 
 What they actually produce, not what they claim to: 3 products parsed from three
 different price formats with the priceless one dropped and named; 6 records
 accepted and 3 rejected with a reason each; a blank PNG caught by colour spread
-where the file size and dimensions look fine; a `$1,340.00` row repaired after
-its own comma split it in half; R² 0.991 and 98.2% accuracy from the same graph
-with two steps swapped.
+where size and file bytes look fine; a `$1,340.00` row repaired after its own
+comma split it in half; four model routes that score *identically*, which the
+notebook reports as "this decision does not matter" rather than crowning a
+winner; a batch that names `item 11` instead of failing forty files at once;
+blocking that saves 89% of the comparisons and says which pair it can therefore
+never find.
 
 ### Eleven notebooks about the model itself
 

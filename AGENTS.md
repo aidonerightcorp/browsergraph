@@ -103,6 +103,46 @@ it.
 
 ---
 
+## Three shapes a stage can have
+
+Most stages run once. Two other shapes exist, and each is a real difference in
+execution rather than a label.
+
+**`kind="map"` — run once per item.** This is how "do it to all ten thousand
+files" gets said. The node inside handles **one** item and never sees the list.
+
+The port types are the part people get wrong. The *stage* talks about the
+collection; the *node* talks about one item:
+
+```python
+StageDefinition(id="read", kind="map",
+                inputs=(PortSpec("in", "List[Path]"),),      # the stage: many
+                outputs=(PortSpec("out", "List[Row]"),))
+node("read.one", "read", [("in", "Path")], [("out", "Row")]) # the node: one
+```
+
+If a node raises, the step names the item — `item 11` — not the batch.
+
+**`kind="branch"` — take one path.** The node returns `(port_name, value)`.
+Ports it did not name are marked not-taken, and the steps behind them are
+**skipped, not failed**. A path not taken is a correct outcome; logging it as a
+failure makes every branching run look broken.
+
+```python
+def decide(**kw):
+    return ("large", kw["in"]) if kw["in"] > 10 else ("small", kw["in"])
+```
+
+**There is no loop.** A loop needs a termination argument, and a graph that can
+loop without one is a graph that can hang. Repeat by mapping over a list you
+already have, or by running the plan again.
+
+Both kinds are visible in `viz.dag` — a doubled outline for map, a dashed one
+for branch — so a graph that claims to batch and does not is visible rather than
+merely documented.
+
+---
+
 ## Run it
 
 A plan is not a run. `browsergraph.execute` does the running.
@@ -131,6 +171,25 @@ Writing a node function:
 `execute.dry_run(...)` runs everything that touches nothing and refuses the
 first step that declares an effect. The plan already knows which those are, so
 this needs no flag on the node and no second implementation.
+
+Four more arguments, each using something the graph already knew:
+
+* `workers=N` runs a layer at once. Steps share a layer because nothing connects
+  them, so this is safe by construction rather than by hope.
+* `fallbacks={"stage": ["other.candidate"]}` tries another candidate when the
+  chosen one fails, and records which one did the work.
+* `cache=some_dict` skips a step already run on these inputs. Only ever applied
+  to steps that are deterministic and effect-free — caching a network step
+  serves a stale answer, and caching a random one hides the variation you kept
+  it for.
+* `run.receipt(task=...)` writes durable evidence keyed on the plan digest.
+
+From the shell:
+
+```bash
+browsergraph execute "" mygraph.json --runtime mypkg.nodes:RUNTIME \
+    --workers 4 --workspace out --receipt run.json
+```
 
 The type check at each hand-off is the part that earns its keep. A node that
 promises `Records` and returns `None` is caught at that node, not three steps
