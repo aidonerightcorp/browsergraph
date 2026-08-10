@@ -46,7 +46,7 @@ class Layout:
     gutter: int = 88
     row_height: int = 15
     # Clear of the subtitle: at 84 the summary line ran into the stage headers.
-    top: int = 104
+    top: int = 124
     pad: int = 22
     font: float = 8.6
     #: Fits "browser adapter · Chrome · BrowserPort · headless" (48 chars).
@@ -66,7 +66,7 @@ def _clip(text: str, limit: int) -> str:
 def to_svg(workbench: WorkbenchDefinition, *,
            routes: Sequence[str] = (), samples: int = 0,
            background: bool = True, layout: Layout | None = None,
-           title: str = "") -> str:
+           title: str = "", only: Sequence[str] = ()) -> str:
     """One SVG, self-contained, no CSS block and no script.
 
     `routes` names the solutions to draw. `samples` adds that many deterministic
@@ -74,7 +74,14 @@ def to_svg(workbench: WorkbenchDefinition, *,
     produces byte-identical output and the file does not churn in git.
     """
     box = layout or Layout()
-    stages = list(workbench.stages)
+    # Columns are leaves: a parent stage is a label, not a decision.
+    #
+    # `only` narrows to named top-level stages. Fourteen sub-steps side by side
+    # is five thousand pixels wide, which is honest and unreadable in a README —
+    # so one stage's decomposition can be shown legibly with the whole graph a
+    # click away. It is a crop, not a summary: nothing inside it is pooled.
+    top = [s for s in workbench.stages if not only or s.id in only]
+    stages = [leaf for stage in top for leaf in stage.leaves()]
     if not stages:
         return "<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'/>"
 
@@ -98,6 +105,14 @@ def to_svg(workbench: WorkbenchDefinition, *,
         f"<rect x='0' y='0' width='{width}' height='{height}' rx='14' "
         f"fill='{PANEL}' stroke='{FRAME}'/>",
     ]
+
+    # Parent band, spanning each stage's sub-step columns.
+    spans: list[tuple[str, int, int]] = []
+    seen = 0
+    for parent in top:
+        width_in_leaves = len(parent.leaves())
+        spans.append((parent.name, seen, width_in_leaves))
+        seen += width_in_leaves
 
     heading = title or workbench.title
     out.append(f"<text x='{box.pad}' y='30' font-size='17' font-weight='650' "
@@ -128,9 +143,11 @@ def to_svg(workbench: WorkbenchDefinition, *,
 
     # --- the named routes
     wanted = [s for s in workbench.solutions if not routes or s.id in routes]
+    shown = {leaf.id for leaf in stages}
     for solution in wanted:
         colour = ROUTE_COLOURS.get(solution.status, ROUTE_COLOURS["candidate"])
-        picked = [solution.route.get(stage.id, "") for stage in stages]
+        picked = [solution.route.get(stage.id, "") for stage in stages
+                  if stage.id in shown]
         out.append(f"<g stroke='{colour}' stroke-width='2.4' fill='none' "
                    f"stroke-linecap='round'>")
         out.append(_route_path(picked, place, box))
@@ -144,6 +161,17 @@ def to_svg(workbench: WorkbenchDefinition, *,
             if cid:
                 highlighted[cid] = ROUTE_COLOURS.get(solution.status,
                                                      ROUTE_COLOURS["candidate"])
+
+    for name, start, count in spans:
+        x0 = box.pad + start * (box.column_width + box.gutter)
+        x1 = (box.pad + (start + count - 1) * (box.column_width + box.gutter)
+              + box.column_width)
+        out.append(f"<line x1='{x0}' y1='{box.top - 46}' x2='{x1}' "
+                   f"y2='{box.top - 46}' stroke='{ROUTE_COLOURS['candidate']}' "
+                   f"stroke-width='1.6' opacity='0.5'/>")
+        out.append(f"<text x='{x0}' y='{box.top - 52}' font-size='11' "
+                   f"font-weight='650' fill='{ROUTE_COLOURS['candidate']}'>"
+                   f"{_esc(name.upper())}</text>")
 
     for index, stage in enumerate(stages):
         x = box.pad + index * (box.column_width + box.gutter)

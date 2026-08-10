@@ -378,29 +378,105 @@ def test_a_profile_with_nothing_measured_scores_zero_not_a_crash():
 def test_routes_multiply_they_do_not_add():
     from browsergraph.demo import workbench
     bench = workbench()
-    counts = [len(s.candidates) for s in bench.stages]
+    counts = [len(s.candidates) for s in bench.leaf_stages]
     expected = 1
     for c in counts:
         expected *= c
     assert bench.route_count() == expected
-    assert bench.route_count() == 32_864_832
+    assert bench.route_count() == 3_802_314_700_800
 
 
 def test_transitions_are_between_adjacent_stages_only():
     from browsergraph.demo import workbench
     bench = workbench()
-    counts = [len(s.candidates) for s in bench.stages]
+    counts = [len(s.candidates) for s in bench.leaf_stages]
     expected = sum(a * b for a, b in zip(counts, counts[1:], strict=False))
-    assert bench.transition_count() == expected == 2_827
+    assert bench.transition_count() == expected == 1_337
 
 
 def test_the_demonstration_has_the_shape_it_claims():
     from browsergraph.demo import workbench
     bench = workbench()
     assert len(bench.stages) == 6
-    assert len(bench.nodes) == 48
-    assert len(bench.candidates) == 149
-    assert [len(s.candidates) for s in bench.stages] == [76, 27, 13, 14, 11, 8]
+    assert len(bench.leaf_stages) == 14
+    assert len(bench.nodes) == 57
+    assert len(bench.candidates) == 166
+    assert [len(s.candidates) for s in bench.leaf_stages] == \
+        [4, 70, 6, 6, 11, 12, 5, 9, 6, 14, 3, 9, 7, 4]
+
+
+def test_decomposing_a_stage_exposes_the_choices_it_was_hiding():
+    """The reason sub-steps exist at all.
+
+    Pooling every candidate in a stage into one decision — which is what a
+    coarse diagram implicitly claims — counts 85,747,200 routes. The sub-steps
+    those same stages are made of expose 3.8 trillion. Same task, same registry,
+    same code: the coarse view was hiding 44,343x of the space.
+    """
+    from browsergraph.demo import workbench
+    bench = workbench()
+    assert bench.coarse_route_count() == 85_747_200
+    assert bench.route_count() // bench.coarse_route_count() == 44_343
+
+
+def test_a_stage_is_a_leaf_or_a_composite_but_never_both():
+    """Otherwise "one choice per stage" stops being well defined."""
+    from browsergraph.demo import workbench
+    for stage in workbench().stages:
+        assert stage.is_composite
+        assert not stage.candidates, "a composite stage must not hold candidates"
+        for leaf in stage.leaves():
+            assert leaf.candidates and not leaf.substages
+
+
+def test_a_composite_stage_must_agree_with_its_own_sub_steps():
+    nodes = (manifest("test.one"),)
+    cands = expand_node_candidates(nodes)
+    leaf = stage(id="inner").with_discovered_candidates(nodes, cands)
+    parent = StageDefinition(id="outer", input_type="A", output_type="WRONG",
+                             substages=(leaf,))
+    problems = WorkbenchDefinition(nodes=nodes, candidates=cands,
+                                   stages=(parent,)).validate()
+    assert any("produces 'WRONG'" in p for p in problems)
+
+
+def test_a_stage_holding_both_candidates_and_sub_steps_is_rejected():
+    nodes = (manifest("test.one"),)
+    cands = expand_node_candidates(nodes)
+    leaf = stage(id="inner").with_discovered_candidates(nodes, cands)
+    both = StageDefinition(id="outer", input_type="A", output_type="B",
+                           substages=(leaf,), candidates=(cands[0].id,))
+    problems = WorkbenchDefinition(nodes=nodes, candidates=cands,
+                                   stages=(both,)).validate()
+    assert any("never both" in p for p in problems)
+
+
+def test_sub_steps_nest_arbitrarily_deep():
+    """Sub-matrices are recursive, so a sub-step can itself decompose.
+
+    Three levels here; nothing in the model caps it. `leaves()` flattens
+    whatever depth exists, and a route is one choice per leaf however deep the
+    leaf sits.
+    """
+    nodes = (manifest("test.one"),)
+    cands = expand_node_candidates(nodes)
+    inner = stage(id="inner").with_discovered_candidates(nodes, cands)
+    middle = StageDefinition(id="middle", input_type="A", output_type="B",
+                             substages=(inner,))
+    outer = StageDefinition(id="outer", input_type="A", output_type="B",
+                            substages=(middle,))
+    bench = WorkbenchDefinition(nodes=nodes, candidates=cands, stages=(outer,))
+    assert bench.validate() == []
+    assert outer.depth() == 3
+    assert [s.id for s in bench.leaf_stages] == ["inner"]
+    assert bench.route_count() == len(cands)
+
+
+def test_sub_steps_survive_a_round_trip():
+    from browsergraph.demo import workbench
+    again = WorkbenchDefinition.from_dict(json.loads(workbench().to_json()))
+    assert len(again.leaf_stages) == 14
+    assert again.validate() == []
 
 
 def test_every_demonstration_metric_says_it_is_a_prior():
@@ -524,7 +600,7 @@ def test_the_cli_writes_a_studio(tmp_path, capsys):
     out = tmp_path / "studio.html"
     assert main(["workbench", "-o", str(out)]) == 0
     assert out.exists() and out.stat().st_size > 50_000
-    assert "32,864,832" in capsys.readouterr().out
+    assert "3,802,314,700,800" in capsys.readouterr().out
 
 
 def test_the_cli_refuses_an_invalid_workbench(tmp_path, capsys):

@@ -1,23 +1,31 @@
-# Choosing a route out of 32,864,832
+# Choosing a route out of 3,802,314,700,800
 
 *A measured report on policy gating and route search over the browsergraph
 workbench. Every number here was produced by the commands shown; none was typed
 in by hand.*
 
-![the candidate path network](route-network.png)
+![one stage decomposed into its sub-steps](stage-decomposition.png)
+
+*One stage, three sub-steps, all 80 candidates.
+[The full 14-sub-step network →](route-network.png)*
 
 ---
 
-## The space
+## The space, and how much of it a coarse view hides
 
 ```
-6 stages · 48 definitions · 149 atomic candidates
-76 × 27 × 13 × 14 × 11 × 8 = 32,864,832 complete primary routes
-                             2,827 adjacent-stage transitions
+6 stages / 14 sub-steps · 57 definitions · 166 atomic candidates
+3,802,314,700,800 complete primary routes · 1,337 adjacent transitions
 ```
 
-Routes **multiply**. That is the entire reason a search is needed rather than a
-table of recommendations.
+Routes **multiply** — that is why a search is needed rather than a table of
+recommendations. But the more interesting number is what decomposition revealed.
+Pool every candidate in a stage into one choice, which is what a coarse diagram
+implicitly claims, and you count **85,747,200**. The sub-steps those same stages
+are made of expose **3,802,314,700,800**.
+
+**The coarse view was hiding 44,343× of the space.** Same task, same registry,
+same code — six stages, but "Acquire inputs" is three decisions, not one.
 
 ## Policy is a hard gate, and it runs first
 
@@ -32,17 +40,25 @@ browsergraph route --gates --deterministic --no-effects \
   --allow database --allow database:read
 ```
 
-| stage | eligible | of |
-|---|---:|---:|
-| Acquire inputs | 9 | 76 |
-| Canonicalize representation | 27 | 27 |
-| Enrich and derive context | 6 | 13 |
-| Transform or act | 4 | 14 |
-| Verify success | 7 | 11 |
-| Emit result and receipt | 3 | 8 |
+| stage | sub-step | eligible | of |
+|---|---|---:|---:|
+| Acquire inputs | Resolve target | 4 | 4 |
+| | Open session | 7 | 70 |
+| | Read payload | 3 | 6 |
+| Canonicalize | Decode bytes | 6 | 6 |
+| | Parse structure | 8 | 11 |
+| | Normalize values | 12 | 12 |
+| Enrich | Plan context | 5 | 5 |
+| | Attach evidence | 3 | 9 |
+| Transform or act | Locate target | 5 | 6 |
+| | Apply or act | 4 | 14 |
+| Verify | Check shape | 3 | 3 |
+| | Check independently | 5 | 9 |
+| Emit | Persist result | 3 | 7 |
+| | Write receipt | 3 | 4 |
 
-**122,472 complete routes remain, out of 32,864,832.** The policy removed
-99.63% of the space before a single score was computed — and every removal
+**1,959,552,000 complete routes remain, out of 3,802,314,700,800.** The policy
+removed 99.95% of the space before a single score was computed — and every removal
 states its reason:
 
 ```
@@ -98,28 +114,25 @@ browsergraph route --compare --profile profile.balanced --deterministic --no-eff
   --allow database --allow database:read
 ```
 
-| profile | greedy | beam(8) | exhaustive | greedy optimal? |
-|---|---:|---:|---:|---|
-| Balanced | 0.7355 | **0.7502** | **0.7502** | **no — loses 0.0147** |
-| Quality first | 0.9426 | 0.9426 | 0.9426 | yes |
-| Speed first | 0.9838 | 0.9838 | 0.9838 | yes |
-| Cost first | 0.3242 | 0.3242 | 0.3242 | yes |
-
-| strategy | routes examined | of 122,472 |
+| profile | greedy (71 evals) | beam (512 evals) |
 |---|---:|---:|
-| greedy | 56 | 0.05% |
-| beam(8) | 385 | 0.31% |
-| exhaustive | 122,472 | 100% |
+| Balanced | 0.8156 | 0.8156 |
+| Quality first | 1.0149 | 1.0149 |
+| **Speed first** | 0.9608 | **1.0304** |
+| Cost first | 0.3443 | 0.3443 |
 
-Greedy is optimal in three of four profiles and loses in the fourth, which is
-exactly what you would predict: it scores each stage in isolation, and route
-metrics do not decompose. **Quality compounds** — it is the product across
+Exhaustive is no longer on this table, and that is the point: decomposition
+pushed the gated space to 1.96 **billion** routes, well past any enumeration
+limit. Before sub-steps the gated space was 122,472 and exhaustive was a real
+option. It is exactly when the space stops being enumerable that the choice of
+strategy starts to matter.
+
+Greedy matches beam on three profiles and loses on the fourth, which is what you
+would predict: it scores each sub-step in isolation, and route metrics do not
+decompose. **Quality compounds** — it is the product across
 stages, not the mean, because a route is only as good as the joint probability
 that every step did its job. Averaging would let one excellent stage hide a step
 that fails half the time.
-
-Beam finds the optimum here for 385 evaluations instead of 122,472 — 0.3% of
-the work for the same answer.
 
 ### The beam was broken, and the measurement is what caught it
 
@@ -130,8 +143,10 @@ was unmistakable once measured —
 
 | beam width | 1 | 8 | 32 | 128 | 512 |
 |---|---:|---:|---:|---:|---:|
-| score (before) | 0.6952 | 0.6952 | 0.6952 | 0.6952 | 0.6952 |
+| score (before the fix) | 0.6952 | 0.6952 | 0.6952 | 0.6952 | 0.6952 |
 | routes examined | 56 | 385 | 892 | 2,812 | 8,878 |
+
+*(measured on the flat six-stage registry, before sub-steps)*
 
 — beam matched plain greedy at *every* width, spending 8,878 evaluations to
 reach the answer greedy found in 56. **A search whose width buys nothing is not
@@ -150,30 +165,41 @@ browsergraph route --profile profile.quality
 ```
 
 ```
-beam search under 'profile.quality' — score 1.133, better than 100.0% of the reference sample
-  Acquire inputs               file loader · directory
-  Canonicalize representation  encoding bom
-  Enrich and derive context    provenance stamper
-  Transform or act             composite · rules+llm
-  Verify success               consensus · majority
-  Emit result and receipt      file json
-  route metrics: quality 0.849 (compounded) · 4,719ms · $0.0340
-  examined 660 of 32,864,832 eligible routes (0.0%) — 32,864,832 exist before policy
-  needs: filesystem:read, filesystem:write, llm
-  note: auto chose beam: 32,864,832 eligible routes exceeds the 200,000 enumeration limit
+beam search under 'profile.quality' — score 1.466, better than 100.0% of the reference sample
+  Resolve target               literal
+  Open session                 filesystem · directory
+  Read payload                 whole
+  Decode bytes                 bom
+  Parse structure              format · csv
+  Normalize values             units · imperial
+  Plan context                 rules
+  Attach evidence              provenance
+  Locate target                recorded
+  Apply or act                 human
+  Check shape                  invariants
+  Check independently          consensus · majority
+  Persist result               file · columnar
+  Write receipt                bundle · full
+  route metrics: quality 0.644 (compounded) · 902,720ms · $2.5200
+  examined 1,020 of 3,802,314,700,800 eligible routes (0.0%) — 3,802,314,700,800 exist before policy
+  needs: filesystem:read, filesystem:write, human
+  note: auto chose beam: 3,802,314,700,800 eligible routes exceeds the 200,000 enumeration limit
+  note: beam width 8
+  note: scored against a fixed 512-route reference sample, so strategies stay comparable
 ```
 
 Three things in that output are deliberate:
 
-**`examined 660 of 32,864,832 … (0.0%)`.** A search that looks at 660 routes and
+**`examined 1,020 of 3,802,314,700,800 … (0.0%)`.** A search that looks at a
+thousand routes out of trillions and
 announces "the best route" without saying so is making a claim it did not earn.
 The number is free to carry.
 
-**`needs: filesystem:read, filesystem:write, llm`.** The union of authority the
+**`needs: filesystem:read, filesystem:write, human`.** The union of authority the
 whole route requires. Per-candidate, each permission looks small; the union is
 what actually has to be granted.
 
-**`score 1.133`.** A normalized score *can* exceed 1 — the reference sample sets
+**The score.** A normalized score *can* exceed 1 — the reference sample sets
 the scale, and a good search finds routes better than anything sampled. That
 reads like a bug, so the headline is the percentile, which cannot.
 
@@ -196,7 +222,7 @@ browsergraph route --gates                    # what the policy blocks, and why
 browsergraph route --compare                  # greedy vs beam vs exhaustive
 browsergraph route --profile profile.quality --json
 browsergraph workbench -o studio.html         # the interactive five-view studio
-pytest tests/test_workbench.py tests/test_search.py -q
+pytest tests/test_workbench.py tests/test_search.py -q   # 770 tests overall
 ```
 
 ## What is still an illustration

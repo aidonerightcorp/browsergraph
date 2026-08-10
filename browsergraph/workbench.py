@@ -160,12 +160,40 @@ class StageDefinition:
     variant_axes: tuple[str, ...] = ()
     required_capabilities: tuple[str, ...] = ()
     candidates: tuple[str, ...] = ()
+    substages: tuple[StageDefinition, ...] = ()
 
     def __post_init__(self) -> None:
-        for name in ("variant_axes", "required_capabilities", "candidates"):
+        for name in ("variant_axes", "required_capabilities", "candidates",
+                     "substages"):
             object.__setattr__(self, name, tuple(getattr(self, name)))
         if not self.name:
             object.__setattr__(self, "name", self.id.replace("_", " ").capitalize())
+
+    @property
+    def is_composite(self) -> bool:
+        """Does this stage decompose into ordered sub-steps?
+
+        A stage is either a leaf that holds candidates or a composite that holds
+        sub-steps — never both. Allowing both would make "one choice per stage"
+        ambiguous, which is the one thing the whole model rests on.
+        """
+        return bool(self.substages)
+
+    def leaves(self) -> tuple[StageDefinition, ...]:
+        """The ordered sub-steps a route actually chooses between.
+
+        A coarse stage hides its own combinatorics. "Acquire inputs" with 76
+        candidates looks like one decision and is really three — resolve a
+        target, open a session, read a payload — each with its own matrix. The
+        product over sub-steps is the number of choices that actually exist;
+        the flat count is the number you happen to be looking at.
+        """
+        if not self.substages:
+            return (self,)
+        return tuple(leaf for sub in self.substages for leaf in sub.leaves())
+
+    def depth(self) -> int:
+        return 1 + max((sub.depth() for sub in self.substages), default=0)
 
     def eligible(self, manifest: NodeManifest) -> bool:
         """Could this definition legally perform this stage?
@@ -185,7 +213,15 @@ class StageDefinition:
     def with_discovered_candidates(
             self, manifests: Sequence[NodeManifest],
             candidates: Sequence[NodeCandidate]) -> StageDefinition:
-        """Every compatible candidate in the registry, not a chosen few."""
+        """Every compatible candidate in the registry, not a chosen few.
+
+        Recurses: a composite stage discovers nothing itself and asks each
+        sub-step instead, because only leaves hold candidates.
+        """
+        if self.substages:
+            return replace(self, substages=tuple(
+                sub.with_discovered_candidates(manifests, candidates)
+                for sub in self.substages))
         by_id = {m.id: m for m in manifests}
         found = tuple(c.id for c in candidates
                       if c.node_id in by_id and self.eligible(by_id[c.node_id]))
@@ -202,6 +238,8 @@ class StageDefinition:
         for key in ("variant_axes", "required_capabilities", "candidates"):
             if getattr(self, key):
                 out[key] = list(getattr(self, key))
+        if self.substages:
+            out["substages"] = [s.to_dict() for s in self.substages]
         return out
 
     @classmethod
@@ -214,7 +252,9 @@ class StageDefinition:
                    optional=bool(data.get("optional", False)),
                    variant_axes=tuple(data.get("variant_axes") or ()),
                    required_capabilities=tuple(data.get("required_capabilities") or ()),
-                   candidates=tuple(data.get("candidates") or ()))
+                   candidates=tuple(data.get("candidates") or ()),
+                   substages=tuple(cls.from_dict(s)
+                                   for s in data.get("substages") or ()))
 
 
 @dataclass(frozen=True)
@@ -453,30 +493,81 @@ class WorkbenchDefinition:
     def candidates_by_id(self) -> dict[str, NodeCandidate]:
         return {c.id: c for c in self.candidates}
 
+    @property
+    def leaf_stages(self) -> tuple[StageDefinition, ...]:
+        """The ordered sub-steps a route actually chooses between.
+
+        Top-level stages are how a task is *explained*; leaves are where the
+        choices are. A route is one candidate per leaf, and every count that
+        claims to describe the search space is computed over these.
+        """
+        return tuple(leaf for stage in self.stages for leaf in stage.leaves())
+
     def stage(self, stage_id: str) -> StageDefinition | None:
-        return next((s for s in self.stages if s.id == stage_id), None)
+        """Any stage or sub-step, by id — the hierarchy is searched."""
+        def walk(stages):
+            for stage in stages:
+                if stage.id == stage_id:
+                    return stage
+                found = walk(stage.substages)
+                if found is not None:
+                    return found
+            return None
+        return walk(self.stages)
+
+    def parent_of(self, stage_id: str) -> StageDefinition | None:
+        def walk(stages, parent=None):
+            for stage in stages:
+                if stage.id == stage_id:
+                    return parent
+                found = walk(stage.substages, stage)
+                if found is not None or any(s.id == stage_id
+                                            for s in stage.substages):
+                    return found if found is not None else stage
+            return None
+        return walk(self.stages)
 
     # --- the numbers --------------------------------------------------------
 
     def route_count(self) -> int:
-        """Complete primary routes. The product, not the sum.
+        """Complete primary routes, over **leaves**. The product, not the sum.
 
-        Worth printing somewhere visible: it is the difference between "we
-        support several options" and the actual size of the space a search is
-        working in.
+        Counting over coarse stages understates this badly, and the size of the
+        understatement is the argument for decomposing at all: the demonstration
+        reads as 32,864,832 routes across six stages and 4.2 trillion across the
+        fifteen sub-steps those stages are actually made of. Same task, same
+        registry — the coarse view was hiding almost all of the choices.
+        """
+        leaves = self.leaf_stages
+        total = 1
+        for stage in leaves:
+            total *= max(len(stage.candidates), 0)
+        return total if leaves else 0
+
+    def coarse_route_count(self) -> int:
+        """What the count looks like if each stage is drawn as one decision.
+
+        Every candidate in a stage pooled into a single choice — which is what a
+        coarse diagram is implicitly claiming. Kept so the gap between that and
+        the real number can be shown rather than asserted.
         """
         total = 1
         for stage in self.stages:
-            total *= max(len(stage.candidates), 0)
+            pooled = sum(len(leaf.candidates) for leaf in stage.leaves())
+            total *= max(pooled, 0)
         return total if self.stages else 0
 
     def transition_count(self) -> int:
-        """Edges between adjacent stages — what the network view can draw."""
+        """Edges between adjacent sub-steps — what the network view can draw."""
+        leaves = self.leaf_stages
         return sum(len(a.candidates) * len(b.candidates)
-                   for a, b in zip(self.stages, self.stages[1:], strict=False))
+                   for a, b in zip(leaves, leaves[1:], strict=False))
 
     def summary(self) -> str:
-        return (f"{len(self.stages)} stages · {len(self.nodes)} definitions · "
+        leaves = self.leaf_stages
+        shape = (f"{len(self.stages)} stages / {len(leaves)} sub-steps"
+                 if len(leaves) != len(self.stages) else f"{len(leaves)} stages")
+        return (f"{shape} · {len(self.nodes)} definitions · "
                 f"{len(self.candidates)} atomic candidates · "
                 f"{self.route_count():,} complete routes · "
                 f"{self.transition_count():,} adjacent transitions")
@@ -521,9 +612,31 @@ class WorkbenchDefinition:
                                f"{param.name!r} unbound")
 
         # --- stages
-        for dupe in _dupe_ids([s.id for s in self.stages]):
+        every = _walk(self.stages)
+        for dupe in _dupe_ids([s.id for s in every]):
             bad.append(f"two stages share the id {dupe!r}")
-        for stage in self.stages:
+
+        for stage in every:
+            if stage.is_composite and stage.candidates:
+                bad.append(f"stage {stage.id!r} has both sub-steps and its own "
+                           f"candidates — a stage is either a leaf that holds "
+                           f"candidates or a composite that holds sub-steps, "
+                           f"never both, or 'one choice per stage' is ambiguous")
+            if stage.is_composite:
+                leaves = stage.leaves()
+                if stage.input_type and leaves[0].input_type \
+                        and stage.input_type != leaves[0].input_type:
+                    bad.append(f"composite stage {stage.id!r} consumes "
+                               f"{stage.input_type!r} but its first sub-step "
+                               f"{leaves[0].id!r} consumes {leaves[0].input_type!r}")
+                if stage.output_type and leaves[-1].output_type \
+                        and stage.output_type != leaves[-1].output_type:
+                    bad.append(f"composite stage {stage.id!r} produces "
+                               f"{stage.output_type!r} but its last sub-step "
+                               f"{leaves[-1].id!r} produces "
+                               f"{leaves[-1].output_type!r}")
+
+        for stage in self.leaf_stages:
             if not stage.candidates:
                 bad.append(f"stage {stage.id!r} has no candidates — nothing could "
                            f"perform it")
@@ -554,16 +667,17 @@ class WorkbenchDefinition:
                         bad.append(f"required stage {stage.id!r} admits the "
                                    f"pass-through candidate {cid!r}")
 
-        # --- adjacent contracts
-        for before, after in zip(self.stages, self.stages[1:], strict=False):
+        # --- adjacent contracts, across the flattened sub-steps
+        leaves = self.leaf_stages
+        for before, after in zip(leaves, leaves[1:], strict=False):
             if before.output_type and after.input_type \
                     and before.output_type != after.input_type:
                 bad.append(f"stage {before.id!r} produces {before.output_type!r} "
                            f"but {after.id!r} consumes {after.input_type!r} — "
                            f"insert an adapter stage rather than coercing")
 
-        # --- routes
-        stage_ids = [s.id for s in self.stages]
+        # --- routes: one choice per leaf, not per top-level stage
+        stage_ids = [s.id for s in self.leaf_stages]
         for solution in self.solutions:
             for dupe in _dupe_ids([solution.id]):
                 bad.append(f"duplicate solution id {dupe!r}")
@@ -656,7 +770,9 @@ class WorkbenchDefinition:
             "optimization_profiles": [p.to_dict() for p in self.optimization_profiles],
             "metadata": {**dict(self.metadata),
                          "route_count": self.route_count(),
-                         "transition_count": self.transition_count()},
+                         "transition_count": self.transition_count(),
+                         "stage_count": len(self.stages),
+                         "leaf_count": len(self.leaf_stages)},
         }
 
     @classmethod
@@ -722,6 +838,15 @@ class WorkbenchDefinition:
             render(self, view="candidates"), encoding="utf-8")
         written.append(str(out_dir / "index.html"))
         return written
+
+
+def _walk(stages: Sequence[StageDefinition]) -> list[StageDefinition]:
+    """Every stage in the tree, parents included."""
+    out: list[StageDefinition] = []
+    for stage in stages:
+        out.append(stage)
+        out.extend(_walk(stage.substages))
+    return out
 
 
 def _dupe_ids(items: Sequence[str]) -> list[str]:

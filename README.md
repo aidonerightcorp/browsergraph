@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Core deps: none](https://img.shields.io/badge/core%20deps-stdlib--only-brightgreen)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-759%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-770%20passing-brightgreen)](tests/)
 [![Kaggle](https://img.shields.io/badge/Kaggle-run%20it%20now-20BEFF?logo=kaggle)](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 
 **Write a browser automation once. Run it on any engine — or on none.**
@@ -63,15 +63,31 @@ print(report(lint(graph)))
 #        — a silent failure will look like success
 ```
 
-## Every candidate, every route, in one picture
+## Sub-steps: the combinatorics a coarse diagram hides
 
-Six ordered stages. Every atomic candidate stacked inside its stage. A route is
-exactly one choice per column — and three of them are traced here.
+Six stages, but "Acquire inputs" is not one decision — it is three. Work out
+*what* to fetch, open a session capable of fetching it, read a payload out of
+that session. Each has its own matrix.
 
-[![the candidate path network](docs/route-network.png)](https://aidonerightcorp.github.io/browsergraph/)
+[![one stage decomposed into its sub-steps](docs/stage-decomposition.png)](https://aidonerightcorp.github.io/browsergraph/)
 
-**76 × 27 × 13 × 14 × 11 × 8 = 32,864,832 complete routes.** Routes multiply,
-which is why a search is needed rather than a table of recommendations.
+*One stage, its three sub-steps, all 80 candidates, three routes traced.
+[The full 14-sub-step network →](docs/route-network.png)*
+
+Draw each stage as a single pooled choice and you count **85,747,200** routes.
+The sub-steps those same stages are actually made of expose
+**3,802,314,700,800** — the coarse view was hiding **44,343×** of the space.
+Same task, same registry, same code.
+
+```
+6 stages / 14 sub-steps · 57 definitions · 166 atomic candidates
+3,802,314,700,800 complete routes · 1,337 adjacent transitions
+```
+
+Sub-steps are **recursive** — a sub-step can decompose again, to any depth. A
+stage is either a leaf that holds candidates or a composite that holds
+sub-steps, never both, because otherwise "one choice per stage" stops being well
+defined and that sentence is what the whole model rests on.
 
 ```bash
 browsergraph workbench -o studio.html   # five interactive views, one offline file
@@ -81,24 +97,26 @@ browsergraph route --gates              # what a policy blocks, and why
 
 Policy is a **hard gate that runs before scoring**: under a locked-down policy
 (no browser, no network, no LLM, no external effects, deterministic only) the
-space drops from 32,864,832 to **122,472** routes — 99.63% removed before a
-single score is computed, every removal stating its reason. Blocked candidates
-stay *visible*; filtering them out silently would answer "what could perform
-this step" with "what the policy left".
+space drops from 3.8 trillion to **1,959,552,000** routes — 99.95% removed
+before a single score is computed, every removal stating its reason. Blocked
+candidates stay *visible*; filtering them out silently would answer "what could
+perform this step" with "what the policy left".
 
 Measured, not asserted — [the full report](docs/ROUTE_SEARCH_REPORT.md) includes
 the profile-ranking bug this found (all four objective profiles were secretly
 identical) and the beam-search bug that made width buy nothing:
 
-| profile | greedy | beam(8) | exhaustive | greedy optimal? |
-|---|---:|---:|---:|---|
-| Balanced | 0.7355 | **0.7502** | **0.7502** | **no — loses 0.0147** |
-| Quality first | 0.9426 | 0.9426 | 0.9426 | yes |
-| Speed first | 0.9838 | 0.9838 | 0.9838 | yes |
-| Cost first | 0.3242 | 0.3242 | 0.3242 | yes |
+| profile | greedy (71 evals) | beam (512 evals) |
+|---|---:|---:|
+| Balanced | 0.8156 | 0.8156 |
+| Quality first | 1.0149 | 1.0149 |
+| **Speed first** | 0.9608 | **1.0304** |
+| Cost first | 0.3443 | 0.3443 |
 
-*Beam reaches the optimum for 385 evaluations instead of 122,472 — 0.3% of the
-work for the same answer.*
+*Greedy scores each sub-step in isolation; route quality **compounds**, so it
+loses whenever the trade-off is real. Decomposition also pushed the gated space
+past the enumeration limit — exhaustive is no longer an option, which is exactly
+when the strategy choice starts to matter.*
 
 ## The architecture
 
@@ -225,7 +243,7 @@ breaks something.
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                  # 759 tests; browser suites skip when absent
+pytest -q                                  # 770 tests; browser suites skip when absent
 mypy browsergraph --ignore-missing-imports
 ruff check browsergraph tests
 ```

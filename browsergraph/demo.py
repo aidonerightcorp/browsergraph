@@ -2,20 +2,27 @@
 
 Everything here is a description. Nothing executes, nothing is installed, and
 the numbers attached to candidates are **illustrative priors** — they exist to
-give the viewer something to sort by, and they are labelled as priors in the
+give the search something to sort by, and they are labelled as priors in the
 data so nobody can mistake them for measurements. Real optimization consumes
 real receipts; a demo that shipped invented benchmarks would be teaching exactly
 the habit this project argues against.
 
-The six stages are a demonstration, not a universal pipeline. A document
-extraction task grows OCR, translation, chunking and reconciliation stages; a
-machine-learning task grows splitting, imputation, calibration and stability
-stages. The stages are data.
+The six stages are a demonstration, not a universal pipeline. The stages are
+data; supply different ones.
 
-What is worth looking at is the arithmetic. Six stages with 76, 27, 13, 14, 11
-and 8 candidates is 149 things to choose from — and 32,864,832 complete routes
-through them. That number is why "the graph picks a route from evidence" is a
-different proposition from "we support several options".
+**Why the stages have sub-steps.** The first version of this registry drew six
+stages, and "Acquire inputs" held seventy-odd candidates. That reads as one
+decision and is three: work out *what* to fetch, open a session capable of
+fetching it, then read a payload out of that session. Drawing it flat is the
+same mistake as drawing a parameter family as one candidate — it hides choices
+that are genuinely available, and it hides them from the search as well as from
+the reader. Pooling every candidate in a stage into one decision counts about a
+hundred million routes; the sub-steps those stages are actually made of expose
+trillions. Same task, same registry, same code.
+
+A stage is either a leaf that holds candidates or a composite that holds
+sub-steps, never both — otherwise "one choice per stage" stops being well
+defined, and that sentence is what the whole model rests on.
 """
 from __future__ import annotations
 
@@ -44,7 +51,7 @@ def _node(node_id: str, kind: str, description: str, *, roles: tuple[str, ...],
           effects: tuple[str, ...] = (), tags: tuple[str, ...] = (),
           deterministic: bool = True, quality: float = 0.8,
           latency_ms: int = 100, cost_usd: float = 0.0) -> NodeManifest:
-    """One definition, with the boilerplate that every one of them shares."""
+    """One definition, with the boilerplate every one of them shares."""
     return NodeManifest(
         id=node_id, kind=kind, description=description, roles=roles,
         capabilities=(capability,), tags=tags,
@@ -62,325 +69,460 @@ def _choice(name: str, *values: Any, description: str = "") -> ParameterSpec:
                          default=values[0], choices=values)
 
 
-# --- 1. acquire --------------------------------------------------------------
-# The browser adapter is the point of the demonstration: one definition, three
-# configuration dimensions, sixty concrete choices. Drawing it as one box would
-# hide fifty-nine decisions a person is entitled to make.
+# === 1. ACQUIRE INPUTS: resolve -> open a session -> read a payload ==========
 
-ACQUIRE = (
-    _node("demo.acquire.browser_adapter", "browser_adapter",
-          "Drives a real browser to reach an authorized target.",
-          roles=("source", "adapter"), capability="acquire",
-          takes="TaskReference", gives="InputHandle",
+RESOLVE = (
+    _node("demo.resolve.literal", "resolve_literal",
+          "Treats the reference as an already-authorized literal locator.",
+          roles=("control",), capability="resolve",
+          takes="TaskReference", gives="ResolvedTarget",
+          quality=0.99, latency_ms=1),
+    _node("demo.resolve.template", "resolve_template",
+          "Fills a declared template from task parameters.",
+          roles=("transform",), capability="resolve",
+          takes="TaskReference", gives="ResolvedTarget",
+          params=(_choice("strictness", "strict", "lenient"),),
+          quality=0.95, latency_ms=3),
+    _node("demo.resolve.directory", "resolve_directory",
+          "Resolves an identifier through an authorized directory.",
+          roles=("source",), capability="resolve",
+          takes="TaskReference", gives="ResolvedTarget",
+          permissions=("database:read",), quality=0.93, latency_ms=40),
+)
+
+SESSION = (
+    _node("demo.session.browser", "browser_session",
+          "Opens a real browser session with a chosen controller and binary.",
+          roles=("adapter",), capability="session",
+          takes="ResolvedTarget", gives="OpenSession",
           params=(_choice("controller", "BrowserPort", "Playwright", "Selenium",
                           "Puppeteer", "CDP"),
                   _choice("binary", "Chrome", "Chromium", "Edge", "Firefox",
                           "WebKit", "Brave"),
                   _choice("display", "headless", "headed")),
           permissions=("browser", "network"), deterministic=False,
-          quality=0.88, latency_ms=2400, cost_usd=0.0),
-    _node("demo.acquire.file_loader", "file_loader",
-          "Loads and hashes an authorized local file.",
-          roles=("source",), capability="acquire",
-          takes="TaskReference", gives="InputHandle",
+          quality=0.88, latency_ms=2200),
+    _node("demo.session.filesystem", "file_session",
+          "Opens an authorized filesystem handle.", roles=("adapter",),
+          capability="session", takes="ResolvedTarget", gives="OpenSession",
           params=(_choice("mode", "file", "directory", "glob"),),
-          permissions=("filesystem:read",), quality=0.97, latency_ms=8),
-    _node("demo.acquire.api_loader", "api_loader",
-          "Loads a typed API response, with provenance.",
-          roles=("source", "adapter"), capability="acquire",
-          takes="TaskReference", gives="InputHandle",
-          params=(_choice("method", "GET", "POST", "PUT"),),
-          permissions=("network",), quality=0.9, latency_ms=320),
-    _node("demo.acquire.database_loader", "database_loader",
-          "Reads rows from an authorized database.",
-          roles=("source",), capability="acquire",
-          takes="TaskReference", gives="InputHandle",
+          permissions=("filesystem:read",), quality=0.98, latency_ms=4),
+    _node("demo.session.http", "http_session",
+          "Opens an HTTP session with a declared retry policy.",
+          roles=("adapter",), capability="session",
+          takes="ResolvedTarget", gives="OpenSession",
+          params=(_choice("retries", "none", "bounded"),),
+          permissions=("network",), quality=0.90, latency_ms=120),
+    _node("demo.session.database", "database_session",
+          "Opens an authorized database connection.", roles=("adapter",),
+          capability="session", takes="ResolvedTarget", gives="OpenSession",
           params=(_choice("dialect", "postgres", "mysql", "sqlite", "bigquery"),),
-          permissions=("database:read",), quality=0.95, latency_ms=140),
-    _node("demo.acquire.queue_kafka", "queue_consumer",
-          "Consumes an authorized Kafka topic.", roles=("source",),
-          capability="acquire", takes="TaskReference", gives="InputHandle",
+          permissions=("database:read",), quality=0.96, latency_ms=90),
+    _node("demo.session.queue", "queue_session",
+          "Subscribes to an authorized queue or topic.", roles=("adapter",),
+          capability="session", takes="ResolvedTarget", gives="OpenSession",
           permissions=("network",), quality=0.86, latency_ms=60),
-    _node("demo.acquire.queue_sqs", "queue_consumer",
-          "Consumes an authorized SQS queue.", roles=("source",),
-          capability="acquire", takes="TaskReference", gives="InputHandle",
-          permissions=("network",), quality=0.85, latency_ms=90),
-    _node("demo.acquire.stream_http", "stream_reader",
-          "Reads a chunked HTTP stream.", roles=("source",),
-          capability="acquire", takes="TaskReference", gives="InputHandle",
-          permissions=("network",), quality=0.82, latency_ms=180),
-    _node("demo.acquire.stream_websocket", "stream_reader",
-          "Reads a websocket stream.", roles=("source",),
-          capability="acquire", takes="TaskReference", gives="InputHandle",
-          permissions=("network",), quality=0.8, latency_ms=200),
-    _node("demo.acquire.archive_zip", "archive_loader",
-          "Expands an authorized zip archive.", roles=("source",),
-          capability="acquire", takes="TaskReference", gives="InputHandle",
-          permissions=("filesystem:read",), quality=0.93, latency_ms=45),
-    _node("demo.acquire.archive_tar", "archive_loader",
-          "Expands an authorized tar archive.", roles=("source",),
-          capability="acquire", takes="TaskReference", gives="InputHandle",
-          permissions=("filesystem:read",), quality=0.93, latency_ms=40),
 )
 
-# --- 2. canonicalize ---------------------------------------------------------
+READ = (
+    _node("demo.read.whole", "read_whole",
+          "Reads the entire payload and hashes it.", roles=("source",),
+          capability="read", takes="OpenSession", gives="InputHandle",
+          quality=0.97, latency_ms=20),
+    _node("demo.read.streamed", "read_streamed",
+          "Reads incrementally, bounding peak memory.", roles=("source",),
+          capability="read", takes="OpenSession", gives="InputHandle",
+          params=(_choice("chunking", "fixed", "adaptive"),),
+          quality=0.94, latency_ms=35),
+    _node("demo.read.rendered", "read_rendered",
+          "Reads what the page rendered, after scripts have run.",
+          roles=("source",), capability="read",
+          takes="OpenSession", gives="InputHandle",
+          params=(_choice("settle", "load", "network-idle", "mutation-quiet"),),
+          permissions=("browser",), deterministic=False,
+          quality=0.90, latency_ms=900),
+)
 
-CANONICALIZE = (
-    _node("demo.canonicalize.text_normalizer", "text_normalizer",
-          "Normalises unicode form and case.", roles=("transform",),
-          capability="canonicalize", takes="InputHandle", gives="CanonicalState",
-          params=(_choice("form", "NFC", "NFKC", "NFD"),
-                  _choice("case", "preserve", "fold")),
-          quality=0.9, latency_ms=6),
-    _node("demo.canonicalize.schema_mapper", "schema_mapper",
-          "Maps incoming fields onto a declared schema.", roles=("transform",),
-          capability="canonicalize", takes="InputHandle", gives="CanonicalState",
-          params=(_choice("strategy", "strict", "lenient", "inferred"),),
-          quality=0.92, latency_ms=25),
-    _node("demo.canonicalize.unit_metric", "unit_converter",
-          "Converts measurements to metric units.", roles=("transform",),
-          capability="canonicalize", takes="InputHandle", gives="CanonicalState",
-          quality=0.96, latency_ms=4),
-    _node("demo.canonicalize.unit_imperial", "unit_converter",
-          "Converts measurements to imperial units.", roles=("transform",),
-          capability="canonicalize", takes="InputHandle", gives="CanonicalState",
-          quality=0.96, latency_ms=4),
-    _node("demo.canonicalize.encoding_chardet", "encoding_detector",
-          "Detects encoding statistically.", roles=("transform",),
-          capability="canonicalize", takes="InputHandle", gives="CanonicalState",
-          quality=0.88, latency_ms=12),
-    _node("demo.canonicalize.encoding_bom", "encoding_detector",
-          "Detects encoding from a byte-order mark.", roles=("transform",),
-          capability="canonicalize", takes="InputHandle", gives="CanonicalState",
+# === 2. CANONICALIZE: decode -> parse -> normalize ===========================
+
+DECODE = (
+    _node("demo.decode.bom", "decode_bom",
+          "Takes the encoding from a byte-order mark.", roles=("transform",),
+          capability="decode", takes="InputHandle", gives="DecodedText",
           quality=0.99, latency_ms=1),
-    _node("demo.canonicalize.format_parser", "format_parser",
-          "Parses a known container format.", roles=("transform",),
-          capability="canonicalize", takes="InputHandle", gives="CanonicalState",
-          params=(_choice("format", "json", "csv", "xml", "yaml"),),
-          quality=0.94, latency_ms=18),
-    _node("demo.canonicalize.identity_resolver", "identity_resolver",
-          "Makes record identity explicit and stable.", roles=("transform",),
-          capability="canonicalize", takes="InputHandle", gives="CanonicalState",
-          params=(_choice("key", "natural", "surrogate", "composite"),),
-          quality=0.87, latency_ms=30),
-    _node("demo.canonicalize.table_canonicalizer", "table_canonicalizer",
-          "Normalises tabular shape, headers and types.", roles=("transform",),
-          capability="canonicalize", takes="InputHandle", gives="CanonicalState",
-          params=(_choice("headers", "first-row", "declared", "inferred"),),
-          quality=0.91, latency_ms=22),
-    _node("demo.canonicalize.locale_normalizer", "locale_normalizer",
-          "Normalises dates, numbers and separators for a locale.",
-          roles=("transform",), capability="canonicalize",
-          takes="InputHandle", gives="CanonicalState",
-          params=(_choice("locale", "en-US", "en-GB", "de-DE"),),
-          quality=0.9, latency_ms=9),
-    _node("demo.canonicalize.passthrough", "passthrough",
-          "Certifies the input already satisfies the canonical contract.",
-          roles=("control",), capability="canonicalize",
-          takes="InputHandle", gives="CanonicalState", tags=("pass-through",),
+    _node("demo.decode.statistical", "decode_statistical",
+          "Detects the encoding statistically.", roles=("transform",),
+          capability="decode", takes="InputHandle", gives="DecodedText",
+          quality=0.88, latency_ms=12),
+    _node("demo.decode.unicode", "decode_unicode",
+          "Applies a declared unicode normal form.", roles=("transform",),
+          capability="decode", takes="InputHandle", gives="DecodedText",
+          params=(_choice("form", "NFC", "NFKC", "NFD"),),
+          quality=0.95, latency_ms=6),
+    _node("demo.decode.passthrough", "decode_passthrough",
+          "Certifies the payload is already decoded text.",
+          roles=("control",), capability="decode",
+          takes="InputHandle", gives="DecodedText", tags=("pass-through",),
           quality=0.75, latency_ms=1),
 )
 
-# --- 3. enrich ---------------------------------------------------------------
-
-ENRICH = (
-    _node("demo.enrich.context_joiner", "context_joiner",
-          "Joins authorized context onto the canonical state.",
-          roles=("transform",), capability="enrich",
-          takes="CanonicalState", gives="EnrichedState",
-          params=(_choice("join", "inner", "left", "fuzzy"),),
-          permissions=("database:read",), quality=0.89, latency_ms=70),
-    _node("demo.enrich.reference_lookup", "reference_lookup",
-          "Looks values up in an authoritative reference set.",
-          roles=("transform",), capability="enrich",
-          takes="CanonicalState", gives="EnrichedState",
-          params=(_choice("source", "internal", "external"),),
-          permissions=("network",), quality=0.91, latency_ms=210),
-    _node("demo.enrich.embedding_enricher", "embedding_enricher",
-          "Attaches vector representations for retrieval.",
-          roles=("model", "transform"), capability="enrich",
-          takes="CanonicalState", gives="EnrichedState",
-          params=(_choice("model", "small", "base", "large"),),
-          deterministic=False, quality=0.85, latency_ms=340, cost_usd=0.0004),
-    _node("demo.enrich.provenance_stamper", "provenance_stamper",
-          "Stamps origin, version and freshness onto every field.",
-          roles=("transform",), capability="enrich",
-          takes="CanonicalState", gives="EnrichedState",
-          quality=0.99, latency_ms=3),
-    _node("demo.enrich.freshness_ttl", "freshness_checker",
-          "Rejects context older than a declared time to live.",
-          roles=("control",), capability="enrich",
-          takes="CanonicalState", gives="EnrichedState",
-          quality=0.95, latency_ms=5),
-    _node("demo.enrich.freshness_etag", "freshness_checker",
-          "Revalidates context against an upstream entity tag.",
-          roles=("control",), capability="enrich",
-          takes="CanonicalState", gives="EnrichedState",
-          permissions=("network",), quality=0.97, latency_ms=120),
-    _node("demo.enrich.geocoder", "geocoder",
-          "Resolves addresses to coordinates and reference regions.",
-          roles=("transform",), capability="enrich",
-          takes="CanonicalState", gives="EnrichedState",
-          permissions=("network",), quality=0.86, latency_ms=260),
-    _node("demo.enrich.passthrough", "passthrough",
-          "Certifies the state already carries the required context.",
-          roles=("control",), capability="enrich",
-          takes="CanonicalState", gives="EnrichedState", tags=("pass-through",),
-          quality=0.7, latency_ms=1),
+PARSE = (
+    _node("demo.parse.format", "parse_format",
+          "Parses a known container format.", roles=("transform",),
+          capability="parse", takes="DecodedText", gives="ParsedRecords",
+          params=(_choice("format", "json", "csv", "xml", "yaml"),),
+          quality=0.94, latency_ms=18),
+    _node("demo.parse.table", "parse_table",
+          "Reads tabular shape and headers.", roles=("transform",),
+          capability="parse", takes="DecodedText", gives="ParsedRecords",
+          params=(_choice("headers", "first-row", "declared", "inferred"),),
+          quality=0.91, latency_ms=22),
+    _node("demo.parse.tolerant", "parse_tolerant",
+          "Recovers records from malformed input, recording every repair.",
+          roles=("transform",), capability="parse",
+          takes="DecodedText", gives="ParsedRecords",
+          quality=0.82, latency_ms=30),
+    _node("demo.parse.model", "parse_model",
+          "Asks a language model for structure when no grammar fits.",
+          roles=("model",), capability="parse",
+          takes="DecodedText", gives="ParsedRecords",
+          params=(_choice("model", "Gemini", "DeepSeek", "GLM"),),
+          permissions=("llm",), deterministic=False,
+          quality=0.89, latency_ms=1500, cost_usd=0.008),
 )
 
-# --- 4. transform ------------------------------------------------------------
+NORMALIZE = (
+    _node("demo.normalize.units", "normalize_units",
+          "Converts measurements to a declared unit system.",
+          roles=("transform",), capability="normalize",
+          takes="ParsedRecords", gives="CanonicalState",
+          params=(_choice("system", "metric", "imperial"),),
+          quality=0.96, latency_ms=4),
+    _node("demo.normalize.locale", "normalize_locale",
+          "Normalizes dates, numbers and separators for a locale.",
+          roles=("transform",), capability="normalize",
+          takes="ParsedRecords", gives="CanonicalState",
+          params=(_choice("locale", "en-US", "en-GB", "de-DE"),),
+          quality=0.90, latency_ms=9),
+    _node("demo.normalize.identity", "normalize_identity",
+          "Makes record identity explicit and stable.", roles=("transform",),
+          capability="normalize", takes="ParsedRecords", gives="CanonicalState",
+          params=(_choice("key", "natural", "surrogate", "composite"),),
+          quality=0.87, latency_ms=30),
+    _node("demo.normalize.schema", "normalize_schema",
+          "Maps incoming fields onto a declared schema.", roles=("transform",),
+          capability="normalize", takes="ParsedRecords", gives="CanonicalState",
+          params=(_choice("strategy", "strict", "lenient", "inferred"),),
+          quality=0.92, latency_ms=25),
+    _node("demo.normalize.passthrough", "normalize_passthrough",
+          "Certifies the records already satisfy the canonical contract.",
+          roles=("control",), capability="normalize",
+          takes="ParsedRecords", gives="CanonicalState", tags=("pass-through",),
+          quality=0.74, latency_ms=1),
+)
 
-TRANSFORM = (
-    _node("demo.transform.deterministic_rules", "deterministic_rules",
+# === 3. ENRICH: plan what context is needed -> attach it =====================
+
+PLAN = (
+    _node("demo.plan.none", "plan_none",
+          "Declares that no additional context is required.",
+          roles=("control",), capability="plan",
+          takes="CanonicalState", gives="ContextPlan", tags=("pass-through",),
+          quality=0.72, latency_ms=1),
+    _node("demo.plan.rules", "plan_rules",
+          "Decides what to fetch from reviewed rules.", roles=("control",),
+          capability="plan", takes="CanonicalState", gives="ContextPlan",
+          quality=0.93, latency_ms=6),
+    _node("demo.plan.retrieval", "plan_retrieval",
+          "Ranks what context would help, by retrieval score.",
+          roles=("transform",), capability="plan",
+          takes="CanonicalState", gives="ContextPlan",
+          params=(_choice("ranking", "bm25", "embedding", "hybrid"),),
+          quality=0.89, latency_ms=120),
+)
+
+ATTACH = (
+    _node("demo.attach.reference", "attach_reference",
+          "Joins an authoritative reference set.", roles=("transform",),
+          capability="attach", takes="ContextPlan", gives="EnrichedState",
+          params=(_choice("source", "internal", "external"),),
+          permissions=("network",), quality=0.91, latency_ms=210),
+    _node("demo.attach.embedding", "attach_embedding",
+          "Attaches vector representations for retrieval.",
+          roles=("model",), capability="attach",
+          takes="ContextPlan", gives="EnrichedState",
+          params=(_choice("model", "small", "base", "large"),),
+          deterministic=False, quality=0.85, latency_ms=340, cost_usd=0.0004),
+    _node("demo.attach.provenance", "attach_provenance",
+          "Stamps origin, version and freshness onto every field.",
+          roles=("transform",), capability="attach",
+          takes="ContextPlan", gives="EnrichedState",
+          quality=0.99, latency_ms=3),
+    _node("demo.attach.freshness", "attach_freshness",
+          "Revalidates context against an upstream entity tag or time to live.",
+          roles=("control",), capability="attach",
+          takes="ContextPlan", gives="EnrichedState",
+          params=(_choice("policy", "ttl", "etag"),),
+          quality=0.96, latency_ms=90),
+    _node("demo.attach.geocode", "attach_geocode",
+          "Resolves addresses to coordinates and reference regions.",
+          roles=("transform",), capability="attach",
+          takes="ContextPlan", gives="EnrichedState",
+          permissions=("network",), quality=0.86, latency_ms=260),
+)
+
+# === 4. TRANSFORM OR ACT: locate the target -> apply or act ==================
+
+LOCATE = (
+    _node("demo.locate.selector", "locate_selector",
+          "Locates by an explicit, reviewed selector or key.",
+          roles=("transform",), capability="locate",
+          takes="EnrichedState", gives="LocatedTarget",
+          quality=0.93, latency_ms=5),
+    _node("demo.locate.heuristic", "locate_heuristic",
+          "Locates by structural heuristics when the selector breaks.",
+          roles=("transform",), capability="locate",
+          takes="EnrichedState", gives="LocatedTarget",
+          params=(_choice("strategy", "nearest-label", "role", "text"),),
+          quality=0.84, latency_ms=40),
+    _node("demo.locate.vision", "locate_vision",
+          "Locates from a rendering, when the structure carries no meaning.",
+          roles=("model",), capability="locate",
+          takes="EnrichedState", gives="LocatedTarget",
+          permissions=("llm",), deterministic=False,
+          quality=0.80, latency_ms=2100, cost_usd=0.011),
+    _node("demo.locate.recorded", "locate_recorded",
+          "Replays a location that a previous verified run recorded.",
+          roles=("control",), capability="locate",
+          takes="EnrichedState", gives="LocatedTarget",
+          quality=0.95, latency_ms=2),
+)
+
+ACT = (
+    _node("demo.act.rules", "act_rules",
           "Applies reviewed, deterministic rules.", roles=("transform",),
-          capability="transform", takes="EnrichedState", gives="CandidateResult",
+          capability="act", takes="LocatedTarget", gives="CandidateResult",
           params=(_choice("ruleset", "conservative", "aggressive"),),
           quality=0.84, latency_ms=15),
-    _node("demo.transform.llm_parser", "llm_parser",
+    _node("demo.act.model", "act_model",
           "Asks a language model for a structured result.",
-          roles=("model", "transform"), capability="transform",
-          takes="EnrichedState", gives="CandidateResult",
+          roles=("model",), capability="act",
+          takes="LocatedTarget", gives="CandidateResult",
           params=(_choice("model", "Gemini", "DeepSeek", "GLM"),
                   _choice("strategy", "single-schema", "field-by-field")),
           permissions=("llm",), deterministic=False,
-          quality=0.9, latency_ms=1800, cost_usd=0.012),
-    _node("demo.transform.statistical_model", "statistical_model",
+          quality=0.90, latency_ms=1800, cost_usd=0.012),
+    _node("demo.act.statistical", "act_statistical",
           "Applies a fitted statistical model.", roles=("model",),
-          capability="transform", takes="EnrichedState", gives="CandidateResult",
+          capability="act", takes="LocatedTarget", gives="CandidateResult",
           params=(_choice("family", "linear", "tree"),),
           quality=0.87, latency_ms=45),
-    _node("demo.transform.composite", "composite_transform",
+    _node("demo.act.composite", "act_composite",
           "Runs a validated child graph and exposes its external ports.",
-          roles=("composite",), capability="transform",
-          takes="EnrichedState", gives="CandidateResult",
-          params=(_choice("children", "rules+llm", "rules+model"),),
+          roles=("composite",), capability="act",
+          takes="LocatedTarget", gives="CandidateResult",
+          params=(_choice("children", "rules+model", "rules+statistical"),),
           permissions=("llm",), deterministic=False,
           quality=0.93, latency_ms=2100, cost_usd=0.014),
-    _node("demo.transform.human_operator", "human_operator",
-          "Routes the decision to an authorized person.",
-          roles=("action",), capability="transform",
-          takes="EnrichedState", gives="CandidateResult",
+    _node("demo.act.browser", "act_browser",
+          "Performs a permitted external effect in a browser.",
+          roles=("action",), capability="act",
+          takes="LocatedTarget", gives="CandidateResult",
+          permissions=("browser", "network"), effects=("external:remote-state",),
+          deterministic=False, quality=0.80, latency_ms=3200),
+    _node("demo.act.human", "act_human",
+          "Routes the decision to an authorized person.", roles=("action",),
+          capability="act", takes="LocatedTarget", gives="CandidateResult",
           permissions=("human",), deterministic=False,
           quality=0.98, latency_ms=900000, cost_usd=2.5),
-    _node("demo.transform.browser_action", "browser_action",
-          "Performs a permitted external effect in a browser.",
-          roles=("action",), capability="transform",
-          takes="EnrichedState", gives="CandidateResult",
-          permissions=("browser", "network"), effects=("external:remote-state",),
-          deterministic=False, quality=0.8, latency_ms=3200),
 )
 
-# --- 5. verify ---------------------------------------------------------------
-# Independence is the property that matters. A producer's own confidence is not
-# verification, however well calibrated it claims to be.
+# === 5. VERIFY: check the shape -> check it independently ====================
 
-VERIFY = (
-    _node("demo.verify.schema_json", "schema_validator",
+SHAPE = (
+    _node("demo.shape.json_schema", "shape_json_schema",
           "Checks the result against a JSON Schema.", roles=("verifier",),
-          capability="verify", takes="CandidateResult", gives="VerifiedOutcome",
-          quality=0.9, latency_ms=6),
-    _node("demo.verify.schema_typed", "schema_validator",
+          capability="shape", takes="CandidateResult", gives="ShapeVerdict",
+          quality=0.90, latency_ms=6),
+    _node("demo.shape.typed", "shape_typed",
           "Checks the result against typed models.", roles=("verifier",),
-          capability="verify", takes="CandidateResult", gives="VerifiedOutcome",
+          capability="shape", takes="CandidateResult", gives="ShapeVerdict",
           quality=0.92, latency_ms=9),
-    _node("demo.verify.oracle", "oracle_check",
-          "Compares against an independent source of truth.",
-          roles=("verifier",), capability="verify",
-          takes="CandidateResult", gives="VerifiedOutcome",
+    _node("demo.shape.invariants", "shape_invariants",
+          "Evaluates declared task invariants and postconditions.",
+          roles=("verifier",), capability="shape",
+          takes="CandidateResult", gives="ShapeVerdict",
+          quality=0.94, latency_ms=14),
+)
+
+INDEPENDENT = (
+    _node("demo.independent.oracle", "independent_oracle",
+          "Compares against a source independent of the producer.",
+          roles=("verifier",), capability="independent",
+          takes="ShapeVerdict", gives="VerifiedOutcome",
           params=(_choice("oracle", "reference-data", "recomputation"),),
           quality=0.95, latency_ms=180),
-    _node("demo.verify.consensus", "consensus_vote",
+    _node("demo.independent.consensus", "independent_consensus",
           "Requires agreement between independent producers.",
-          roles=("verifier",), capability="verify",
-          takes="CandidateResult", gives="VerifiedOutcome",
+          roles=("verifier",), capability="independent",
+          takes="ShapeVerdict", gives="VerifiedOutcome",
           params=(_choice("rule", "unanimous", "majority", "weighted"),),
           deterministic=False, quality=0.97, latency_ms=2600, cost_usd=0.02),
-    _node("demo.verify.human_review", "human_review",
+    _node("demo.independent.human", "independent_human",
           "An authorized person accepts or rejects the outcome.",
-          roles=("verifier",), capability="verify",
-          takes="CandidateResult", gives="VerifiedOutcome",
+          roles=("verifier",), capability="independent",
+          takes="ShapeVerdict", gives="VerifiedOutcome",
           permissions=("human",), quality=0.99, latency_ms=1200000, cost_usd=3.0),
-    _node("demo.verify.visual_diff", "visual_diff",
-          "Compares rendered output against an approved baseline.",
-          roles=("verifier",), capability="verify",
-          takes="CandidateResult", gives="VerifiedOutcome",
+    _node("demo.independent.visual", "independent_visual",
+          "Compares a rendering against an approved baseline.",
+          roles=("verifier",), capability="independent",
+          takes="ShapeVerdict", gives="VerifiedOutcome",
           quality=0.88, latency_ms=420),
-    _node("demo.verify.ocr_check", "ocr_verifier",
+    _node("demo.independent.ocr", "independent_ocr",
           "Confirms the result is visible to a reader, not merely present.",
-          roles=("verifier",), capability="verify",
-          takes="CandidateResult", gives="VerifiedOutcome",
+          roles=("verifier",), capability="independent",
+          takes="ShapeVerdict", gives="VerifiedOutcome",
           params=(_choice("backend", "rapidocr", "tesseract"),),
           quality=0.86, latency_ms=650),
 )
 
-# --- 6. emit -----------------------------------------------------------------
+# === 6. EMIT: persist the result -> write the receipt ========================
 
-EMIT = (
-    _node("demo.emit.file_json", "file_writer",
-          "Writes the result and receipt as JSON.", roles=("sink",),
-          capability="emit", takes="VerifiedOutcome", gives="TaskReceipt",
+PERSIST = (
+    _node("demo.persist.file", "persist_file",
+          "Writes the result to a file.", roles=("sink",),
+          capability="persist", takes="VerifiedOutcome", gives="StoredResult",
+          params=(_choice("format", "json", "columnar"),),
           permissions=("filesystem:write",), effects=("local:file",),
           quality=0.99, latency_ms=7),
-    _node("demo.emit.file_columnar", "file_writer",
-          "Writes the result and receipt in a columnar format.",
-          roles=("sink",), capability="emit",
-          takes="VerifiedOutcome", gives="TaskReceipt",
-          permissions=("filesystem:write",), effects=("local:file",),
-          quality=0.98, latency_ms=26),
-    _node("demo.emit.api_publisher", "api_publisher",
-          "Publishes the result to an authorized endpoint.",
-          roles=("sink", "action"), capability="emit",
-          takes="VerifiedOutcome", gives="TaskReceipt",
-          params=(_choice("delivery", "at-least-once", "exactly-once"),),
-          permissions=("network",), effects=("external:published",),
-          quality=0.93, latency_ms=290),
-    _node("demo.emit.database_writer", "database_writer",
+    _node("demo.persist.database", "persist_database",
           "Writes the result to an authorized table.", roles=("sink",),
-          capability="emit", takes="VerifiedOutcome", gives="TaskReceipt",
+          capability="persist", takes="VerifiedOutcome", gives="StoredResult",
           params=(_choice("mode", "append", "upsert"),),
           permissions=("database:write",), effects=("external:row-state",),
           quality=0.96, latency_ms=110),
-    _node("demo.emit.evidence_bundler", "evidence_bundler",
-          "Bundles artifacts, provenance and replay data into a receipt.",
-          roles=("sink",), capability="emit",
-          takes="VerifiedOutcome", gives="TaskReceipt",
-          permissions=("filesystem:write",), effects=("local:file",),
-          quality=0.99, latency_ms=40),
-    _node("demo.emit.notifier", "notifier",
-          "Notifies authorized parties that the task completed.",
-          roles=("sink", "action"), capability="emit",
-          takes="VerifiedOutcome", gives="TaskReceipt",
-          permissions=("network",), effects=("external:notification",),
-          quality=0.9, latency_ms=150),
+    _node("demo.persist.publish", "persist_publish",
+          "Publishes the result to an authorized endpoint.",
+          roles=("sink", "action"), capability="persist",
+          takes="VerifiedOutcome", gives="StoredResult",
+          params=(_choice("delivery", "at-least-once", "exactly-once"),),
+          permissions=("network",), effects=("external:published",),
+          quality=0.93, latency_ms=290),
+    _node("demo.persist.memory", "persist_memory",
+          "Returns the result in memory without storing it.",
+          roles=("sink",), capability="persist",
+          takes="VerifiedOutcome", gives="StoredResult",
+          quality=0.85, latency_ms=1),
 )
 
-NODES = ACQUIRE + CANONICALIZE + ENRICH + TRANSFORM + VERIFY + EMIT
+RECEIPT = (
+    _node("demo.receipt.bundle", "receipt_bundle",
+          "Bundles artifacts, provenance and replay data into a receipt.",
+          roles=("sink",), capability="receipt",
+          takes="StoredResult", gives="TaskReceipt",
+          params=(_choice("detail", "summary", "full"),),
+          permissions=("filesystem:write",), effects=("local:file",),
+          quality=0.99, latency_ms=40),
+    _node("demo.receipt.checkpoint", "receipt_checkpoint",
+          "Writes a resumable, content-addressed checkpoint.",
+          roles=("sink",), capability="receipt",
+          takes="StoredResult", gives="TaskReceipt",
+          permissions=("filesystem:write",), effects=("local:file",),
+          quality=0.97, latency_ms=26),
+    _node("demo.receipt.notify", "receipt_notify",
+          "Notifies authorized parties that the task completed.",
+          roles=("sink", "action"), capability="receipt",
+          takes="StoredResult", gives="TaskReceipt",
+          permissions=("network",), effects=("external:notification",),
+          quality=0.90, latency_ms=150),
+)
 
+NODES = (RESOLVE + SESSION + READ + DECODE + PARSE + NORMALIZE + PLAN + ATTACH
+         + LOCATE + ACT + SHAPE + INDEPENDENT + PERSIST + RECEIPT)
+
+
+#: (id, name, input, output, capability, description, success, optional)
+SUBSTEPS = {
+    "acquire": (
+        ("resolve", "Resolve target", "TaskReference", "ResolvedTarget", "resolve",
+         "Turn the reference into an authorized, concrete target.",
+         "the target is concrete and authorized", False),
+        ("session", "Open session", "ResolvedTarget", "OpenSession", "session",
+         "Open something capable of fetching that target.",
+         "a session exists and is usable", False),
+        ("read", "Read payload", "OpenSession", "InputHandle", "read",
+         "Read a versioned, hashed payload out of the session.",
+         "the payload is readable, identified and versioned", False),
+    ),
+    "canonicalize": (
+        ("decode", "Decode bytes", "InputHandle", "DecodedText", "decode",
+         "Establish the encoding and normal form.",
+         "the text is decoded and in a declared normal form", True),
+        ("parse", "Parse structure", "DecodedText", "ParsedRecords", "parse",
+         "Recover records from the text.",
+         "records exist, with every repair recorded", False),
+        ("normalize", "Normalize values", "ParsedRecords", "CanonicalState",
+         "normalize", "Make schema, units, locale and identity explicit.",
+         "downstream nodes receive a typed, versioned representation", True),
+    ),
+    "enrich": (
+        ("plan", "Plan context", "CanonicalState", "ContextPlan", "plan",
+         "Decide what additional context the task actually needs.",
+         "the plan names what is needed and why", True),
+        ("attach", "Attach evidence", "ContextPlan", "EnrichedState", "attach",
+         "Attach it, with provenance and freshness.",
+         "every derived field carries a source and a freshness stamp", False),
+    ),
+    "transform": (
+        ("locate", "Locate target", "EnrichedState", "LocatedTarget", "locate",
+         "Find the thing to act on or read from.",
+         "the target is identified and still present", False),
+        ("act", "Apply or act", "LocatedTarget", "CandidateResult", "act",
+         "Produce the result, or perform a permitted external effect.",
+         "a candidate result exists with its inputs recorded", False),
+    ),
+    "verify": (
+        ("shape", "Check shape", "CandidateResult", "ShapeVerdict", "shape",
+         "Check the result is the right shape before judging its content.",
+         "the result satisfies its declared schema and invariants", False),
+        ("independent", "Check independently", "ShapeVerdict", "VerifiedOutcome",
+         "independent", "Judge the outcome independently of what produced it.",
+         "an independent check accepted the outcome", False),
+    ),
+    "emit": (
+        ("persist", "Persist result", "VerifiedOutcome", "StoredResult", "persist",
+         "Store or return the result.", "the result is durable or returned", False),
+        ("receipt", "Write receipt", "StoredResult", "TaskReceipt", "receipt",
+         "Record evidence, provenance and replay data.",
+         "the run is replayable from the receipt", False),
+    ),
+}
+
+#: (id, name, input, output, description, success, variant axes)
 STAGE_SPECS = (
-    ("acquire", "Acquire inputs", "TaskReference", "InputHandle", "acquire",
+    ("acquire", "Acquire inputs", "TaskReference", "InputHandle",
      "Resolve authorized task references into readable, versioned handles.",
-     "the input is readable, identified and versioned", False,
+     "the input is readable, identified and versioned",
      ("controller", "binary", "display", "transport")),
     ("canonicalize", "Canonicalize representation", "InputHandle", "CanonicalState",
-     "canonicalize", "Make schema, units, encoding and identity explicit.",
-     "downstream nodes receive a typed, versioned representation", True,
+     "Make schema, units, encoding and identity explicit.",
+     "downstream nodes receive a typed, versioned representation",
      ("format", "schema", "units", "locale", "precision")),
     ("enrich", "Enrich and derive context", "CanonicalState", "EnrichedState",
-     "enrich", "Attach required context, evidence, provenance and freshness.",
-     "every derived field carries a source and a freshness stamp", True,
+     "Attach required context, evidence, provenance and freshness.",
+     "every derived field carries a source and a freshness stamp",
      ("source", "recency", "depth")),
     ("transform", "Transform or act", "EnrichedState", "CandidateResult",
-     "transform", "Produce the result, or perform a permitted external effect.",
-     "a candidate result exists with its inputs recorded", False,
+     "Produce the result, or perform a permitted external effect.",
+     "a candidate result exists with its inputs recorded",
      ("method", "model", "strategy")),
     ("verify", "Verify success", "CandidateResult", "VerifiedOutcome",
-     "verify", "Judge the outcome independently of whatever produced it.",
-     "an independent check accepted the outcome", False,
+     "Judge the outcome independently of whatever produced it.",
+     "an independent check accepted the outcome",
      ("independence", "strictness", "sample")),
     ("emit", "Emit result and receipt", "VerifiedOutcome", "TaskReceipt",
-     "emit", "Persist or return the result, evidence, provenance and replay data.",
-     "the receipt is durable and the run is replayable", False,
+     "Persist or return the result, evidence, provenance and replay data.",
+     "the receipt is durable and the run is replayable",
      ("destination", "durability", "format")),
 )
 
@@ -474,6 +616,8 @@ PROFILES = (
 )
 
 
+
+
 def _cid(node_id: str, **params: Any) -> str:
     """The candidate ID for one binding, so routes can name choices readably."""
     manifest = next(n for n in NODES if n.id == node_id)
@@ -483,95 +627,147 @@ def _cid(node_id: str, **params: Any) -> str:
     return candidate_id(node_id, full)
 
 
+def _route(**by_substep: str) -> dict[str, str]:
+    return dict(by_substep)
+
+
 def workbench() -> WorkbenchDefinition:
     """The demonstration, assembled and validated."""
     candidates = expand_node_candidates(NODES)
-    stages = tuple(
-        StageDefinition(
+
+    built: list[StageDefinition] = []
+    for sid, name, takes, gives, description, success, axes in STAGE_SPECS:
+        subs = tuple(
+            StageDefinition(
+                id=sub_id, name=sub_name, input_type=sub_in,
+                output_type=sub_out, required_capabilities=(capability,),
+                description=sub_desc, success=sub_success, optional=optional,
+            ).with_discovered_candidates(NODES, candidates)
+            for sub_id, sub_name, sub_in, sub_out, capability, sub_desc,
+            sub_success, optional in SUBSTEPS[sid])
+        built.append(StageDefinition(
             id=sid, name=name, input_type=takes, output_type=gives,
-            required_capabilities=(capability,), description=description,
-            success=success, optional=optional, variant_axes=axes,
-        ).with_discovered_candidates(NODES, candidates)
-        for sid, name, takes, gives, capability, description, success, optional, axes
-        in STAGE_SPECS)
+            description=description, success=success, variant_axes=axes,
+            substages=subs))
+    stages = tuple(built)
 
     cheapest = SolutionDefinition(
         id="cheapest", name="Cheapest route", status="baseline",
         description="What runs before there is any evidence: no browser, no "
                     "model, no external effect.",
-        route={"acquire": _cid("demo.acquire.file_loader", mode="file"),
-               "canonicalize": _cid("demo.canonicalize.encoding_bom"),
-               "enrich": _cid("demo.enrich.provenance_stamper"),
-               "transform": _cid("demo.transform.deterministic_rules",
-                                 ruleset="conservative"),
-               "verify": _cid("demo.verify.schema_json"),
-               "emit": _cid("demo.emit.file_json")},
-        metrics={"quality": 0.84, "latency_ms": 41, "cost_usd": 0.0},
+        route=_route(
+            resolve=_cid("demo.resolve.literal"),
+            session=_cid("demo.session.filesystem", mode="file"),
+            read=_cid("demo.read.whole"),
+            decode=_cid("demo.decode.bom"),
+            parse=_cid("demo.parse.format", format="json"),
+            normalize=_cid("demo.normalize.schema", strategy="strict"),
+            plan=_cid("demo.plan.rules"),
+            attach=_cid("demo.attach.provenance"),
+            locate=_cid("demo.locate.selector"),
+            act=_cid("demo.act.rules", ruleset="conservative"),
+            shape=_cid("demo.shape.json_schema"),
+            independent=_cid("demo.independent.oracle", oracle="recomputation"),
+            persist=_cid("demo.persist.file", format="json"),
+            receipt=_cid("demo.receipt.bundle", detail="summary")),
+        metrics={"quality": 0.78, "latency_ms": 320, "cost_usd": 0.0},
         tags=("baseline", "deterministic"))
 
     accuracy = SolutionDefinition(
         id="accuracy_first", name="Accuracy-first route", status="candidate",
-        description="Composite transformation with independent consensus, and a "
-                    "human as the last fallback.",
-        route={"acquire": _cid("demo.acquire.database_loader", dialect="postgres"),
-               "canonicalize": _cid("demo.canonicalize.schema_mapper",
-                                    strategy="strict"),
-               "enrich": _cid("demo.enrich.reference_lookup", source="internal"),
-               "transform": _cid("demo.transform.composite", children="rules+llm"),
-               "verify": _cid("demo.verify.consensus", rule="majority"),
-               "emit": _cid("demo.emit.evidence_bundler")},
-        fallbacks={"verify": (_cid("demo.verify.oracle", oracle="reference-data"),
-                              _cid("demo.verify.human_review"))},
-        metrics={"quality": 0.97, "latency_ms": 1420, "cost_usd": 0.031},
+        description="Composite action with independent consensus, and a human "
+                    "as the last fallback.",
+        route=_route(
+            resolve=_cid("demo.resolve.directory"),
+            session=_cid("demo.session.database", dialect="postgres"),
+            read=_cid("demo.read.whole"),
+            decode=_cid("demo.decode.unicode", form="NFKC"),
+            parse=_cid("demo.parse.format", format="json"),
+            normalize=_cid("demo.normalize.schema", strategy="strict"),
+            plan=_cid("demo.plan.retrieval", ranking="hybrid"),
+            attach=_cid("demo.attach.reference", source="internal"),
+            locate=_cid("demo.locate.selector"),
+            act=_cid("demo.act.composite", children="rules+model"),
+            shape=_cid("demo.shape.invariants"),
+            independent=_cid("demo.independent.consensus", rule="majority"),
+            persist=_cid("demo.persist.database", mode="upsert"),
+            receipt=_cid("demo.receipt.bundle", detail="full")),
+        fallbacks={"independent": (_cid("demo.independent.oracle",
+                                        oracle="reference-data"),
+                                   _cid("demo.independent.human"))},
+        metrics={"quality": 0.95, "latency_ms": 3400, "cost_usd": 0.036},
         tags=("quality", "independent-verification"))
 
     learned = SolutionDefinition(
         id="learned", name="Learned route", status="learned",
-        description="Where evidence moved the choice: a defended source needed a "
-                    "real browser, and OCR caught a result that was present in "
-                    "the data and invisible on the page.",
-        route={"acquire": _cid("demo.acquire.browser_adapter",
-                               controller="Playwright", binary="Firefox",
-                               display="headless"),
-               "canonicalize": _cid("demo.canonicalize.text_normalizer",
-                                    form="NFKC", case="fold"),
-               "enrich": _cid("demo.enrich.provenance_stamper"),
-               "transform": _cid("demo.transform.llm_parser", model="GLM",
-                                 strategy="field-by-field"),
-               "verify": _cid("demo.verify.ocr_check", backend="rapidocr"),
-               "emit": _cid("demo.emit.evidence_bundler")},
-        fallbacks={"acquire": (_cid("demo.acquire.browser_adapter",
-                                    controller="Selenium", binary="Chrome",
-                                    display="headless"),),
-                   "transform": (_cid("demo.transform.deterministic_rules",
-                                      ruleset="aggressive"),)},
-        metrics={"quality": 0.94, "latency_ms": 4300, "cost_usd": 0.018},
+        description="Where evidence moved the choice: a defended source needed "
+                    "a real browser, the DOM stopped being trustworthy, and OCR "
+                    "caught a result that was present in the data and invisible "
+                    "on the page.",
+        route=_route(
+            resolve=_cid("demo.resolve.template", strictness="lenient"),
+            session=_cid("demo.session.browser", controller="Playwright",
+                         binary="Firefox", display="headless"),
+            read=_cid("demo.read.rendered", settle="mutation-quiet"),
+            decode=_cid("demo.decode.unicode", form="NFKC"),
+            parse=_cid("demo.parse.tolerant"),
+            normalize=_cid("demo.normalize.identity", key="composite"),
+            plan=_cid("demo.plan.rules"),
+            attach=_cid("demo.attach.provenance"),
+            locate=_cid("demo.locate.heuristic", strategy="nearest-label"),
+            act=_cid("demo.act.model", model="GLM", strategy="field-by-field"),
+            shape=_cid("demo.shape.typed"),
+            independent=_cid("demo.independent.ocr", backend="rapidocr"),
+            persist=_cid("demo.persist.file", format="json"),
+            receipt=_cid("demo.receipt.bundle", detail="full")),
+        fallbacks={"session": (_cid("demo.session.browser", controller="Selenium",
+                                    binary="Chrome", display="headless"),),
+                   "act": (_cid("demo.act.rules", ruleset="aggressive"),)},
+        metrics={"quality": 0.91, "latency_ms": 6200, "cost_usd": 0.019},
         tags=("learned", "browser", "ocr"))
 
     fastest = SolutionDefinition(
         id="fastest", name="Fastest route", status="candidate",
-        description="Every stage taking its cheapest admitted candidate.",
-        route={"acquire": _cid("demo.acquire.file_loader", mode="file"),
-               "canonicalize": _cid("demo.canonicalize.passthrough"),
-               "enrich": _cid("demo.enrich.passthrough"),
-               "transform": _cid("demo.transform.deterministic_rules",
-                                 ruleset="aggressive"),
-               "verify": _cid("demo.verify.schema_json"),
-               "emit": _cid("demo.emit.file_json")},
-        metrics={"quality": 0.7, "latency_ms": 30, "cost_usd": 0.0},
+        description="Every sub-step taking its cheapest admitted candidate.",
+        route=_route(
+            resolve=_cid("demo.resolve.literal"),
+            session=_cid("demo.session.filesystem", mode="file"),
+            read=_cid("demo.read.whole"),
+            decode=_cid("demo.decode.passthrough"),
+            parse=_cid("demo.parse.format", format="json"),
+            normalize=_cid("demo.normalize.passthrough"),
+            plan=_cid("demo.plan.none"),
+            attach=_cid("demo.attach.provenance"),
+            locate=_cid("demo.locate.recorded"),
+            act=_cid("demo.act.rules", ruleset="aggressive"),
+            shape=_cid("demo.shape.json_schema"),
+            independent=_cid("demo.independent.oracle", oracle="recomputation"),
+            persist=_cid("demo.persist.memory"),
+            receipt=_cid("demo.receipt.checkpoint")),
+        metrics={"quality": 0.61, "latency_ms": 240, "cost_usd": 0.0},
         tags=("speed", "pass-through"))
 
     careful = SolutionDefinition(
-        id="human_in_the_loop", name="Human-in-the-loop route", status="candidate",
+        id="human_in_the_loop", name="Human-in-the-loop route",
+        status="candidate",
         description="For effects that are hard to undo: a person decides, and a "
                     "person checks.",
-        route={"acquire": _cid("demo.acquire.api_loader", method="GET"),
-               "canonicalize": _cid("demo.canonicalize.format_parser", format="json"),
-               "enrich": _cid("demo.enrich.freshness_etag"),
-               "transform": _cid("demo.transform.human_operator"),
-               "verify": _cid("demo.verify.human_review"),
-               "emit": _cid("demo.emit.notifier")},
-        metrics={"quality": 0.99, "latency_ms": 2100000, "cost_usd": 5.5},
+        route=_route(
+            resolve=_cid("demo.resolve.directory"),
+            session=_cid("demo.session.http", retries="bounded"),
+            read=_cid("demo.read.streamed", chunking="adaptive"),
+            decode=_cid("demo.decode.statistical"),
+            parse=_cid("demo.parse.format", format="json"),
+            normalize=_cid("demo.normalize.locale", locale="en-GB"),
+            plan=_cid("demo.plan.rules"),
+            attach=_cid("demo.attach.freshness", policy="etag"),
+            locate=_cid("demo.locate.selector"),
+            act=_cid("demo.act.human"),
+            shape=_cid("demo.shape.invariants"),
+            independent=_cid("demo.independent.human"),
+            persist=_cid("demo.persist.publish", delivery="exactly-once"),
+            receipt=_cid("demo.receipt.notify")),
+        metrics={"quality": 0.985, "latency_ms": 2_150_000, "cost_usd": 5.6},
         tags=("authority", "irreversible"))
 
     return WorkbenchDefinition(

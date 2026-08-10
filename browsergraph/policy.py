@@ -146,6 +146,17 @@ class Gate:
 
 def gate_stage(workbench: WorkbenchDefinition, stage: StageDefinition,
                policy: Policy) -> Gate:
+    """Judge every candidate on one **leaf** sub-step.
+
+    A composite holds sub-steps rather than candidates, so gating one is a
+    category error. It used to return an empty verdict list, which looked
+    exactly like a policy that blocked everything.
+    """
+    if stage.is_composite:
+        raise ValueError(
+            f"stage {stage.id!r} is a composite of "
+            f"{', '.join(s.id for s in stage.substages)} — gate its sub-steps, "
+            f"or use gate_all() which walks the leaves for you")
     nodes = workbench.nodes_by_id
     candidates = workbench.candidates_by_id
     verdicts = []
@@ -161,8 +172,14 @@ def gate_stage(workbench: WorkbenchDefinition, stage: StageDefinition,
 
 
 def gate_all(workbench: WorkbenchDefinition, policy: Policy) -> dict[str, Gate]:
+    """Gate the **leaves**, because that is where candidates live.
+
+    Walking the top-level stages returned nothing eligible the moment stages
+    grew sub-steps — every stage reported "0 of 0 candidates", which reads like
+    a brutally strict policy rather than a traversal bug.
+    """
     return {stage.id: gate_stage(workbench, stage, policy)
-            for stage in workbench.stages}
+            for stage in workbench.leaf_stages}
 
 
 @dataclass
@@ -213,7 +230,7 @@ def check_route(workbench: WorkbenchDefinition, route: Mapping[str, str],
     """
     problems = []
     gates = gate_all(workbench, policy)
-    for stage in workbench.stages:
+    for stage in workbench.leaf_stages:
         cid = route.get(stage.id)
         if not cid:
             problems.append(f"{stage.id}: no candidate chosen")
@@ -240,7 +257,7 @@ def aggregate(workbench: WorkbenchDefinition, route: Mapping[str, str]
     candidates = workbench.candidates_by_id
     quality, latency, cost = 1.0, 0.0, 0.0
     seen = False
-    for stage in workbench.stages:
+    for stage in workbench.leaf_stages:
         candidate = candidates.get(route.get(stage.id, ""))
         manifest = nodes.get(candidate.node_id) if candidate else None
         if manifest is None:

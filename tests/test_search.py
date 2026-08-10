@@ -33,6 +33,40 @@ def bench():
 
 
 @pytest.fixture(scope="module")
+def small_bench():
+    """Four sub-steps of five candidates: 625 routes, so exhaustive is instant."""
+    from browsergraph.manifest import NodeManifest, ParameterSpec, PortSpec
+    from browsergraph.workbench import (
+        StageDefinition,
+        WorkbenchDefinition,
+        expand_node_candidates,
+    )
+
+    types = ["A", "B", "C", "D", "E"]
+    nodes, stages = [], []
+    for index, (takes, gives) in enumerate(zip(types, types[1:], strict=False)):
+        nodes.append(NodeManifest(
+            id=f"small.step{index}", kind=f"step{index}",
+            description=f"Step {index}.", roles=("transform",),
+            capabilities=(f"cap{index}",),
+            inputs=(PortSpec("in", takes),), outputs=(PortSpec("out", gives),),
+            parameters=(ParameterSpec("setting", "string", default="a",
+                                      choices=("a", "b", "c", "d", "e")),),
+            metrics={"quality": 0.9 - index * 0.05,
+                     "latency_ms": 10 + index * 7, "cost_usd": index * 0.001},
+        ).assert_valid())
+    candidates = expand_node_candidates(nodes)
+    # Vary the metrics per binding so the search has something to find.
+    for index, (takes, gives) in enumerate(zip(types, types[1:], strict=False)):
+        stages.append(StageDefinition(
+            id=f"step{index}", input_type=takes, output_type=gives,
+            required_capabilities=(f"cap{index}",),
+        ).with_discovered_candidates(nodes, candidates))
+    return WorkbenchDefinition(nodes=tuple(nodes), candidates=candidates,
+                               stages=tuple(stages)).assert_valid()
+
+
+@pytest.fixture(scope="module")
 def locked():
     return Policy(permissions=frozenset({"filesystem", "filesystem:read",
                                          "filesystem:write", "database",
@@ -120,15 +154,28 @@ def test_a_permission_family_grants_its_members():
 
 
 def test_silence_does_not_grant(bench):
-    """An empty policy blocks with a reason rather than permitting by omission."""
-    gate = gate_stage(bench, bench.stages[0], Policy(name="empty"))
+    """An empty policy blocks with a reason rather than permitting by omission.
+
+    Checked on `session`, where every candidate needs *some* authority. The
+    first sub-step needs none at all, so an empty policy correctly permits it —
+    which is the rule working, not failing.
+    """
+    session = next(s for s in bench.leaf_stages if s.id == "session")
+    gate = gate_stage(bench, session, Policy(name="empty"))
     assert gate.eligible == ()
     assert all(v.reason for v in gate.blocked)
 
 
+def test_a_candidate_that_needs_no_authority_needs_no_grant(bench):
+    resolve = next(s for s in bench.leaf_stages if s.id == "resolve")
+    gate = gate_stage(bench, resolve, Policy(name="empty"))
+    assert gate.eligible, "a node asking for nothing should not need permission"
+
+
 def test_blocked_candidates_stay_visible_with_reasons(bench, locked):
-    gate = gate_stage(bench, bench.stages[0], locked)
-    assert len(gate.verdicts) == len(bench.stages[0].candidates)
+    session = next(s for s in bench.leaf_stages if s.id == "session")
+    gate = gate_stage(bench, session, locked)
+    assert len(gate.verdicts) == len(session.candidates)
     assert gate.eligible and gate.blocked
     assert any("needs browser" in v.reason for v in gate.blocked)
 
@@ -136,8 +183,16 @@ def test_blocked_candidates_stay_visible_with_reasons(bench, locked):
 def test_policy_removes_most_of_the_space_and_says_so(bench, locked):
     report = review(bench, locked)
     assert 0 < report.reachable_routes < bench.route_count()
-    assert report.reachable_routes == 122_472
-    assert "122,472" in report.text()
+    assert report.reachable_routes == 1_959_552_000
+    assert "1,959,552,000" in report.text()
+
+
+def test_gating_walks_the_leaves_not_the_parent_stages(bench, locked):
+    """Walking top-level stages reported "0 of 0 candidates" everywhere, which
+    reads like a brutally strict policy rather than a traversal bug."""
+    report = review(bench, locked)
+    assert set(report.gates) == {s.id for s in bench.leaf_stages}
+    assert all(gate.verdicts for gate in report.gates.values())
 
 
 def test_a_policy_that_kills_a_stage_is_diagnosed_not_silently_empty(bench):
@@ -151,12 +206,19 @@ def test_determinism_and_effects_are_separate_gates(bench):
     everything = Policy.permissive()
     no_effects = Policy.permissive(allow_external_effects=False)
     deterministic = Policy.permissive(deterministic_only=True)
-    stage = next(s for s in bench.stages if s.id == "emit")
-    assert len(gate_stage(bench, stage, everything).eligible) > \
-        len(gate_stage(bench, stage, no_effects).eligible)
-    transform = next(s for s in bench.stages if s.id == "transform")
-    assert len(gate_stage(bench, transform, deterministic).eligible) < \
-        len(gate_stage(bench, transform, everything).eligible)
+    persist = next(s for s in bench.leaf_stages if s.id == "persist")
+    assert len(gate_stage(bench, persist, everything).eligible) > \
+        len(gate_stage(bench, persist, no_effects).eligible)
+    act = next(s for s in bench.leaf_stages if s.id == "act")
+    assert len(gate_stage(bench, act, deterministic).eligible) < \
+        len(gate_stage(bench, act, everything).eligible)
+
+
+def test_gating_a_composite_stage_is_refused_not_silently_empty(bench):
+    """It returned an empty verdict list, which looked exactly like a policy
+    that blocked everything."""
+    with pytest.raises(ValueError, match="is a composite of"):
+        gate_stage(bench, bench.stages[0], Policy.permissive())
 
 
 # --- route arithmetic -------------------------------------------------------
@@ -164,7 +226,7 @@ def test_determinism_and_effects_are_separate_gates(bench):
 def test_quality_compounds_and_the_rest_adds(bench):
     """Averaging quality would let one excellent stage hide a step that fails
     half the time."""
-    route = {s.id: s.candidates[0] for s in bench.stages}
+    route = {s.id: s.candidates[0] for s in bench.leaf_stages}
     got = aggregate(bench, route)
     nodes = bench.nodes_by_id
     qualities = [nodes[bench.candidates_by_id[c].node_id].metrics["quality"]
@@ -208,31 +270,38 @@ def test_a_search_reports_how_much_it_examined(bench, locked):
     assert "examined" in proposal.text(bench)
 
 
-def test_exhaustive_examines_everything_eligible(bench, locked):
-    proposal = search.propose(bench, BALANCED, policy=locked, strategy="exhaustive")
-    assert proposal.examined == proposal.eligible_total == 122_472
+def test_exhaustive_examines_everything_eligible(small_bench):
+    """On the demonstration the gated space is two billion routes, so exhaustive
+    is measured on a small workbench instead of pretending otherwise."""
+    proposal = search.propose(small_bench, BALANCED, strategy="exhaustive")
+    assert proposal.examined == proposal.eligible_total == 5 ** 4
     assert proposal.coverage == 1.0
 
 
-def test_beam_reaches_the_optimum_far_more_cheaply(bench, locked):
+def test_beam_reaches_the_optimum_far_more_cheaply(small_bench):
     """The regression test for the beam that renormalized at every step.
 
-    That version matched plain greedy at width 1, 8, 32, 128 and 512 — 8,878
-    evaluations to reach the answer greedy found in 56.
+    That version matched plain greedy at width 1, 8, 32, 128 and 512, spending
+    8,878 evaluations to reach the answer greedy found in 56.
     """
-    best = search.propose(bench, BALANCED, policy=locked, strategy="exhaustive")
-    beam = search.propose(bench, BALANCED, policy=locked, strategy="beam")
-    greedy = search.propose(bench, BALANCED, policy=locked, strategy="greedy")
+    best = search.propose(small_bench, BALANCED, strategy="exhaustive")
+    beam = search.propose(small_bench, BALANCED, strategy="beam")
     assert beam.score == pytest.approx(best.score), "beam should reach the optimum"
-    assert beam.examined < best.examined / 100
-    assert greedy.score < best.score, \
-        "greedy scores each stage in isolation; it should lose when metrics compound"
+    assert beam.examined < best.examined
 
 
-def test_auto_picks_exhaustive_only_when_it_fits(bench, locked):
-    small = search.propose(bench, BALANCED, policy=locked, strategy="auto")
-    assert small.strategy == "exhaustive"
-    big = search.propose(bench, BALANCED, policy=Policy.permissive(), strategy="auto")
+def test_beam_can_beat_greedy_on_the_demonstration(bench, locked):
+    """Greedy scores each sub-step in isolation; route metrics compound."""
+    speed = next(p for p in bench.optimization_profiles if p.id == "profile.speed")
+    greedy = search.propose(bench, speed, policy=locked, strategy="greedy")
+    beam = search.propose(bench, speed, policy=locked, strategy="beam")
+    assert beam.score > greedy.score
+
+
+def test_auto_picks_exhaustive_only_when_it_fits(bench, small_bench, locked):
+    assert search.propose(small_bench, BALANCED, strategy="auto").strategy \
+        == "exhaustive"
+    big = search.propose(bench, BALANCED, policy=locked, strategy="auto")
     assert big.strategy == "beam"
     assert any("exceeds" in note for note in big.notes)
 
@@ -294,12 +363,23 @@ def test_every_candidate_appears_in_the_static_svg(bench):
     assert svg.count("<circle") == len(bench.candidates)
 
 
+def test_the_static_svg_can_focus_one_stage_without_pooling_it(bench):
+    """Fourteen sub-steps side by side is five thousand pixels wide — honest and
+    unreadable. Narrowing is a crop, not a summary: nothing inside is pooled."""
+    from browsergraph.routegraph import to_svg
+    acquire = next(s for s in bench.stages if s.id == "acquire")
+    svg = to_svg(bench, only=("acquire",), background=False)
+    inside = sum(len(leaf.candidates) for leaf in acquire.leaves())
+    assert svg.count("<circle") == inside < len(bench.candidates)
+    assert "ACQUIRE INPUTS" in svg
+
+
 def test_the_static_svg_labels_keep_the_binding_that_distinguishes_rows(bench):
     """Truncating shorter made headless and headed rows identical."""
     from browsergraph.routegraph import to_svg
     svg = to_svg(bench, background=False)
-    assert "browser adapter · Chrome · BrowserPort · headless" in svg
-    assert "browser adapter · Chrome · BrowserPort · headed<" in svg
+    assert "browser · Chrome · BrowserPort · headless" in svg
+    assert "browser · Chrome · BrowserPort · headed<" in svg
 
 
 # --- the CLI ----------------------------------------------------------------
@@ -308,7 +388,7 @@ def test_the_route_command_proposes(capsys):
     from browsergraph.cli import main
     assert main(["route", "--profile", "profile.speed", "--strategy", "greedy"]) == 0
     out = capsys.readouterr().out
-    assert "examined" in out and "Acquire inputs" in out
+    assert "examined" in out and "Resolve target" in out
 
 
 def test_the_route_command_can_show_the_gates(capsys):

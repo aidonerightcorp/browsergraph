@@ -5,22 +5,17 @@
   "success": "an independent verifier accepted the outcome and a replayable receipt exists",
   "nodes": [
     {
-      "id": "demo.acquire.browser_adapter",
-      "kind": "browser_adapter",
-      "name": "browser adapter",
+      "id": "demo.resolve.literal",
+      "kind": "resolve_literal",
+      "name": "literal",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Drives a real browser to reach an authorized target.",
+      "description": "Treats the reference as an already-authorized literal locator.",
       "roles": [
-        "source",
-        "adapter"
+        "control"
       ],
       "capabilities": [
-        "acquire"
-      ],
-      "permissions": [
-        "browser",
-        "network"
+        "resolve"
       ],
       "inputs": [
         {
@@ -31,7 +26,136 @@
       "outputs": [
         {
           "name": "output",
-          "type": "InputHandle"
+          "type": "ResolvedTarget"
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.99,
+        "latency_ms": 1,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.resolve.template",
+      "kind": "resolve_template",
+      "name": "template",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Fills a declared template from task parameters.",
+      "roles": [
+        "transform"
+      ],
+      "capabilities": [
+        "resolve"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "TaskReference"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "ResolvedTarget"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "strictness",
+          "type": "string",
+          "default": "strict",
+          "choices": [
+            "strict",
+            "lenient"
+          ]
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.95,
+        "latency_ms": 3,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.resolve.directory",
+      "kind": "resolve_directory",
+      "name": "directory",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Resolves an identifier through an authorized directory.",
+      "roles": [
+        "source"
+      ],
+      "capabilities": [
+        "resolve"
+      ],
+      "permissions": [
+        "database:read"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "TaskReference"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "ResolvedTarget"
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.93,
+        "latency_ms": 40,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.session.browser",
+      "kind": "browser_session",
+      "name": "browser",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Opens a real browser session with a chosen controller and binary.",
+      "roles": [
+        "adapter"
+      ],
+      "capabilities": [
+        "session"
+      ],
+      "permissions": [
+        "browser",
+        "network"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "ResolvedTarget"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "OpenSession"
         }
       ],
       "parameters": [
@@ -78,22 +202,22 @@
         "source": "illustrative-prior",
         "evidence": 0,
         "quality": 0.88,
-        "latency_ms": 2400,
+        "latency_ms": 2200,
         "cost_usd": 0.0
       }
     },
     {
-      "id": "demo.acquire.file_loader",
-      "kind": "file_loader",
-      "name": "file loader",
+      "id": "demo.session.filesystem",
+      "kind": "file_session",
+      "name": "filesystem",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Loads and hashes an authorized local file.",
+      "description": "Opens an authorized filesystem handle.",
       "roles": [
-        "source"
+        "adapter"
       ],
       "capabilities": [
-        "acquire"
+        "session"
       ],
       "permissions": [
         "filesystem:read"
@@ -101,13 +225,13 @@
       "inputs": [
         {
           "name": "input",
-          "type": "TaskReference"
+          "type": "ResolvedTarget"
         }
       ],
       "outputs": [
         {
           "name": "output",
-          "type": "InputHandle"
+          "type": "OpenSession"
         }
       ],
       "parameters": [
@@ -129,24 +253,23 @@
       "metrics": {
         "source": "illustrative-prior",
         "evidence": 0,
-        "quality": 0.97,
-        "latency_ms": 8,
+        "quality": 0.98,
+        "latency_ms": 4,
         "cost_usd": 0.0
       }
     },
     {
-      "id": "demo.acquire.api_loader",
-      "kind": "api_loader",
-      "name": "api loader",
+      "id": "demo.session.http",
+      "kind": "http_session",
+      "name": "http",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Loads a typed API response, with provenance.",
+      "description": "Opens an HTTP session with a declared retry policy.",
       "roles": [
-        "source",
         "adapter"
       ],
       "capabilities": [
-        "acquire"
+        "session"
       ],
       "permissions": [
         "network"
@@ -154,24 +277,23 @@
       "inputs": [
         {
           "name": "input",
-          "type": "TaskReference"
+          "type": "ResolvedTarget"
         }
       ],
       "outputs": [
         {
           "name": "output",
-          "type": "InputHandle"
+          "type": "OpenSession"
         }
       ],
       "parameters": [
         {
-          "name": "method",
+          "name": "retries",
           "type": "string",
-          "default": "GET",
+          "default": "none",
           "choices": [
-            "GET",
-            "POST",
-            "PUT"
+            "none",
+            "bounded"
           ]
         }
       ],
@@ -183,22 +305,22 @@
         "source": "illustrative-prior",
         "evidence": 0,
         "quality": 0.9,
-        "latency_ms": 320,
+        "latency_ms": 120,
         "cost_usd": 0.0
       }
     },
     {
-      "id": "demo.acquire.database_loader",
-      "kind": "database_loader",
-      "name": "database loader",
+      "id": "demo.session.database",
+      "kind": "database_session",
+      "name": "database",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Reads rows from an authorized database.",
+      "description": "Opens an authorized database connection.",
       "roles": [
-        "source"
+        "adapter"
       ],
       "capabilities": [
-        "acquire"
+        "session"
       ],
       "permissions": [
         "database:read"
@@ -206,13 +328,13 @@
       "inputs": [
         {
           "name": "input",
-          "type": "TaskReference"
+          "type": "ResolvedTarget"
         }
       ],
       "outputs": [
         {
           "name": "output",
-          "type": "InputHandle"
+          "type": "OpenSession"
         }
       ],
       "parameters": [
@@ -235,23 +357,23 @@
       "metrics": {
         "source": "illustrative-prior",
         "evidence": 0,
-        "quality": 0.95,
-        "latency_ms": 140,
+        "quality": 0.96,
+        "latency_ms": 90,
         "cost_usd": 0.0
       }
     },
     {
-      "id": "demo.acquire.queue_kafka",
-      "kind": "queue_consumer",
-      "name": "queue kafka",
+      "id": "demo.session.queue",
+      "kind": "queue_session",
+      "name": "queue",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Consumes an authorized Kafka topic.",
+      "description": "Subscribes to an authorized queue or topic.",
       "roles": [
-        "source"
+        "adapter"
       ],
       "capabilities": [
-        "acquire"
+        "session"
       ],
       "permissions": [
         "network"
@@ -259,13 +381,13 @@
       "inputs": [
         {
           "name": "input",
-          "type": "TaskReference"
+          "type": "ResolvedTarget"
         }
       ],
       "outputs": [
         {
           "name": "output",
-          "type": "InputHandle"
+          "type": "OpenSession"
         }
       ],
       "runtime": {
@@ -281,25 +403,22 @@
       }
     },
     {
-      "id": "demo.acquire.queue_sqs",
-      "kind": "queue_consumer",
-      "name": "queue sqs",
+      "id": "demo.read.whole",
+      "kind": "read_whole",
+      "name": "whole",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Consumes an authorized SQS queue.",
+      "description": "Reads the entire payload and hashes it.",
       "roles": [
         "source"
       ],
       "capabilities": [
-        "acquire"
-      ],
-      "permissions": [
-        "network"
+        "read"
       ],
       "inputs": [
         {
           "name": "input",
-          "type": "TaskReference"
+          "type": "OpenSession"
         }
       ],
       "outputs": [
@@ -315,241 +434,123 @@
       "metrics": {
         "source": "illustrative-prior",
         "evidence": 0,
-        "quality": 0.85,
-        "latency_ms": 90,
+        "quality": 0.97,
+        "latency_ms": 20,
         "cost_usd": 0.0
       }
     },
     {
-      "id": "demo.acquire.stream_http",
-      "kind": "stream_reader",
-      "name": "stream http",
+      "id": "demo.read.streamed",
+      "kind": "read_streamed",
+      "name": "streamed",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Reads a chunked HTTP stream.",
+      "description": "Reads incrementally, bounding peak memory.",
       "roles": [
         "source"
       ],
       "capabilities": [
-        "acquire"
-      ],
-      "permissions": [
-        "network"
+        "read"
       ],
       "inputs": [
         {
           "name": "input",
-          "type": "TaskReference"
+          "type": "OpenSession"
         }
       ],
       "outputs": [
         {
           "name": "output",
           "type": "InputHandle"
-        }
-      ],
-      "runtime": {
-        "deterministic": true,
-        "sandbox": "process"
-      },
-      "metrics": {
-        "source": "illustrative-prior",
-        "evidence": 0,
-        "quality": 0.82,
-        "latency_ms": 180,
-        "cost_usd": 0.0
-      }
-    },
-    {
-      "id": "demo.acquire.stream_websocket",
-      "kind": "stream_reader",
-      "name": "stream websocket",
-      "version": "1.0",
-      "schema_version": "2.0",
-      "description": "Reads a websocket stream.",
-      "roles": [
-        "source"
-      ],
-      "capabilities": [
-        "acquire"
-      ],
-      "permissions": [
-        "network"
-      ],
-      "inputs": [
-        {
-          "name": "input",
-          "type": "TaskReference"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output",
-          "type": "InputHandle"
-        }
-      ],
-      "runtime": {
-        "deterministic": true,
-        "sandbox": "process"
-      },
-      "metrics": {
-        "source": "illustrative-prior",
-        "evidence": 0,
-        "quality": 0.8,
-        "latency_ms": 200,
-        "cost_usd": 0.0
-      }
-    },
-    {
-      "id": "demo.acquire.archive_zip",
-      "kind": "archive_loader",
-      "name": "archive zip",
-      "version": "1.0",
-      "schema_version": "2.0",
-      "description": "Expands an authorized zip archive.",
-      "roles": [
-        "source"
-      ],
-      "capabilities": [
-        "acquire"
-      ],
-      "permissions": [
-        "filesystem:read"
-      ],
-      "inputs": [
-        {
-          "name": "input",
-          "type": "TaskReference"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output",
-          "type": "InputHandle"
-        }
-      ],
-      "runtime": {
-        "deterministic": true,
-        "sandbox": "process"
-      },
-      "metrics": {
-        "source": "illustrative-prior",
-        "evidence": 0,
-        "quality": 0.93,
-        "latency_ms": 45,
-        "cost_usd": 0.0
-      }
-    },
-    {
-      "id": "demo.acquire.archive_tar",
-      "kind": "archive_loader",
-      "name": "archive tar",
-      "version": "1.0",
-      "schema_version": "2.0",
-      "description": "Expands an authorized tar archive.",
-      "roles": [
-        "source"
-      ],
-      "capabilities": [
-        "acquire"
-      ],
-      "permissions": [
-        "filesystem:read"
-      ],
-      "inputs": [
-        {
-          "name": "input",
-          "type": "TaskReference"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output",
-          "type": "InputHandle"
-        }
-      ],
-      "runtime": {
-        "deterministic": true,
-        "sandbox": "process"
-      },
-      "metrics": {
-        "source": "illustrative-prior",
-        "evidence": 0,
-        "quality": 0.93,
-        "latency_ms": 40,
-        "cost_usd": 0.0
-      }
-    },
-    {
-      "id": "demo.canonicalize.text_normalizer",
-      "kind": "text_normalizer",
-      "name": "text normalizer",
-      "version": "1.0",
-      "schema_version": "2.0",
-      "description": "Normalises unicode form and case.",
-      "roles": [
-        "transform"
-      ],
-      "capabilities": [
-        "canonicalize"
-      ],
-      "inputs": [
-        {
-          "name": "input",
-          "type": "InputHandle"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output",
-          "type": "CanonicalState"
         }
       ],
       "parameters": [
         {
-          "name": "form",
+          "name": "chunking",
           "type": "string",
-          "default": "NFC",
+          "default": "fixed",
           "choices": [
-            "NFC",
-            "NFKC",
-            "NFD"
-          ]
-        },
-        {
-          "name": "case",
-          "type": "string",
-          "default": "preserve",
-          "choices": [
-            "preserve",
-            "fold"
+            "fixed",
+            "adaptive"
           ]
         }
       ],
       "runtime": {
         "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.94,
+        "latency_ms": 35,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.read.rendered",
+      "kind": "read_rendered",
+      "name": "rendered",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Reads what the page rendered, after scripts have run.",
+      "roles": [
+        "source"
+      ],
+      "capabilities": [
+        "read"
+      ],
+      "permissions": [
+        "browser"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "OpenSession"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "InputHandle"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "settle",
+          "type": "string",
+          "default": "load",
+          "choices": [
+            "load",
+            "network-idle",
+            "mutation-quiet"
+          ]
+        }
+      ],
+      "runtime": {
+        "deterministic": false,
         "sandbox": "process"
       },
       "metrics": {
         "source": "illustrative-prior",
         "evidence": 0,
         "quality": 0.9,
-        "latency_ms": 6,
+        "latency_ms": 900,
         "cost_usd": 0.0
       }
     },
     {
-      "id": "demo.canonicalize.schema_mapper",
-      "kind": "schema_mapper",
-      "name": "schema mapper",
+      "id": "demo.decode.bom",
+      "kind": "decode_bom",
+      "name": "bom",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Maps incoming fields onto a declared schema.",
+      "description": "Takes the encoding from a byte-order mark.",
       "roles": [
         "transform"
       ],
       "capabilities": [
-        "canonicalize"
+        "decode"
       ],
       "inputs": [
         {
@@ -560,167 +561,7 @@
       "outputs": [
         {
           "name": "output",
-          "type": "CanonicalState"
-        }
-      ],
-      "parameters": [
-        {
-          "name": "strategy",
-          "type": "string",
-          "default": "strict",
-          "choices": [
-            "strict",
-            "lenient",
-            "inferred"
-          ]
-        }
-      ],
-      "runtime": {
-        "deterministic": true,
-        "sandbox": "process"
-      },
-      "metrics": {
-        "source": "illustrative-prior",
-        "evidence": 0,
-        "quality": 0.92,
-        "latency_ms": 25,
-        "cost_usd": 0.0
-      }
-    },
-    {
-      "id": "demo.canonicalize.unit_metric",
-      "kind": "unit_converter",
-      "name": "unit metric",
-      "version": "1.0",
-      "schema_version": "2.0",
-      "description": "Converts measurements to metric units.",
-      "roles": [
-        "transform"
-      ],
-      "capabilities": [
-        "canonicalize"
-      ],
-      "inputs": [
-        {
-          "name": "input",
-          "type": "InputHandle"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output",
-          "type": "CanonicalState"
-        }
-      ],
-      "runtime": {
-        "deterministic": true,
-        "sandbox": "process"
-      },
-      "metrics": {
-        "source": "illustrative-prior",
-        "evidence": 0,
-        "quality": 0.96,
-        "latency_ms": 4,
-        "cost_usd": 0.0
-      }
-    },
-    {
-      "id": "demo.canonicalize.unit_imperial",
-      "kind": "unit_converter",
-      "name": "unit imperial",
-      "version": "1.0",
-      "schema_version": "2.0",
-      "description": "Converts measurements to imperial units.",
-      "roles": [
-        "transform"
-      ],
-      "capabilities": [
-        "canonicalize"
-      ],
-      "inputs": [
-        {
-          "name": "input",
-          "type": "InputHandle"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output",
-          "type": "CanonicalState"
-        }
-      ],
-      "runtime": {
-        "deterministic": true,
-        "sandbox": "process"
-      },
-      "metrics": {
-        "source": "illustrative-prior",
-        "evidence": 0,
-        "quality": 0.96,
-        "latency_ms": 4,
-        "cost_usd": 0.0
-      }
-    },
-    {
-      "id": "demo.canonicalize.encoding_chardet",
-      "kind": "encoding_detector",
-      "name": "encoding chardet",
-      "version": "1.0",
-      "schema_version": "2.0",
-      "description": "Detects encoding statistically.",
-      "roles": [
-        "transform"
-      ],
-      "capabilities": [
-        "canonicalize"
-      ],
-      "inputs": [
-        {
-          "name": "input",
-          "type": "InputHandle"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output",
-          "type": "CanonicalState"
-        }
-      ],
-      "runtime": {
-        "deterministic": true,
-        "sandbox": "process"
-      },
-      "metrics": {
-        "source": "illustrative-prior",
-        "evidence": 0,
-        "quality": 0.88,
-        "latency_ms": 12,
-        "cost_usd": 0.0
-      }
-    },
-    {
-      "id": "demo.canonicalize.encoding_bom",
-      "kind": "encoding_detector",
-      "name": "encoding bom",
-      "version": "1.0",
-      "schema_version": "2.0",
-      "description": "Detects encoding from a byte-order mark.",
-      "roles": [
-        "transform"
-      ],
-      "capabilities": [
-        "canonicalize"
-      ],
-      "inputs": [
-        {
-          "name": "input",
-          "type": "InputHandle"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output",
-          "type": "CanonicalState"
+          "type": "DecodedText"
         }
       ],
       "runtime": {
@@ -736,17 +577,17 @@
       }
     },
     {
-      "id": "demo.canonicalize.format_parser",
-      "kind": "format_parser",
-      "name": "format parser",
+      "id": "demo.decode.statistical",
+      "kind": "decode_statistical",
+      "name": "statistical",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Parses a known container format.",
+      "description": "Detects the encoding statistically.",
       "roles": [
         "transform"
       ],
       "capabilities": [
-        "canonicalize"
+        "decode"
       ],
       "inputs": [
         {
@@ -757,7 +598,133 @@
       "outputs": [
         {
           "name": "output",
-          "type": "CanonicalState"
+          "type": "DecodedText"
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.88,
+        "latency_ms": 12,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.decode.unicode",
+      "kind": "decode_unicode",
+      "name": "unicode",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Applies a declared unicode normal form.",
+      "roles": [
+        "transform"
+      ],
+      "capabilities": [
+        "decode"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "InputHandle"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "DecodedText"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "form",
+          "type": "string",
+          "default": "NFC",
+          "choices": [
+            "NFC",
+            "NFKC",
+            "NFD"
+          ]
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.95,
+        "latency_ms": 6,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.decode.passthrough",
+      "kind": "decode_passthrough",
+      "name": "passthrough",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Certifies the payload is already decoded text.",
+      "roles": [
+        "control"
+      ],
+      "capabilities": [
+        "decode"
+      ],
+      "tags": [
+        "pass-through"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "InputHandle"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "DecodedText"
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.75,
+        "latency_ms": 1,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.parse.format",
+      "kind": "parse_format",
+      "name": "format",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Parses a known container format.",
+      "roles": [
+        "transform"
+      ],
+      "capabilities": [
+        "parse"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "DecodedText"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "ParsedRecords"
         }
       ],
       "parameters": [
@@ -786,77 +753,28 @@
       }
     },
     {
-      "id": "demo.canonicalize.identity_resolver",
-      "kind": "identity_resolver",
-      "name": "identity resolver",
+      "id": "demo.parse.table",
+      "kind": "parse_table",
+      "name": "table",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Makes record identity explicit and stable.",
+      "description": "Reads tabular shape and headers.",
       "roles": [
         "transform"
       ],
       "capabilities": [
-        "canonicalize"
+        "parse"
       ],
       "inputs": [
         {
           "name": "input",
-          "type": "InputHandle"
+          "type": "DecodedText"
         }
       ],
       "outputs": [
         {
           "name": "output",
-          "type": "CanonicalState"
-        }
-      ],
-      "parameters": [
-        {
-          "name": "key",
-          "type": "string",
-          "default": "natural",
-          "choices": [
-            "natural",
-            "surrogate",
-            "composite"
-          ]
-        }
-      ],
-      "runtime": {
-        "deterministic": true,
-        "sandbox": "process"
-      },
-      "metrics": {
-        "source": "illustrative-prior",
-        "evidence": 0,
-        "quality": 0.87,
-        "latency_ms": 30,
-        "cost_usd": 0.0
-      }
-    },
-    {
-      "id": "demo.canonicalize.table_canonicalizer",
-      "kind": "table_canonicalizer",
-      "name": "table canonicalizer",
-      "version": "1.0",
-      "schema_version": "2.0",
-      "description": "Normalises tabular shape, headers and types.",
-      "roles": [
-        "transform"
-      ],
-      "capabilities": [
-        "canonicalize"
-      ],
-      "inputs": [
-        {
-          "name": "input",
-          "type": "InputHandle"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output",
-          "type": "CanonicalState"
+          "type": "ParsedRecords"
         }
       ],
       "parameters": [
@@ -884,22 +802,159 @@
       }
     },
     {
-      "id": "demo.canonicalize.locale_normalizer",
-      "kind": "locale_normalizer",
-      "name": "locale normalizer",
+      "id": "demo.parse.tolerant",
+      "kind": "parse_tolerant",
+      "name": "tolerant",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Normalises dates, numbers and separators for a locale.",
+      "description": "Recovers records from malformed input, recording every repair.",
       "roles": [
         "transform"
       ],
       "capabilities": [
-        "canonicalize"
+        "parse"
       ],
       "inputs": [
         {
           "name": "input",
-          "type": "InputHandle"
+          "type": "DecodedText"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "ParsedRecords"
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.82,
+        "latency_ms": 30,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.parse.model",
+      "kind": "parse_model",
+      "name": "model",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Asks a language model for structure when no grammar fits.",
+      "roles": [
+        "model"
+      ],
+      "capabilities": [
+        "parse"
+      ],
+      "permissions": [
+        "llm"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "DecodedText"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "ParsedRecords"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "model",
+          "type": "string",
+          "default": "Gemini",
+          "choices": [
+            "Gemini",
+            "DeepSeek",
+            "GLM"
+          ]
+        }
+      ],
+      "runtime": {
+        "deterministic": false,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.89,
+        "latency_ms": 1500,
+        "cost_usd": 0.008
+      }
+    },
+    {
+      "id": "demo.normalize.units",
+      "kind": "normalize_units",
+      "name": "units",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Converts measurements to a declared unit system.",
+      "roles": [
+        "transform"
+      ],
+      "capabilities": [
+        "normalize"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "ParsedRecords"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "CanonicalState"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "system",
+          "type": "string",
+          "default": "metric",
+          "choices": [
+            "metric",
+            "imperial"
+          ]
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.96,
+        "latency_ms": 4,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.normalize.locale",
+      "kind": "normalize_locale",
+      "name": "locale",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Normalizes dates, numbers and separators for a locale.",
+      "roles": [
+        "transform"
+      ],
+      "capabilities": [
+        "normalize"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "ParsedRecords"
         }
       ],
       "outputs": [
@@ -933,17 +988,115 @@
       }
     },
     {
-      "id": "demo.canonicalize.passthrough",
-      "kind": "passthrough",
+      "id": "demo.normalize.identity",
+      "kind": "normalize_identity",
+      "name": "identity",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Makes record identity explicit and stable.",
+      "roles": [
+        "transform"
+      ],
+      "capabilities": [
+        "normalize"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "ParsedRecords"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "CanonicalState"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "key",
+          "type": "string",
+          "default": "natural",
+          "choices": [
+            "natural",
+            "surrogate",
+            "composite"
+          ]
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.87,
+        "latency_ms": 30,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.normalize.schema",
+      "kind": "normalize_schema",
+      "name": "schema",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Maps incoming fields onto a declared schema.",
+      "roles": [
+        "transform"
+      ],
+      "capabilities": [
+        "normalize"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "ParsedRecords"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "CanonicalState"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "strategy",
+          "type": "string",
+          "default": "strict",
+          "choices": [
+            "strict",
+            "lenient",
+            "inferred"
+          ]
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.92,
+        "latency_ms": 25,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.normalize.passthrough",
+      "kind": "normalize_passthrough",
       "name": "passthrough",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Certifies the input already satisfies the canonical contract.",
+      "description": "Certifies the records already satisfy the canonical contract.",
       "roles": [
         "control"
       ],
       "capabilities": [
-        "canonicalize"
+        "normalize"
       ],
       "tags": [
         "pass-through"
@@ -951,7 +1104,7 @@
       "inputs": [
         {
           "name": "input",
-          "type": "InputHandle"
+          "type": "ParsedRecords"
         }
       ],
       "outputs": [
@@ -967,26 +1120,26 @@
       "metrics": {
         "source": "illustrative-prior",
         "evidence": 0,
-        "quality": 0.75,
+        "quality": 0.74,
         "latency_ms": 1,
         "cost_usd": 0.0
       }
     },
     {
-      "id": "demo.enrich.context_joiner",
-      "kind": "context_joiner",
-      "name": "context joiner",
+      "id": "demo.plan.none",
+      "kind": "plan_none",
+      "name": "none",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Joins authorized context onto the canonical state.",
+      "description": "Declares that no additional context is required.",
       "roles": [
-        "transform"
+        "control"
       ],
       "capabilities": [
-        "enrich"
+        "plan"
       ],
-      "permissions": [
-        "database:read"
+      "tags": [
+        "pass-through"
       ],
       "inputs": [
         {
@@ -997,18 +1150,92 @@
       "outputs": [
         {
           "name": "output",
-          "type": "EnrichedState"
+          "type": "ContextPlan"
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.72,
+        "latency_ms": 1,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.plan.rules",
+      "kind": "plan_rules",
+      "name": "rules",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Decides what to fetch from reviewed rules.",
+      "roles": [
+        "control"
+      ],
+      "capabilities": [
+        "plan"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "CanonicalState"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "ContextPlan"
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.93,
+        "latency_ms": 6,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.plan.retrieval",
+      "kind": "plan_retrieval",
+      "name": "retrieval",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Ranks what context would help, by retrieval score.",
+      "roles": [
+        "transform"
+      ],
+      "capabilities": [
+        "plan"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "CanonicalState"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "ContextPlan"
         }
       ],
       "parameters": [
         {
-          "name": "join",
+          "name": "ranking",
           "type": "string",
-          "default": "inner",
+          "default": "bm25",
           "choices": [
-            "inner",
-            "left",
-            "fuzzy"
+            "bm25",
+            "embedding",
+            "hybrid"
           ]
         }
       ],
@@ -1020,22 +1247,22 @@
         "source": "illustrative-prior",
         "evidence": 0,
         "quality": 0.89,
-        "latency_ms": 70,
+        "latency_ms": 120,
         "cost_usd": 0.0
       }
     },
     {
-      "id": "demo.enrich.reference_lookup",
-      "kind": "reference_lookup",
-      "name": "reference lookup",
+      "id": "demo.attach.reference",
+      "kind": "attach_reference",
+      "name": "reference",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Looks values up in an authoritative reference set.",
+      "description": "Joins an authoritative reference set.",
       "roles": [
         "transform"
       ],
       "capabilities": [
-        "enrich"
+        "attach"
       ],
       "permissions": [
         "network"
@@ -1043,7 +1270,7 @@
       "inputs": [
         {
           "name": "input",
-          "type": "CanonicalState"
+          "type": "ContextPlan"
         }
       ],
       "outputs": [
@@ -1076,23 +1303,22 @@
       }
     },
     {
-      "id": "demo.enrich.embedding_enricher",
-      "kind": "embedding_enricher",
-      "name": "embedding enricher",
+      "id": "demo.attach.embedding",
+      "kind": "attach_embedding",
+      "name": "embedding",
       "version": "1.0",
       "schema_version": "2.0",
       "description": "Attaches vector representations for retrieval.",
       "roles": [
-        "model",
-        "transform"
+        "model"
       ],
       "capabilities": [
-        "enrich"
+        "attach"
       ],
       "inputs": [
         {
           "name": "input",
-          "type": "CanonicalState"
+          "type": "ContextPlan"
         }
       ],
       "outputs": [
@@ -1126,9 +1352,9 @@
       }
     },
     {
-      "id": "demo.enrich.provenance_stamper",
-      "kind": "provenance_stamper",
-      "name": "provenance stamper",
+      "id": "demo.attach.provenance",
+      "kind": "attach_provenance",
+      "name": "provenance",
       "version": "1.0",
       "schema_version": "2.0",
       "description": "Stamps origin, version and freshness onto every field.",
@@ -1136,12 +1362,12 @@
         "transform"
       ],
       "capabilities": [
-        "enrich"
+        "attach"
       ],
       "inputs": [
         {
           "name": "input",
-          "type": "CanonicalState"
+          "type": "ContextPlan"
         }
       ],
       "outputs": [
@@ -1163,28 +1389,39 @@
       }
     },
     {
-      "id": "demo.enrich.freshness_ttl",
-      "kind": "freshness_checker",
-      "name": "freshness ttl",
+      "id": "demo.attach.freshness",
+      "kind": "attach_freshness",
+      "name": "freshness",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Rejects context older than a declared time to live.",
+      "description": "Revalidates context against an upstream entity tag or time to live.",
       "roles": [
         "control"
       ],
       "capabilities": [
-        "enrich"
+        "attach"
       ],
       "inputs": [
         {
           "name": "input",
-          "type": "CanonicalState"
+          "type": "ContextPlan"
         }
       ],
       "outputs": [
         {
           "name": "output",
           "type": "EnrichedState"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "policy",
+          "type": "string",
+          "default": "ttl",
+          "choices": [
+            "ttl",
+            "etag"
+          ]
         }
       ],
       "runtime": {
@@ -1194,55 +1431,15 @@
       "metrics": {
         "source": "illustrative-prior",
         "evidence": 0,
-        "quality": 0.95,
-        "latency_ms": 5,
+        "quality": 0.96,
+        "latency_ms": 90,
         "cost_usd": 0.0
       }
     },
     {
-      "id": "demo.enrich.freshness_etag",
-      "kind": "freshness_checker",
-      "name": "freshness etag",
-      "version": "1.0",
-      "schema_version": "2.0",
-      "description": "Revalidates context against an upstream entity tag.",
-      "roles": [
-        "control"
-      ],
-      "capabilities": [
-        "enrich"
-      ],
-      "permissions": [
-        "network"
-      ],
-      "inputs": [
-        {
-          "name": "input",
-          "type": "CanonicalState"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output",
-          "type": "EnrichedState"
-        }
-      ],
-      "runtime": {
-        "deterministic": true,
-        "sandbox": "process"
-      },
-      "metrics": {
-        "source": "illustrative-prior",
-        "evidence": 0,
-        "quality": 0.97,
-        "latency_ms": 120,
-        "cost_usd": 0.0
-      }
-    },
-    {
-      "id": "demo.enrich.geocoder",
-      "kind": "geocoder",
-      "name": "geocoder",
+      "id": "demo.attach.geocode",
+      "kind": "attach_geocode",
+      "name": "geocode",
       "version": "1.0",
       "schema_version": "2.0",
       "description": "Resolves addresses to coordinates and reference regions.",
@@ -1250,7 +1447,7 @@
         "transform"
       ],
       "capabilities": [
-        "enrich"
+        "attach"
       ],
       "permissions": [
         "network"
@@ -1258,7 +1455,7 @@
       "inputs": [
         {
           "name": "input",
-          "type": "CanonicalState"
+          "type": "ContextPlan"
         }
       ],
       "outputs": [
@@ -1280,31 +1477,28 @@
       }
     },
     {
-      "id": "demo.enrich.passthrough",
-      "kind": "passthrough",
-      "name": "passthrough",
+      "id": "demo.locate.selector",
+      "kind": "locate_selector",
+      "name": "selector",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Certifies the state already carries the required context.",
+      "description": "Locates by an explicit, reviewed selector or key.",
       "roles": [
-        "control"
+        "transform"
       ],
       "capabilities": [
-        "enrich"
-      ],
-      "tags": [
-        "pass-through"
+        "locate"
       ],
       "inputs": [
         {
           "name": "input",
-          "type": "CanonicalState"
+          "type": "EnrichedState"
         }
       ],
       "outputs": [
         {
           "name": "output",
-          "type": "EnrichedState"
+          "type": "LocatedTarget"
         }
       ],
       "runtime": {
@@ -1314,15 +1508,141 @@
       "metrics": {
         "source": "illustrative-prior",
         "evidence": 0,
-        "quality": 0.7,
-        "latency_ms": 1,
+        "quality": 0.93,
+        "latency_ms": 5,
         "cost_usd": 0.0
       }
     },
     {
-      "id": "demo.transform.deterministic_rules",
-      "kind": "deterministic_rules",
-      "name": "deterministic rules",
+      "id": "demo.locate.heuristic",
+      "kind": "locate_heuristic",
+      "name": "heuristic",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Locates by structural heuristics when the selector breaks.",
+      "roles": [
+        "transform"
+      ],
+      "capabilities": [
+        "locate"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "EnrichedState"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LocatedTarget"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "strategy",
+          "type": "string",
+          "default": "nearest-label",
+          "choices": [
+            "nearest-label",
+            "role",
+            "text"
+          ]
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.84,
+        "latency_ms": 40,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.locate.vision",
+      "kind": "locate_vision",
+      "name": "vision",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Locates from a rendering, when the structure carries no meaning.",
+      "roles": [
+        "model"
+      ],
+      "capabilities": [
+        "locate"
+      ],
+      "permissions": [
+        "llm"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "EnrichedState"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LocatedTarget"
+        }
+      ],
+      "runtime": {
+        "deterministic": false,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.8,
+        "latency_ms": 2100,
+        "cost_usd": 0.011
+      }
+    },
+    {
+      "id": "demo.locate.recorded",
+      "kind": "locate_recorded",
+      "name": "recorded",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Replays a location that a previous verified run recorded.",
+      "roles": [
+        "control"
+      ],
+      "capabilities": [
+        "locate"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "EnrichedState"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LocatedTarget"
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.95,
+        "latency_ms": 2,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.act.rules",
+      "kind": "act_rules",
+      "name": "rules",
       "version": "1.0",
       "schema_version": "2.0",
       "description": "Applies reviewed, deterministic rules.",
@@ -1330,12 +1650,12 @@
         "transform"
       ],
       "capabilities": [
-        "transform"
+        "act"
       ],
       "inputs": [
         {
           "name": "input",
-          "type": "EnrichedState"
+          "type": "LocatedTarget"
         }
       ],
       "outputs": [
@@ -1368,18 +1688,17 @@
       }
     },
     {
-      "id": "demo.transform.llm_parser",
-      "kind": "llm_parser",
-      "name": "llm parser",
+      "id": "demo.act.model",
+      "kind": "act_model",
+      "name": "model",
       "version": "1.0",
       "schema_version": "2.0",
       "description": "Asks a language model for a structured result.",
       "roles": [
-        "model",
-        "transform"
+        "model"
       ],
       "capabilities": [
-        "transform"
+        "act"
       ],
       "permissions": [
         "llm"
@@ -1387,7 +1706,7 @@
       "inputs": [
         {
           "name": "input",
-          "type": "EnrichedState"
+          "type": "LocatedTarget"
         }
       ],
       "outputs": [
@@ -1430,9 +1749,9 @@
       }
     },
     {
-      "id": "demo.transform.statistical_model",
-      "kind": "statistical_model",
-      "name": "statistical model",
+      "id": "demo.act.statistical",
+      "kind": "act_statistical",
+      "name": "statistical",
       "version": "1.0",
       "schema_version": "2.0",
       "description": "Applies a fitted statistical model.",
@@ -1440,12 +1759,12 @@
         "model"
       ],
       "capabilities": [
-        "transform"
+        "act"
       ],
       "inputs": [
         {
           "name": "input",
-          "type": "EnrichedState"
+          "type": "LocatedTarget"
         }
       ],
       "outputs": [
@@ -1478,8 +1797,8 @@
       }
     },
     {
-      "id": "demo.transform.composite",
-      "kind": "composite_transform",
+      "id": "demo.act.composite",
+      "kind": "act_composite",
       "name": "composite",
       "version": "1.0",
       "schema_version": "2.0",
@@ -1488,7 +1807,7 @@
         "composite"
       ],
       "capabilities": [
-        "transform"
+        "act"
       ],
       "permissions": [
         "llm"
@@ -1496,7 +1815,7 @@
       "inputs": [
         {
           "name": "input",
-          "type": "EnrichedState"
+          "type": "LocatedTarget"
         }
       ],
       "outputs": [
@@ -1509,10 +1828,10 @@
         {
           "name": "children",
           "type": "string",
-          "default": "rules+llm",
+          "default": "rules+model",
           "choices": [
-            "rules+llm",
-            "rules+model"
+            "rules+model",
+            "rules+statistical"
           ]
         }
       ],
@@ -1529,49 +1848,9 @@
       }
     },
     {
-      "id": "demo.transform.human_operator",
-      "kind": "human_operator",
-      "name": "human operator",
-      "version": "1.0",
-      "schema_version": "2.0",
-      "description": "Routes the decision to an authorized person.",
-      "roles": [
-        "action"
-      ],
-      "capabilities": [
-        "transform"
-      ],
-      "permissions": [
-        "human"
-      ],
-      "inputs": [
-        {
-          "name": "input",
-          "type": "EnrichedState"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output",
-          "type": "CandidateResult"
-        }
-      ],
-      "runtime": {
-        "deterministic": false,
-        "sandbox": "process"
-      },
-      "metrics": {
-        "source": "illustrative-prior",
-        "evidence": 0,
-        "quality": 0.98,
-        "latency_ms": 900000,
-        "cost_usd": 2.5
-      }
-    },
-    {
-      "id": "demo.transform.browser_action",
-      "kind": "browser_action",
-      "name": "browser action",
+      "id": "demo.act.browser",
+      "kind": "act_browser",
+      "name": "browser",
       "version": "1.0",
       "schema_version": "2.0",
       "description": "Performs a permitted external effect in a browser.",
@@ -1579,7 +1858,7 @@
         "action"
       ],
       "capabilities": [
-        "transform"
+        "act"
       ],
       "permissions": [
         "browser",
@@ -1591,7 +1870,7 @@
       "inputs": [
         {
           "name": "input",
-          "type": "EnrichedState"
+          "type": "LocatedTarget"
         }
       ],
       "outputs": [
@@ -1613,9 +1892,49 @@
       }
     },
     {
-      "id": "demo.verify.schema_json",
-      "kind": "schema_validator",
-      "name": "schema json",
+      "id": "demo.act.human",
+      "kind": "act_human",
+      "name": "human",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Routes the decision to an authorized person.",
+      "roles": [
+        "action"
+      ],
+      "capabilities": [
+        "act"
+      ],
+      "permissions": [
+        "human"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "LocatedTarget"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "CandidateResult"
+        }
+      ],
+      "runtime": {
+        "deterministic": false,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.98,
+        "latency_ms": 900000,
+        "cost_usd": 2.5
+      }
+    },
+    {
+      "id": "demo.shape.json_schema",
+      "kind": "shape_json_schema",
+      "name": "json schema",
       "version": "1.0",
       "schema_version": "2.0",
       "description": "Checks the result against a JSON Schema.",
@@ -1623,7 +1942,7 @@
         "verifier"
       ],
       "capabilities": [
-        "verify"
+        "shape"
       ],
       "inputs": [
         {
@@ -1634,7 +1953,7 @@
       "outputs": [
         {
           "name": "output",
-          "type": "VerifiedOutcome"
+          "type": "ShapeVerdict"
         }
       ],
       "runtime": {
@@ -1650,9 +1969,9 @@
       }
     },
     {
-      "id": "demo.verify.schema_typed",
-      "kind": "schema_validator",
-      "name": "schema typed",
+      "id": "demo.shape.typed",
+      "kind": "shape_typed",
+      "name": "typed",
       "version": "1.0",
       "schema_version": "2.0",
       "description": "Checks the result against typed models.",
@@ -1660,7 +1979,7 @@
         "verifier"
       ],
       "capabilities": [
-        "verify"
+        "shape"
       ],
       "inputs": [
         {
@@ -1671,7 +1990,7 @@
       "outputs": [
         {
           "name": "output",
-          "type": "VerifiedOutcome"
+          "type": "ShapeVerdict"
         }
       ],
       "runtime": {
@@ -1687,22 +2006,59 @@
       }
     },
     {
-      "id": "demo.verify.oracle",
-      "kind": "oracle_check",
-      "name": "oracle",
+      "id": "demo.shape.invariants",
+      "kind": "shape_invariants",
+      "name": "invariants",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Compares against an independent source of truth.",
+      "description": "Evaluates declared task invariants and postconditions.",
       "roles": [
         "verifier"
       ],
       "capabilities": [
-        "verify"
+        "shape"
       ],
       "inputs": [
         {
           "name": "input",
           "type": "CandidateResult"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "ShapeVerdict"
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.94,
+        "latency_ms": 14,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.independent.oracle",
+      "kind": "independent_oracle",
+      "name": "oracle",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Compares against a source independent of the producer.",
+      "roles": [
+        "verifier"
+      ],
+      "capabilities": [
+        "independent"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "ShapeVerdict"
         }
       ],
       "outputs": [
@@ -1735,8 +2091,8 @@
       }
     },
     {
-      "id": "demo.verify.consensus",
-      "kind": "consensus_vote",
+      "id": "demo.independent.consensus",
+      "kind": "independent_consensus",
       "name": "consensus",
       "version": "1.0",
       "schema_version": "2.0",
@@ -1745,12 +2101,12 @@
         "verifier"
       ],
       "capabilities": [
-        "verify"
+        "independent"
       ],
       "inputs": [
         {
           "name": "input",
-          "type": "CandidateResult"
+          "type": "ShapeVerdict"
         }
       ],
       "outputs": [
@@ -1784,9 +2140,9 @@
       }
     },
     {
-      "id": "demo.verify.human_review",
-      "kind": "human_review",
-      "name": "human review",
+      "id": "demo.independent.human",
+      "kind": "independent_human",
+      "name": "human",
       "version": "1.0",
       "schema_version": "2.0",
       "description": "An authorized person accepts or rejects the outcome.",
@@ -1794,7 +2150,7 @@
         "verifier"
       ],
       "capabilities": [
-        "verify"
+        "independent"
       ],
       "permissions": [
         "human"
@@ -1802,7 +2158,7 @@
       "inputs": [
         {
           "name": "input",
-          "type": "CandidateResult"
+          "type": "ShapeVerdict"
         }
       ],
       "outputs": [
@@ -1824,22 +2180,22 @@
       }
     },
     {
-      "id": "demo.verify.visual_diff",
-      "kind": "visual_diff",
-      "name": "visual diff",
+      "id": "demo.independent.visual",
+      "kind": "independent_visual",
+      "name": "visual",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Compares rendered output against an approved baseline.",
+      "description": "Compares a rendering against an approved baseline.",
       "roles": [
         "verifier"
       ],
       "capabilities": [
-        "verify"
+        "independent"
       ],
       "inputs": [
         {
           "name": "input",
-          "type": "CandidateResult"
+          "type": "ShapeVerdict"
         }
       ],
       "outputs": [
@@ -1861,9 +2217,9 @@
       }
     },
     {
-      "id": "demo.verify.ocr_check",
-      "kind": "ocr_verifier",
-      "name": "ocr check",
+      "id": "demo.independent.ocr",
+      "kind": "independent_ocr",
+      "name": "ocr",
       "version": "1.0",
       "schema_version": "2.0",
       "description": "Confirms the result is visible to a reader, not merely present.",
@@ -1871,12 +2227,12 @@
         "verifier"
       ],
       "capabilities": [
-        "verify"
+        "independent"
       ],
       "inputs": [
         {
           "name": "input",
-          "type": "CandidateResult"
+          "type": "ShapeVerdict"
         }
       ],
       "outputs": [
@@ -1909,17 +2265,17 @@
       }
     },
     {
-      "id": "demo.emit.file_json",
-      "kind": "file_writer",
-      "name": "file json",
+      "id": "demo.persist.file",
+      "kind": "persist_file",
+      "name": "file",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Writes the result and receipt as JSON.",
+      "description": "Writes the result to a file.",
       "roles": [
         "sink"
       ],
       "capabilities": [
-        "emit"
+        "persist"
       ],
       "permissions": [
         "filesystem:write"
@@ -1936,7 +2292,18 @@
       "outputs": [
         {
           "name": "output",
-          "type": "TaskReceipt"
+          "type": "StoredResult"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "format",
+          "type": "string",
+          "default": "json",
+          "choices": [
+            "json",
+            "columnar"
+          ]
         }
       ],
       "runtime": {
@@ -1952,107 +2319,9 @@
       }
     },
     {
-      "id": "demo.emit.file_columnar",
-      "kind": "file_writer",
-      "name": "file columnar",
-      "version": "1.0",
-      "schema_version": "2.0",
-      "description": "Writes the result and receipt in a columnar format.",
-      "roles": [
-        "sink"
-      ],
-      "capabilities": [
-        "emit"
-      ],
-      "permissions": [
-        "filesystem:write"
-      ],
-      "effects": [
-        "local:file"
-      ],
-      "inputs": [
-        {
-          "name": "input",
-          "type": "VerifiedOutcome"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output",
-          "type": "TaskReceipt"
-        }
-      ],
-      "runtime": {
-        "deterministic": true,
-        "sandbox": "process"
-      },
-      "metrics": {
-        "source": "illustrative-prior",
-        "evidence": 0,
-        "quality": 0.98,
-        "latency_ms": 26,
-        "cost_usd": 0.0
-      }
-    },
-    {
-      "id": "demo.emit.api_publisher",
-      "kind": "api_publisher",
-      "name": "api publisher",
-      "version": "1.0",
-      "schema_version": "2.0",
-      "description": "Publishes the result to an authorized endpoint.",
-      "roles": [
-        "sink",
-        "action"
-      ],
-      "capabilities": [
-        "emit"
-      ],
-      "permissions": [
-        "network"
-      ],
-      "effects": [
-        "external:published"
-      ],
-      "inputs": [
-        {
-          "name": "input",
-          "type": "VerifiedOutcome"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output",
-          "type": "TaskReceipt"
-        }
-      ],
-      "parameters": [
-        {
-          "name": "delivery",
-          "type": "string",
-          "default": "at-least-once",
-          "choices": [
-            "at-least-once",
-            "exactly-once"
-          ]
-        }
-      ],
-      "runtime": {
-        "deterministic": true,
-        "sandbox": "process"
-      },
-      "metrics": {
-        "source": "illustrative-prior",
-        "evidence": 0,
-        "quality": 0.93,
-        "latency_ms": 290,
-        "cost_usd": 0.0
-      }
-    },
-    {
-      "id": "demo.emit.database_writer",
-      "kind": "database_writer",
-      "name": "database writer",
+      "id": "demo.persist.database",
+      "kind": "persist_database",
+      "name": "database",
       "version": "1.0",
       "schema_version": "2.0",
       "description": "Writes the result to an authorized table.",
@@ -2060,7 +2329,7 @@
         "sink"
       ],
       "capabilities": [
-        "emit"
+        "persist"
       ],
       "permissions": [
         "database:write"
@@ -2077,7 +2346,7 @@
       "outputs": [
         {
           "name": "output",
-          "type": "TaskReceipt"
+          "type": "StoredResult"
         }
       ],
       "parameters": [
@@ -2104,23 +2373,24 @@
       }
     },
     {
-      "id": "demo.emit.evidence_bundler",
-      "kind": "evidence_bundler",
-      "name": "evidence bundler",
+      "id": "demo.persist.publish",
+      "kind": "persist_publish",
+      "name": "publish",
       "version": "1.0",
       "schema_version": "2.0",
-      "description": "Bundles artifacts, provenance and replay data into a receipt.",
+      "description": "Publishes the result to an authorized endpoint.",
       "roles": [
-        "sink"
+        "sink",
+        "action"
       ],
       "capabilities": [
-        "emit"
+        "persist"
       ],
       "permissions": [
-        "filesystem:write"
+        "network"
       ],
       "effects": [
-        "local:file"
+        "external:published"
       ],
       "inputs": [
         {
@@ -2131,7 +2401,109 @@
       "outputs": [
         {
           "name": "output",
+          "type": "StoredResult"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "delivery",
+          "type": "string",
+          "default": "at-least-once",
+          "choices": [
+            "at-least-once",
+            "exactly-once"
+          ]
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.93,
+        "latency_ms": 290,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.persist.memory",
+      "kind": "persist_memory",
+      "name": "memory",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Returns the result in memory without storing it.",
+      "roles": [
+        "sink"
+      ],
+      "capabilities": [
+        "persist"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "VerifiedOutcome"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "StoredResult"
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.85,
+        "latency_ms": 1,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.receipt.bundle",
+      "kind": "receipt_bundle",
+      "name": "bundle",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Bundles artifacts, provenance and replay data into a receipt.",
+      "roles": [
+        "sink"
+      ],
+      "capabilities": [
+        "receipt"
+      ],
+      "permissions": [
+        "filesystem:write"
+      ],
+      "effects": [
+        "local:file"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "StoredResult"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
           "type": "TaskReceipt"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "detail",
+          "type": "string",
+          "default": "summary",
+          "choices": [
+            "summary",
+            "full"
+          ]
         }
       ],
       "runtime": {
@@ -2147,9 +2519,52 @@
       }
     },
     {
-      "id": "demo.emit.notifier",
-      "kind": "notifier",
-      "name": "notifier",
+      "id": "demo.receipt.checkpoint",
+      "kind": "receipt_checkpoint",
+      "name": "checkpoint",
+      "version": "1.0",
+      "schema_version": "2.0",
+      "description": "Writes a resumable, content-addressed checkpoint.",
+      "roles": [
+        "sink"
+      ],
+      "capabilities": [
+        "receipt"
+      ],
+      "permissions": [
+        "filesystem:write"
+      ],
+      "effects": [
+        "local:file"
+      ],
+      "inputs": [
+        {
+          "name": "input",
+          "type": "StoredResult"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "TaskReceipt"
+        }
+      ],
+      "runtime": {
+        "deterministic": true,
+        "sandbox": "process"
+      },
+      "metrics": {
+        "source": "illustrative-prior",
+        "evidence": 0,
+        "quality": 0.97,
+        "latency_ms": 26,
+        "cost_usd": 0.0
+      }
+    },
+    {
+      "id": "demo.receipt.notify",
+      "kind": "receipt_notify",
+      "name": "notify",
       "version": "1.0",
       "schema_version": "2.0",
       "description": "Notifies authorized parties that the task completed.",
@@ -2158,7 +2573,7 @@
         "action"
       ],
       "capabilities": [
-        "emit"
+        "receipt"
       ],
       "permissions": [
         "network"
@@ -2169,7 +2584,7 @@
       "inputs": [
         {
           "name": "input",
-          "type": "VerifiedOutcome"
+          "type": "StoredResult"
         }
       ],
       "outputs": [
@@ -2193,9 +2608,35 @@
   ],
   "candidates": [
     {
-      "id": "demo.acquire.browser_adapter.chrome.browserport.headless.02013536",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chrome \u00b7 BrowserPort \u00b7 headless",
+      "id": "demo.resolve.literal",
+      "node_id": "demo.resolve.literal",
+      "name": "literal"
+    },
+    {
+      "id": "demo.resolve.template.strict.8802fb2f",
+      "node_id": "demo.resolve.template",
+      "name": "template \u00b7 strict",
+      "params": {
+        "strictness": "strict"
+      }
+    },
+    {
+      "id": "demo.resolve.template.lenient.6de9ec86",
+      "node_id": "demo.resolve.template",
+      "name": "template \u00b7 lenient",
+      "params": {
+        "strictness": "lenient"
+      }
+    },
+    {
+      "id": "demo.resolve.directory",
+      "node_id": "demo.resolve.directory",
+      "name": "directory"
+    },
+    {
+      "id": "demo.session.browser.chrome.browserport.headless.5b950ef5",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chrome \u00b7 BrowserPort \u00b7 headless",
       "params": {
         "controller": "BrowserPort",
         "binary": "Chrome",
@@ -2203,9 +2644,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chrome.browserport.headed.284863cb",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chrome \u00b7 BrowserPort \u00b7 headed",
+      "id": "demo.session.browser.chrome.browserport.headed.cdd12df9",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chrome \u00b7 BrowserPort \u00b7 headed",
       "params": {
         "controller": "BrowserPort",
         "binary": "Chrome",
@@ -2213,9 +2654,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chromium.browserport.headless.ad62b5ee",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chromium \u00b7 BrowserPort \u00b7 headless",
+      "id": "demo.session.browser.chromium.browserport.headless.5bb38c38",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chromium \u00b7 BrowserPort \u00b7 headless",
       "params": {
         "controller": "BrowserPort",
         "binary": "Chromium",
@@ -2223,9 +2664,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chromium.browserport.headed.eb97ce14",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chromium \u00b7 BrowserPort \u00b7 headed",
+      "id": "demo.session.browser.chromium.browserport.headed.52a5c9a7",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chromium \u00b7 BrowserPort \u00b7 headed",
       "params": {
         "controller": "BrowserPort",
         "binary": "Chromium",
@@ -2233,9 +2674,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.edge.browserport.headless.ff1cdf67",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Edge \u00b7 BrowserPort \u00b7 headless",
+      "id": "demo.session.browser.edge.browserport.headless.9ac872b7",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Edge \u00b7 BrowserPort \u00b7 headless",
       "params": {
         "controller": "BrowserPort",
         "binary": "Edge",
@@ -2243,9 +2684,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.edge.browserport.headed.d3497d86",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Edge \u00b7 BrowserPort \u00b7 headed",
+      "id": "demo.session.browser.edge.browserport.headed.414bfb9b",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Edge \u00b7 BrowserPort \u00b7 headed",
       "params": {
         "controller": "BrowserPort",
         "binary": "Edge",
@@ -2253,9 +2694,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.firefox.browserport.headless.2d92d84b",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Firefox \u00b7 BrowserPort \u00b7 headless",
+      "id": "demo.session.browser.firefox.browserport.headless.6c5fe25f",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Firefox \u00b7 BrowserPort \u00b7 headless",
       "params": {
         "controller": "BrowserPort",
         "binary": "Firefox",
@@ -2263,9 +2704,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.firefox.browserport.headed.382a54da",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Firefox \u00b7 BrowserPort \u00b7 headed",
+      "id": "demo.session.browser.firefox.browserport.headed.fa250942",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Firefox \u00b7 BrowserPort \u00b7 headed",
       "params": {
         "controller": "BrowserPort",
         "binary": "Firefox",
@@ -2273,9 +2714,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.webkit.browserport.headless.eee81e7d",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 WebKit \u00b7 BrowserPort \u00b7 headless",
+      "id": "demo.session.browser.webkit.browserport.headless.d04bb699",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 WebKit \u00b7 BrowserPort \u00b7 headless",
       "params": {
         "controller": "BrowserPort",
         "binary": "WebKit",
@@ -2283,9 +2724,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.webkit.browserport.headed.acb96ce8",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 WebKit \u00b7 BrowserPort \u00b7 headed",
+      "id": "demo.session.browser.webkit.browserport.headed.fb3443c7",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 WebKit \u00b7 BrowserPort \u00b7 headed",
       "params": {
         "controller": "BrowserPort",
         "binary": "WebKit",
@@ -2293,9 +2734,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.brave.browserport.headless.45013e6e",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Brave \u00b7 BrowserPort \u00b7 headless",
+      "id": "demo.session.browser.brave.browserport.headless.8c69e70b",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Brave \u00b7 BrowserPort \u00b7 headless",
       "params": {
         "controller": "BrowserPort",
         "binary": "Brave",
@@ -2303,9 +2744,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.brave.browserport.headed.2e59efe5",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Brave \u00b7 BrowserPort \u00b7 headed",
+      "id": "demo.session.browser.brave.browserport.headed.ebf2266c",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Brave \u00b7 BrowserPort \u00b7 headed",
       "params": {
         "controller": "BrowserPort",
         "binary": "Brave",
@@ -2313,9 +2754,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chrome.playwright.headless.11b2e04d",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chrome \u00b7 Playwright \u00b7 headless",
+      "id": "demo.session.browser.chrome.playwright.headless.6cb0bdac",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chrome \u00b7 Playwright \u00b7 headless",
       "params": {
         "controller": "Playwright",
         "binary": "Chrome",
@@ -2323,9 +2764,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chrome.playwright.headed.9f4e703f",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chrome \u00b7 Playwright \u00b7 headed",
+      "id": "demo.session.browser.chrome.playwright.headed.fdd2ae1b",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chrome \u00b7 Playwright \u00b7 headed",
       "params": {
         "controller": "Playwright",
         "binary": "Chrome",
@@ -2333,9 +2774,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chromium.playwright.headless.f918e9ee",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chromium \u00b7 Playwright \u00b7 headless",
+      "id": "demo.session.browser.chromium.playwright.headless.648a65ee",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chromium \u00b7 Playwright \u00b7 headless",
       "params": {
         "controller": "Playwright",
         "binary": "Chromium",
@@ -2343,9 +2784,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chromium.playwright.headed.bdb4e881",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chromium \u00b7 Playwright \u00b7 headed",
+      "id": "demo.session.browser.chromium.playwright.headed.ab0d4fa1",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chromium \u00b7 Playwright \u00b7 headed",
       "params": {
         "controller": "Playwright",
         "binary": "Chromium",
@@ -2353,9 +2794,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.edge.playwright.headless.fd1d93c6",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Edge \u00b7 Playwright \u00b7 headless",
+      "id": "demo.session.browser.edge.playwright.headless.bb9216f2",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Edge \u00b7 Playwright \u00b7 headless",
       "params": {
         "controller": "Playwright",
         "binary": "Edge",
@@ -2363,9 +2804,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.edge.playwright.headed.a0092eca",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Edge \u00b7 Playwright \u00b7 headed",
+      "id": "demo.session.browser.edge.playwright.headed.0a7f44d2",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Edge \u00b7 Playwright \u00b7 headed",
       "params": {
         "controller": "Playwright",
         "binary": "Edge",
@@ -2373,9 +2814,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.firefox.playwright.headless.22984131",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Firefox \u00b7 Playwright \u00b7 headless",
+      "id": "demo.session.browser.firefox.playwright.headless.7c49507d",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Firefox \u00b7 Playwright \u00b7 headless",
       "params": {
         "controller": "Playwright",
         "binary": "Firefox",
@@ -2383,9 +2824,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.firefox.playwright.headed.19939504",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Firefox \u00b7 Playwright \u00b7 headed",
+      "id": "demo.session.browser.firefox.playwright.headed.434a137b",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Firefox \u00b7 Playwright \u00b7 headed",
       "params": {
         "controller": "Playwright",
         "binary": "Firefox",
@@ -2393,9 +2834,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.webkit.playwright.headless.11758c0d",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 WebKit \u00b7 Playwright \u00b7 headless",
+      "id": "demo.session.browser.webkit.playwright.headless.b016f221",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 WebKit \u00b7 Playwright \u00b7 headless",
       "params": {
         "controller": "Playwright",
         "binary": "WebKit",
@@ -2403,9 +2844,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.webkit.playwright.headed.d0410ba1",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 WebKit \u00b7 Playwright \u00b7 headed",
+      "id": "demo.session.browser.webkit.playwright.headed.8b701695",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 WebKit \u00b7 Playwright \u00b7 headed",
       "params": {
         "controller": "Playwright",
         "binary": "WebKit",
@@ -2413,9 +2854,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.brave.playwright.headless.bfd125bd",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Brave \u00b7 Playwright \u00b7 headless",
+      "id": "demo.session.browser.brave.playwright.headless.0c6395b3",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Brave \u00b7 Playwright \u00b7 headless",
       "params": {
         "controller": "Playwright",
         "binary": "Brave",
@@ -2423,9 +2864,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.brave.playwright.headed.dafcdda4",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Brave \u00b7 Playwright \u00b7 headed",
+      "id": "demo.session.browser.brave.playwright.headed.59d1baa8",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Brave \u00b7 Playwright \u00b7 headed",
       "params": {
         "controller": "Playwright",
         "binary": "Brave",
@@ -2433,9 +2874,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chrome.selenium.headless.525d7325",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chrome \u00b7 Selenium \u00b7 headless",
+      "id": "demo.session.browser.chrome.selenium.headless.4736c125",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chrome \u00b7 Selenium \u00b7 headless",
       "params": {
         "controller": "Selenium",
         "binary": "Chrome",
@@ -2443,9 +2884,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chrome.selenium.headed.5469438c",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chrome \u00b7 Selenium \u00b7 headed",
+      "id": "demo.session.browser.chrome.selenium.headed.f5cf4ba2",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chrome \u00b7 Selenium \u00b7 headed",
       "params": {
         "controller": "Selenium",
         "binary": "Chrome",
@@ -2453,9 +2894,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chromium.selenium.headless.ad5a26e9",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chromium \u00b7 Selenium \u00b7 headless",
+      "id": "demo.session.browser.chromium.selenium.headless.2f36574c",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chromium \u00b7 Selenium \u00b7 headless",
       "params": {
         "controller": "Selenium",
         "binary": "Chromium",
@@ -2463,9 +2904,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chromium.selenium.headed.89acd76a",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chromium \u00b7 Selenium \u00b7 headed",
+      "id": "demo.session.browser.chromium.selenium.headed.4a12f8d0",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chromium \u00b7 Selenium \u00b7 headed",
       "params": {
         "controller": "Selenium",
         "binary": "Chromium",
@@ -2473,9 +2914,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.edge.selenium.headless.608bb3e7",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Edge \u00b7 Selenium \u00b7 headless",
+      "id": "demo.session.browser.edge.selenium.headless.184106bb",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Edge \u00b7 Selenium \u00b7 headless",
       "params": {
         "controller": "Selenium",
         "binary": "Edge",
@@ -2483,9 +2924,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.edge.selenium.headed.4ed816ca",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Edge \u00b7 Selenium \u00b7 headed",
+      "id": "demo.session.browser.edge.selenium.headed.9cdddc92",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Edge \u00b7 Selenium \u00b7 headed",
       "params": {
         "controller": "Selenium",
         "binary": "Edge",
@@ -2493,9 +2934,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.firefox.selenium.headless.5c20979d",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Firefox \u00b7 Selenium \u00b7 headless",
+      "id": "demo.session.browser.firefox.selenium.headless.792e78cb",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Firefox \u00b7 Selenium \u00b7 headless",
       "params": {
         "controller": "Selenium",
         "binary": "Firefox",
@@ -2503,9 +2944,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.firefox.selenium.headed.2cd57496",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Firefox \u00b7 Selenium \u00b7 headed",
+      "id": "demo.session.browser.firefox.selenium.headed.9af38716",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Firefox \u00b7 Selenium \u00b7 headed",
       "params": {
         "controller": "Selenium",
         "binary": "Firefox",
@@ -2513,9 +2954,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.webkit.selenium.headless.13e11106",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 WebKit \u00b7 Selenium \u00b7 headless",
+      "id": "demo.session.browser.webkit.selenium.headless.a99fb360",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 WebKit \u00b7 Selenium \u00b7 headless",
       "params": {
         "controller": "Selenium",
         "binary": "WebKit",
@@ -2523,9 +2964,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.webkit.selenium.headed.1552c0f5",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 WebKit \u00b7 Selenium \u00b7 headed",
+      "id": "demo.session.browser.webkit.selenium.headed.4e139d61",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 WebKit \u00b7 Selenium \u00b7 headed",
       "params": {
         "controller": "Selenium",
         "binary": "WebKit",
@@ -2533,9 +2974,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.brave.selenium.headless.801d4f99",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Brave \u00b7 Selenium \u00b7 headless",
+      "id": "demo.session.browser.brave.selenium.headless.3b509bac",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Brave \u00b7 Selenium \u00b7 headless",
       "params": {
         "controller": "Selenium",
         "binary": "Brave",
@@ -2543,9 +2984,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.brave.selenium.headed.d5f0847d",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Brave \u00b7 Selenium \u00b7 headed",
+      "id": "demo.session.browser.brave.selenium.headed.280e75bb",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Brave \u00b7 Selenium \u00b7 headed",
       "params": {
         "controller": "Selenium",
         "binary": "Brave",
@@ -2553,9 +2994,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chrome.puppeteer.headless.009ca7e8",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chrome \u00b7 Puppeteer \u00b7 headless",
+      "id": "demo.session.browser.chrome.puppeteer.headless.0c5c5fd1",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chrome \u00b7 Puppeteer \u00b7 headless",
       "params": {
         "controller": "Puppeteer",
         "binary": "Chrome",
@@ -2563,9 +3004,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chrome.puppeteer.headed.a9bbe5d3",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chrome \u00b7 Puppeteer \u00b7 headed",
+      "id": "demo.session.browser.chrome.puppeteer.headed.e4b29656",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chrome \u00b7 Puppeteer \u00b7 headed",
       "params": {
         "controller": "Puppeteer",
         "binary": "Chrome",
@@ -2573,9 +3014,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chromium.puppeteer.headless.cb477762",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chromium \u00b7 Puppeteer \u00b7 headless",
+      "id": "demo.session.browser.chromium.puppeteer.headless.29755a7d",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chromium \u00b7 Puppeteer \u00b7 headless",
       "params": {
         "controller": "Puppeteer",
         "binary": "Chromium",
@@ -2583,9 +3024,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chromium.puppeteer.headed.f1335ac8",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chromium \u00b7 Puppeteer \u00b7 headed",
+      "id": "demo.session.browser.chromium.puppeteer.headed.b4130fc0",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chromium \u00b7 Puppeteer \u00b7 headed",
       "params": {
         "controller": "Puppeteer",
         "binary": "Chromium",
@@ -2593,9 +3034,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.edge.puppeteer.headless.aeca0b0c",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Edge \u00b7 Puppeteer \u00b7 headless",
+      "id": "demo.session.browser.edge.puppeteer.headless.47efb6df",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Edge \u00b7 Puppeteer \u00b7 headless",
       "params": {
         "controller": "Puppeteer",
         "binary": "Edge",
@@ -2603,9 +3044,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.edge.puppeteer.headed.e7e4fae1",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Edge \u00b7 Puppeteer \u00b7 headed",
+      "id": "demo.session.browser.edge.puppeteer.headed.a2659d5d",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Edge \u00b7 Puppeteer \u00b7 headed",
       "params": {
         "controller": "Puppeteer",
         "binary": "Edge",
@@ -2613,9 +3054,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.firefox.puppeteer.headless.769aa5fc",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Firefox \u00b7 Puppeteer \u00b7 headless",
+      "id": "demo.session.browser.firefox.puppeteer.headless.06ff75c8",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Firefox \u00b7 Puppeteer \u00b7 headless",
       "params": {
         "controller": "Puppeteer",
         "binary": "Firefox",
@@ -2623,9 +3064,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.firefox.puppeteer.headed.8f78d442",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Firefox \u00b7 Puppeteer \u00b7 headed",
+      "id": "demo.session.browser.firefox.puppeteer.headed.f79c17eb",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Firefox \u00b7 Puppeteer \u00b7 headed",
       "params": {
         "controller": "Puppeteer",
         "binary": "Firefox",
@@ -2633,9 +3074,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.webkit.puppeteer.headless.b200a1d5",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 WebKit \u00b7 Puppeteer \u00b7 headless",
+      "id": "demo.session.browser.webkit.puppeteer.headless.d9ee7772",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 WebKit \u00b7 Puppeteer \u00b7 headless",
       "params": {
         "controller": "Puppeteer",
         "binary": "WebKit",
@@ -2643,9 +3084,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.webkit.puppeteer.headed.0445ddf3",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 WebKit \u00b7 Puppeteer \u00b7 headed",
+      "id": "demo.session.browser.webkit.puppeteer.headed.adb4e427",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 WebKit \u00b7 Puppeteer \u00b7 headed",
       "params": {
         "controller": "Puppeteer",
         "binary": "WebKit",
@@ -2653,9 +3094,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.brave.puppeteer.headless.41223f3f",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Brave \u00b7 Puppeteer \u00b7 headless",
+      "id": "demo.session.browser.brave.puppeteer.headless.4b1de48f",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Brave \u00b7 Puppeteer \u00b7 headless",
       "params": {
         "controller": "Puppeteer",
         "binary": "Brave",
@@ -2663,9 +3104,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.brave.puppeteer.headed.80df8067",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Brave \u00b7 Puppeteer \u00b7 headed",
+      "id": "demo.session.browser.brave.puppeteer.headed.4147534a",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Brave \u00b7 Puppeteer \u00b7 headed",
       "params": {
         "controller": "Puppeteer",
         "binary": "Brave",
@@ -2673,9 +3114,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chrome.cdp.headless.7b3d2d1a",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chrome \u00b7 CDP \u00b7 headless",
+      "id": "demo.session.browser.chrome.cdp.headless.8c268bb3",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chrome \u00b7 CDP \u00b7 headless",
       "params": {
         "controller": "CDP",
         "binary": "Chrome",
@@ -2683,9 +3124,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chrome.cdp.headed.bf606d79",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chrome \u00b7 CDP \u00b7 headed",
+      "id": "demo.session.browser.chrome.cdp.headed.5449b15b",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chrome \u00b7 CDP \u00b7 headed",
       "params": {
         "controller": "CDP",
         "binary": "Chrome",
@@ -2693,9 +3134,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chromium.cdp.headless.dcb84e01",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chromium \u00b7 CDP \u00b7 headless",
+      "id": "demo.session.browser.chromium.cdp.headless.525d5f90",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chromium \u00b7 CDP \u00b7 headless",
       "params": {
         "controller": "CDP",
         "binary": "Chromium",
@@ -2703,9 +3144,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.chromium.cdp.headed.b5f730a4",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Chromium \u00b7 CDP \u00b7 headed",
+      "id": "demo.session.browser.chromium.cdp.headed.2fc9a88e",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Chromium \u00b7 CDP \u00b7 headed",
       "params": {
         "controller": "CDP",
         "binary": "Chromium",
@@ -2713,9 +3154,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.edge.cdp.headless.1018c1fd",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Edge \u00b7 CDP \u00b7 headless",
+      "id": "demo.session.browser.edge.cdp.headless.d2cd01b1",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Edge \u00b7 CDP \u00b7 headless",
       "params": {
         "controller": "CDP",
         "binary": "Edge",
@@ -2723,9 +3164,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.edge.cdp.headed.8ccf465d",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Edge \u00b7 CDP \u00b7 headed",
+      "id": "demo.session.browser.edge.cdp.headed.319216dd",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Edge \u00b7 CDP \u00b7 headed",
       "params": {
         "controller": "CDP",
         "binary": "Edge",
@@ -2733,9 +3174,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.firefox.cdp.headless.c2301d7d",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Firefox \u00b7 CDP \u00b7 headless",
+      "id": "demo.session.browser.firefox.cdp.headless.b85361b2",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Firefox \u00b7 CDP \u00b7 headless",
       "params": {
         "controller": "CDP",
         "binary": "Firefox",
@@ -2743,9 +3184,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.firefox.cdp.headed.c06b076b",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Firefox \u00b7 CDP \u00b7 headed",
+      "id": "demo.session.browser.firefox.cdp.headed.7a958eec",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Firefox \u00b7 CDP \u00b7 headed",
       "params": {
         "controller": "CDP",
         "binary": "Firefox",
@@ -2753,9 +3194,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.webkit.cdp.headless.eac28b36",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 WebKit \u00b7 CDP \u00b7 headless",
+      "id": "demo.session.browser.webkit.cdp.headless.e593fae0",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 WebKit \u00b7 CDP \u00b7 headless",
       "params": {
         "controller": "CDP",
         "binary": "WebKit",
@@ -2763,9 +3204,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.webkit.cdp.headed.d9646df0",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 WebKit \u00b7 CDP \u00b7 headed",
+      "id": "demo.session.browser.webkit.cdp.headed.1e9e8f95",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 WebKit \u00b7 CDP \u00b7 headed",
       "params": {
         "controller": "CDP",
         "binary": "WebKit",
@@ -2773,9 +3214,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.brave.cdp.headless.1be4a10d",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Brave \u00b7 CDP \u00b7 headless",
+      "id": "demo.session.browser.brave.cdp.headless.6f475faa",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Brave \u00b7 CDP \u00b7 headless",
       "params": {
         "controller": "CDP",
         "binary": "Brave",
@@ -2783,9 +3224,9 @@
       }
     },
     {
-      "id": "demo.acquire.browser_adapter.brave.cdp.headed.6313c7b2",
-      "node_id": "demo.acquire.browser_adapter",
-      "name": "browser adapter \u00b7 Brave \u00b7 CDP \u00b7 headed",
+      "id": "demo.session.browser.brave.cdp.headed.7a1f5e08",
+      "node_id": "demo.session.browser",
+      "name": "browser \u00b7 Brave \u00b7 CDP \u00b7 headed",
       "params": {
         "controller": "CDP",
         "binary": "Brave",
@@ -2793,656 +3234,763 @@
       }
     },
     {
-      "id": "demo.acquire.file_loader.file.7623f426",
-      "node_id": "demo.acquire.file_loader",
-      "name": "file loader \u00b7 file",
+      "id": "demo.session.filesystem.file.341fc310",
+      "node_id": "demo.session.filesystem",
+      "name": "filesystem \u00b7 file",
       "params": {
         "mode": "file"
       }
     },
     {
-      "id": "demo.acquire.file_loader.directory.acf57694",
-      "node_id": "demo.acquire.file_loader",
-      "name": "file loader \u00b7 directory",
+      "id": "demo.session.filesystem.directory.3bc3ce67",
+      "node_id": "demo.session.filesystem",
+      "name": "filesystem \u00b7 directory",
       "params": {
         "mode": "directory"
       }
     },
     {
-      "id": "demo.acquire.file_loader.glob.27bbb52a",
-      "node_id": "demo.acquire.file_loader",
-      "name": "file loader \u00b7 glob",
+      "id": "demo.session.filesystem.glob.d61234b1",
+      "node_id": "demo.session.filesystem",
+      "name": "filesystem \u00b7 glob",
       "params": {
         "mode": "glob"
       }
     },
     {
-      "id": "demo.acquire.api_loader.get.78b22e42",
-      "node_id": "demo.acquire.api_loader",
-      "name": "api loader \u00b7 GET",
+      "id": "demo.session.http.none.62a9a496",
+      "node_id": "demo.session.http",
+      "name": "http \u00b7 none",
       "params": {
-        "method": "GET"
+        "retries": "none"
       }
     },
     {
-      "id": "demo.acquire.api_loader.post.34eba557",
-      "node_id": "demo.acquire.api_loader",
-      "name": "api loader \u00b7 POST",
+      "id": "demo.session.http.bounded.47bb2a12",
+      "node_id": "demo.session.http",
+      "name": "http \u00b7 bounded",
       "params": {
-        "method": "POST"
+        "retries": "bounded"
       }
     },
     {
-      "id": "demo.acquire.api_loader.put.ad214c53",
-      "node_id": "demo.acquire.api_loader",
-      "name": "api loader \u00b7 PUT",
-      "params": {
-        "method": "PUT"
-      }
-    },
-    {
-      "id": "demo.acquire.database_loader.postgres.c03717ca",
-      "node_id": "demo.acquire.database_loader",
-      "name": "database loader \u00b7 postgres",
+      "id": "demo.session.database.postgres.c121dc81",
+      "node_id": "demo.session.database",
+      "name": "database \u00b7 postgres",
       "params": {
         "dialect": "postgres"
       }
     },
     {
-      "id": "demo.acquire.database_loader.mysql.bb783976",
-      "node_id": "demo.acquire.database_loader",
-      "name": "database loader \u00b7 mysql",
+      "id": "demo.session.database.mysql.60aa87c7",
+      "node_id": "demo.session.database",
+      "name": "database \u00b7 mysql",
       "params": {
         "dialect": "mysql"
       }
     },
     {
-      "id": "demo.acquire.database_loader.sqlite.cd9207b6",
-      "node_id": "demo.acquire.database_loader",
-      "name": "database loader \u00b7 sqlite",
+      "id": "demo.session.database.sqlite.c242c041",
+      "node_id": "demo.session.database",
+      "name": "database \u00b7 sqlite",
       "params": {
         "dialect": "sqlite"
       }
     },
     {
-      "id": "demo.acquire.database_loader.bigquery.1e1d27ee",
-      "node_id": "demo.acquire.database_loader",
-      "name": "database loader \u00b7 bigquery",
+      "id": "demo.session.database.bigquery.4dc14c41",
+      "node_id": "demo.session.database",
+      "name": "database \u00b7 bigquery",
       "params": {
         "dialect": "bigquery"
       }
     },
     {
-      "id": "demo.acquire.queue_kafka",
-      "node_id": "demo.acquire.queue_kafka",
-      "name": "queue kafka"
+      "id": "demo.session.queue",
+      "node_id": "demo.session.queue",
+      "name": "queue"
     },
     {
-      "id": "demo.acquire.queue_sqs",
-      "node_id": "demo.acquire.queue_sqs",
-      "name": "queue sqs"
+      "id": "demo.read.whole",
+      "node_id": "demo.read.whole",
+      "name": "whole"
     },
     {
-      "id": "demo.acquire.stream_http",
-      "node_id": "demo.acquire.stream_http",
-      "name": "stream http"
-    },
-    {
-      "id": "demo.acquire.stream_websocket",
-      "node_id": "demo.acquire.stream_websocket",
-      "name": "stream websocket"
-    },
-    {
-      "id": "demo.acquire.archive_zip",
-      "node_id": "demo.acquire.archive_zip",
-      "name": "archive zip"
-    },
-    {
-      "id": "demo.acquire.archive_tar",
-      "node_id": "demo.acquire.archive_tar",
-      "name": "archive tar"
-    },
-    {
-      "id": "demo.canonicalize.text_normalizer.preserve.nfc.4b139767",
-      "node_id": "demo.canonicalize.text_normalizer",
-      "name": "text normalizer \u00b7 preserve \u00b7 NFC",
+      "id": "demo.read.streamed.fixed.71cc7d8e",
+      "node_id": "demo.read.streamed",
+      "name": "streamed \u00b7 fixed",
       "params": {
-        "form": "NFC",
-        "case": "preserve"
+        "chunking": "fixed"
       }
     },
     {
-      "id": "demo.canonicalize.text_normalizer.fold.nfc.39c799a2",
-      "node_id": "demo.canonicalize.text_normalizer",
-      "name": "text normalizer \u00b7 fold \u00b7 NFC",
+      "id": "demo.read.streamed.adaptive.5011dca8",
+      "node_id": "demo.read.streamed",
+      "name": "streamed \u00b7 adaptive",
       "params": {
-        "form": "NFC",
-        "case": "fold"
+        "chunking": "adaptive"
       }
     },
     {
-      "id": "demo.canonicalize.text_normalizer.preserve.nfkc.163f8c8a",
-      "node_id": "demo.canonicalize.text_normalizer",
-      "name": "text normalizer \u00b7 preserve \u00b7 NFKC",
+      "id": "demo.read.rendered.load.bc101bff",
+      "node_id": "demo.read.rendered",
+      "name": "rendered \u00b7 load",
       "params": {
-        "form": "NFKC",
-        "case": "preserve"
+        "settle": "load"
       }
     },
     {
-      "id": "demo.canonicalize.text_normalizer.fold.nfkc.b7cf3e3e",
-      "node_id": "demo.canonicalize.text_normalizer",
-      "name": "text normalizer \u00b7 fold \u00b7 NFKC",
+      "id": "demo.read.rendered.network-idle.473b5050",
+      "node_id": "demo.read.rendered",
+      "name": "rendered \u00b7 network-idle",
       "params": {
-        "form": "NFKC",
-        "case": "fold"
+        "settle": "network-idle"
       }
     },
     {
-      "id": "demo.canonicalize.text_normalizer.preserve.nfd.beb9cd70",
-      "node_id": "demo.canonicalize.text_normalizer",
-      "name": "text normalizer \u00b7 preserve \u00b7 NFD",
+      "id": "demo.read.rendered.mutation-quiet.065e5fb5",
+      "node_id": "demo.read.rendered",
+      "name": "rendered \u00b7 mutation-quiet",
       "params": {
-        "form": "NFD",
-        "case": "preserve"
+        "settle": "mutation-quiet"
       }
     },
     {
-      "id": "demo.canonicalize.text_normalizer.fold.nfd.092f62f1",
-      "node_id": "demo.canonicalize.text_normalizer",
-      "name": "text normalizer \u00b7 fold \u00b7 NFD",
+      "id": "demo.decode.bom",
+      "node_id": "demo.decode.bom",
+      "name": "bom"
+    },
+    {
+      "id": "demo.decode.statistical",
+      "node_id": "demo.decode.statistical",
+      "name": "statistical"
+    },
+    {
+      "id": "demo.decode.unicode.nfc.9577ef78",
+      "node_id": "demo.decode.unicode",
+      "name": "unicode \u00b7 NFC",
       "params": {
-        "form": "NFD",
-        "case": "fold"
+        "form": "NFC"
       }
     },
     {
-      "id": "demo.canonicalize.schema_mapper.strict.d7d3cfad",
-      "node_id": "demo.canonicalize.schema_mapper",
-      "name": "schema mapper \u00b7 strict",
+      "id": "demo.decode.unicode.nfkc.695abb5a",
+      "node_id": "demo.decode.unicode",
+      "name": "unicode \u00b7 NFKC",
       "params": {
-        "strategy": "strict"
+        "form": "NFKC"
       }
     },
     {
-      "id": "demo.canonicalize.schema_mapper.lenient.db56168a",
-      "node_id": "demo.canonicalize.schema_mapper",
-      "name": "schema mapper \u00b7 lenient",
+      "id": "demo.decode.unicode.nfd.73ca57a7",
+      "node_id": "demo.decode.unicode",
+      "name": "unicode \u00b7 NFD",
       "params": {
-        "strategy": "lenient"
+        "form": "NFD"
       }
     },
     {
-      "id": "demo.canonicalize.schema_mapper.inferred.fb02f3a7",
-      "node_id": "demo.canonicalize.schema_mapper",
-      "name": "schema mapper \u00b7 inferred",
-      "params": {
-        "strategy": "inferred"
-      }
+      "id": "demo.decode.passthrough",
+      "node_id": "demo.decode.passthrough",
+      "name": "passthrough",
+      "tags": [
+        "pass-through"
+      ]
     },
     {
-      "id": "demo.canonicalize.unit_metric",
-      "node_id": "demo.canonicalize.unit_metric",
-      "name": "unit metric"
-    },
-    {
-      "id": "demo.canonicalize.unit_imperial",
-      "node_id": "demo.canonicalize.unit_imperial",
-      "name": "unit imperial"
-    },
-    {
-      "id": "demo.canonicalize.encoding_chardet",
-      "node_id": "demo.canonicalize.encoding_chardet",
-      "name": "encoding chardet"
-    },
-    {
-      "id": "demo.canonicalize.encoding_bom",
-      "node_id": "demo.canonicalize.encoding_bom",
-      "name": "encoding bom"
-    },
-    {
-      "id": "demo.canonicalize.format_parser.json.61dc29a0",
-      "node_id": "demo.canonicalize.format_parser",
-      "name": "format parser \u00b7 json",
+      "id": "demo.parse.format.json.6fe77dbc",
+      "node_id": "demo.parse.format",
+      "name": "format \u00b7 json",
       "params": {
         "format": "json"
       }
     },
     {
-      "id": "demo.canonicalize.format_parser.csv.7eb7a319",
-      "node_id": "demo.canonicalize.format_parser",
-      "name": "format parser \u00b7 csv",
+      "id": "demo.parse.format.csv.a8650080",
+      "node_id": "demo.parse.format",
+      "name": "format \u00b7 csv",
       "params": {
         "format": "csv"
       }
     },
     {
-      "id": "demo.canonicalize.format_parser.xml.dd052a3a",
-      "node_id": "demo.canonicalize.format_parser",
-      "name": "format parser \u00b7 xml",
+      "id": "demo.parse.format.xml.f93bad96",
+      "node_id": "demo.parse.format",
+      "name": "format \u00b7 xml",
       "params": {
         "format": "xml"
       }
     },
     {
-      "id": "demo.canonicalize.format_parser.yaml.b0d363f5",
-      "node_id": "demo.canonicalize.format_parser",
-      "name": "format parser \u00b7 yaml",
+      "id": "demo.parse.format.yaml.623a098a",
+      "node_id": "demo.parse.format",
+      "name": "format \u00b7 yaml",
       "params": {
         "format": "yaml"
       }
     },
     {
-      "id": "demo.canonicalize.identity_resolver.natural.2477b2b9",
-      "node_id": "demo.canonicalize.identity_resolver",
-      "name": "identity resolver \u00b7 natural",
-      "params": {
-        "key": "natural"
-      }
-    },
-    {
-      "id": "demo.canonicalize.identity_resolver.surrogate.b30a0f13",
-      "node_id": "demo.canonicalize.identity_resolver",
-      "name": "identity resolver \u00b7 surrogate",
-      "params": {
-        "key": "surrogate"
-      }
-    },
-    {
-      "id": "demo.canonicalize.identity_resolver.composite.30f77fb4",
-      "node_id": "demo.canonicalize.identity_resolver",
-      "name": "identity resolver \u00b7 composite",
-      "params": {
-        "key": "composite"
-      }
-    },
-    {
-      "id": "demo.canonicalize.table_canonicalizer.first-row.a70894da",
-      "node_id": "demo.canonicalize.table_canonicalizer",
-      "name": "table canonicalizer \u00b7 first-row",
+      "id": "demo.parse.table.first-row.8c789915",
+      "node_id": "demo.parse.table",
+      "name": "table \u00b7 first-row",
       "params": {
         "headers": "first-row"
       }
     },
     {
-      "id": "demo.canonicalize.table_canonicalizer.declared.5f2f8377",
-      "node_id": "demo.canonicalize.table_canonicalizer",
-      "name": "table canonicalizer \u00b7 declared",
+      "id": "demo.parse.table.declared.a36ceb19",
+      "node_id": "demo.parse.table",
+      "name": "table \u00b7 declared",
       "params": {
         "headers": "declared"
       }
     },
     {
-      "id": "demo.canonicalize.table_canonicalizer.inferred.ac5137f6",
-      "node_id": "demo.canonicalize.table_canonicalizer",
-      "name": "table canonicalizer \u00b7 inferred",
+      "id": "demo.parse.table.inferred.8c72a3cf",
+      "node_id": "demo.parse.table",
+      "name": "table \u00b7 inferred",
       "params": {
         "headers": "inferred"
       }
     },
     {
-      "id": "demo.canonicalize.locale_normalizer.en-us.51a3c39a",
-      "node_id": "demo.canonicalize.locale_normalizer",
-      "name": "locale normalizer \u00b7 en-US",
+      "id": "demo.parse.tolerant",
+      "node_id": "demo.parse.tolerant",
+      "name": "tolerant"
+    },
+    {
+      "id": "demo.parse.model.gemini.ba1c4b6a",
+      "node_id": "demo.parse.model",
+      "name": "model \u00b7 Gemini",
+      "params": {
+        "model": "Gemini"
+      }
+    },
+    {
+      "id": "demo.parse.model.deepseek.9bba6336",
+      "node_id": "demo.parse.model",
+      "name": "model \u00b7 DeepSeek",
+      "params": {
+        "model": "DeepSeek"
+      }
+    },
+    {
+      "id": "demo.parse.model.glm.95a90ac9",
+      "node_id": "demo.parse.model",
+      "name": "model \u00b7 GLM",
+      "params": {
+        "model": "GLM"
+      }
+    },
+    {
+      "id": "demo.normalize.units.metric.28d4f4ce",
+      "node_id": "demo.normalize.units",
+      "name": "units \u00b7 metric",
+      "params": {
+        "system": "metric"
+      }
+    },
+    {
+      "id": "demo.normalize.units.imperial.12db79f9",
+      "node_id": "demo.normalize.units",
+      "name": "units \u00b7 imperial",
+      "params": {
+        "system": "imperial"
+      }
+    },
+    {
+      "id": "demo.normalize.locale.en-us.68aa3aea",
+      "node_id": "demo.normalize.locale",
+      "name": "locale \u00b7 en-US",
       "params": {
         "locale": "en-US"
       }
     },
     {
-      "id": "demo.canonicalize.locale_normalizer.en-gb.910aa7ce",
-      "node_id": "demo.canonicalize.locale_normalizer",
-      "name": "locale normalizer \u00b7 en-GB",
+      "id": "demo.normalize.locale.en-gb.fcbb3d2c",
+      "node_id": "demo.normalize.locale",
+      "name": "locale \u00b7 en-GB",
       "params": {
         "locale": "en-GB"
       }
     },
     {
-      "id": "demo.canonicalize.locale_normalizer.de-de.528ee685",
-      "node_id": "demo.canonicalize.locale_normalizer",
-      "name": "locale normalizer \u00b7 de-DE",
+      "id": "demo.normalize.locale.de-de.9c50d5c0",
+      "node_id": "demo.normalize.locale",
+      "name": "locale \u00b7 de-DE",
       "params": {
         "locale": "de-DE"
       }
     },
     {
-      "id": "demo.canonicalize.passthrough",
-      "node_id": "demo.canonicalize.passthrough",
+      "id": "demo.normalize.identity.natural.16b1e59b",
+      "node_id": "demo.normalize.identity",
+      "name": "identity \u00b7 natural",
+      "params": {
+        "key": "natural"
+      }
+    },
+    {
+      "id": "demo.normalize.identity.surrogate.73813150",
+      "node_id": "demo.normalize.identity",
+      "name": "identity \u00b7 surrogate",
+      "params": {
+        "key": "surrogate"
+      }
+    },
+    {
+      "id": "demo.normalize.identity.composite.4533d1a8",
+      "node_id": "demo.normalize.identity",
+      "name": "identity \u00b7 composite",
+      "params": {
+        "key": "composite"
+      }
+    },
+    {
+      "id": "demo.normalize.schema.strict.018cc9a6",
+      "node_id": "demo.normalize.schema",
+      "name": "schema \u00b7 strict",
+      "params": {
+        "strategy": "strict"
+      }
+    },
+    {
+      "id": "demo.normalize.schema.lenient.e786b14f",
+      "node_id": "demo.normalize.schema",
+      "name": "schema \u00b7 lenient",
+      "params": {
+        "strategy": "lenient"
+      }
+    },
+    {
+      "id": "demo.normalize.schema.inferred.00ebbccf",
+      "node_id": "demo.normalize.schema",
+      "name": "schema \u00b7 inferred",
+      "params": {
+        "strategy": "inferred"
+      }
+    },
+    {
+      "id": "demo.normalize.passthrough",
+      "node_id": "demo.normalize.passthrough",
       "name": "passthrough",
       "tags": [
         "pass-through"
       ]
     },
     {
-      "id": "demo.enrich.context_joiner.inner.f8ebf160",
-      "node_id": "demo.enrich.context_joiner",
-      "name": "context joiner \u00b7 inner",
+      "id": "demo.plan.none",
+      "node_id": "demo.plan.none",
+      "name": "none",
+      "tags": [
+        "pass-through"
+      ]
+    },
+    {
+      "id": "demo.plan.rules",
+      "node_id": "demo.plan.rules",
+      "name": "rules"
+    },
+    {
+      "id": "demo.plan.retrieval.bm25.a820e40d",
+      "node_id": "demo.plan.retrieval",
+      "name": "retrieval \u00b7 bm25",
       "params": {
-        "join": "inner"
+        "ranking": "bm25"
       }
     },
     {
-      "id": "demo.enrich.context_joiner.left.45f3d727",
-      "node_id": "demo.enrich.context_joiner",
-      "name": "context joiner \u00b7 left",
+      "id": "demo.plan.retrieval.embedding.4c0ca6c4",
+      "node_id": "demo.plan.retrieval",
+      "name": "retrieval \u00b7 embedding",
       "params": {
-        "join": "left"
+        "ranking": "embedding"
       }
     },
     {
-      "id": "demo.enrich.context_joiner.fuzzy.f0b6ecb8",
-      "node_id": "demo.enrich.context_joiner",
-      "name": "context joiner \u00b7 fuzzy",
+      "id": "demo.plan.retrieval.hybrid.13679b77",
+      "node_id": "demo.plan.retrieval",
+      "name": "retrieval \u00b7 hybrid",
       "params": {
-        "join": "fuzzy"
+        "ranking": "hybrid"
       }
     },
     {
-      "id": "demo.enrich.reference_lookup.internal.7bcdbdbd",
-      "node_id": "demo.enrich.reference_lookup",
-      "name": "reference lookup \u00b7 internal",
+      "id": "demo.attach.reference.internal.a4942519",
+      "node_id": "demo.attach.reference",
+      "name": "reference \u00b7 internal",
       "params": {
         "source": "internal"
       }
     },
     {
-      "id": "demo.enrich.reference_lookup.external.46429466",
-      "node_id": "demo.enrich.reference_lookup",
-      "name": "reference lookup \u00b7 external",
+      "id": "demo.attach.reference.external.84f8b948",
+      "node_id": "demo.attach.reference",
+      "name": "reference \u00b7 external",
       "params": {
         "source": "external"
       }
     },
     {
-      "id": "demo.enrich.embedding_enricher.small.d6798da8",
-      "node_id": "demo.enrich.embedding_enricher",
-      "name": "embedding enricher \u00b7 small",
+      "id": "demo.attach.embedding.small.9c26c41e",
+      "node_id": "demo.attach.embedding",
+      "name": "embedding \u00b7 small",
       "params": {
         "model": "small"
       }
     },
     {
-      "id": "demo.enrich.embedding_enricher.base.4054f14c",
-      "node_id": "demo.enrich.embedding_enricher",
-      "name": "embedding enricher \u00b7 base",
+      "id": "demo.attach.embedding.base.0233fd38",
+      "node_id": "demo.attach.embedding",
+      "name": "embedding \u00b7 base",
       "params": {
         "model": "base"
       }
     },
     {
-      "id": "demo.enrich.embedding_enricher.large.66a187e7",
-      "node_id": "demo.enrich.embedding_enricher",
-      "name": "embedding enricher \u00b7 large",
+      "id": "demo.attach.embedding.large.ae5325f7",
+      "node_id": "demo.attach.embedding",
+      "name": "embedding \u00b7 large",
       "params": {
         "model": "large"
       }
     },
     {
-      "id": "demo.enrich.provenance_stamper",
-      "node_id": "demo.enrich.provenance_stamper",
-      "name": "provenance stamper"
+      "id": "demo.attach.provenance",
+      "node_id": "demo.attach.provenance",
+      "name": "provenance"
     },
     {
-      "id": "demo.enrich.freshness_ttl",
-      "node_id": "demo.enrich.freshness_ttl",
-      "name": "freshness ttl"
+      "id": "demo.attach.freshness.ttl.6a23c731",
+      "node_id": "demo.attach.freshness",
+      "name": "freshness \u00b7 ttl",
+      "params": {
+        "policy": "ttl"
+      }
     },
     {
-      "id": "demo.enrich.freshness_etag",
-      "node_id": "demo.enrich.freshness_etag",
-      "name": "freshness etag"
+      "id": "demo.attach.freshness.etag.4e8e920a",
+      "node_id": "demo.attach.freshness",
+      "name": "freshness \u00b7 etag",
+      "params": {
+        "policy": "etag"
+      }
     },
     {
-      "id": "demo.enrich.geocoder",
-      "node_id": "demo.enrich.geocoder",
-      "name": "geocoder"
+      "id": "demo.attach.geocode",
+      "node_id": "demo.attach.geocode",
+      "name": "geocode"
     },
     {
-      "id": "demo.enrich.passthrough",
-      "node_id": "demo.enrich.passthrough",
-      "name": "passthrough",
-      "tags": [
-        "pass-through"
-      ]
+      "id": "demo.locate.selector",
+      "node_id": "demo.locate.selector",
+      "name": "selector"
     },
     {
-      "id": "demo.transform.deterministic_rules.conservative.edeb0b14",
-      "node_id": "demo.transform.deterministic_rules",
-      "name": "deterministic rules \u00b7 conservative",
+      "id": "demo.locate.heuristic.nearest-label.0ca22a93",
+      "node_id": "demo.locate.heuristic",
+      "name": "heuristic \u00b7 nearest-label",
+      "params": {
+        "strategy": "nearest-label"
+      }
+    },
+    {
+      "id": "demo.locate.heuristic.role.8ae59c87",
+      "node_id": "demo.locate.heuristic",
+      "name": "heuristic \u00b7 role",
+      "params": {
+        "strategy": "role"
+      }
+    },
+    {
+      "id": "demo.locate.heuristic.text.7c7e4ed0",
+      "node_id": "demo.locate.heuristic",
+      "name": "heuristic \u00b7 text",
+      "params": {
+        "strategy": "text"
+      }
+    },
+    {
+      "id": "demo.locate.vision",
+      "node_id": "demo.locate.vision",
+      "name": "vision"
+    },
+    {
+      "id": "demo.locate.recorded",
+      "node_id": "demo.locate.recorded",
+      "name": "recorded"
+    },
+    {
+      "id": "demo.act.rules.conservative.8aae95f9",
+      "node_id": "demo.act.rules",
+      "name": "rules \u00b7 conservative",
       "params": {
         "ruleset": "conservative"
       }
     },
     {
-      "id": "demo.transform.deterministic_rules.aggressive.0686452c",
-      "node_id": "demo.transform.deterministic_rules",
-      "name": "deterministic rules \u00b7 aggressive",
+      "id": "demo.act.rules.aggressive.09678d32",
+      "node_id": "demo.act.rules",
+      "name": "rules \u00b7 aggressive",
       "params": {
         "ruleset": "aggressive"
       }
     },
     {
-      "id": "demo.transform.llm_parser.gemini.single-schema.c1f4d978",
-      "node_id": "demo.transform.llm_parser",
-      "name": "llm parser \u00b7 Gemini \u00b7 single-schema",
+      "id": "demo.act.model.gemini.single-schema.524960f3",
+      "node_id": "demo.act.model",
+      "name": "model \u00b7 Gemini \u00b7 single-schema",
       "params": {
         "model": "Gemini",
         "strategy": "single-schema"
       }
     },
     {
-      "id": "demo.transform.llm_parser.gemini.field-by-field.c294af8f",
-      "node_id": "demo.transform.llm_parser",
-      "name": "llm parser \u00b7 Gemini \u00b7 field-by-field",
+      "id": "demo.act.model.gemini.field-by-field.a1f650ec",
+      "node_id": "demo.act.model",
+      "name": "model \u00b7 Gemini \u00b7 field-by-field",
       "params": {
         "model": "Gemini",
         "strategy": "field-by-field"
       }
     },
     {
-      "id": "demo.transform.llm_parser.deepseek.single-schema.4ea72f4c",
-      "node_id": "demo.transform.llm_parser",
-      "name": "llm parser \u00b7 DeepSeek \u00b7 single-schema",
+      "id": "demo.act.model.deepseek.single-schema.728b8b68",
+      "node_id": "demo.act.model",
+      "name": "model \u00b7 DeepSeek \u00b7 single-schema",
       "params": {
         "model": "DeepSeek",
         "strategy": "single-schema"
       }
     },
     {
-      "id": "demo.transform.llm_parser.deepseek.field-by-field.e6cbbbe5",
-      "node_id": "demo.transform.llm_parser",
-      "name": "llm parser \u00b7 DeepSeek \u00b7 field-by-field",
+      "id": "demo.act.model.deepseek.field-by-field.f912e481",
+      "node_id": "demo.act.model",
+      "name": "model \u00b7 DeepSeek \u00b7 field-by-field",
       "params": {
         "model": "DeepSeek",
         "strategy": "field-by-field"
       }
     },
     {
-      "id": "demo.transform.llm_parser.glm.single-schema.37e19864",
-      "node_id": "demo.transform.llm_parser",
-      "name": "llm parser \u00b7 GLM \u00b7 single-schema",
+      "id": "demo.act.model.glm.single-schema.e59a44e1",
+      "node_id": "demo.act.model",
+      "name": "model \u00b7 GLM \u00b7 single-schema",
       "params": {
         "model": "GLM",
         "strategy": "single-schema"
       }
     },
     {
-      "id": "demo.transform.llm_parser.glm.field-by-field.7cc976f3",
-      "node_id": "demo.transform.llm_parser",
-      "name": "llm parser \u00b7 GLM \u00b7 field-by-field",
+      "id": "demo.act.model.glm.field-by-field.1697d91e",
+      "node_id": "demo.act.model",
+      "name": "model \u00b7 GLM \u00b7 field-by-field",
       "params": {
         "model": "GLM",
         "strategy": "field-by-field"
       }
     },
     {
-      "id": "demo.transform.statistical_model.linear.54cc921b",
-      "node_id": "demo.transform.statistical_model",
-      "name": "statistical model \u00b7 linear",
+      "id": "demo.act.statistical.linear.f365d2a0",
+      "node_id": "demo.act.statistical",
+      "name": "statistical \u00b7 linear",
       "params": {
         "family": "linear"
       }
     },
     {
-      "id": "demo.transform.statistical_model.tree.dbb904f7",
-      "node_id": "demo.transform.statistical_model",
-      "name": "statistical model \u00b7 tree",
+      "id": "demo.act.statistical.tree.acad4637",
+      "node_id": "demo.act.statistical",
+      "name": "statistical \u00b7 tree",
       "params": {
         "family": "tree"
       }
     },
     {
-      "id": "demo.transform.composite.rules-llm.c20cf6f5",
-      "node_id": "demo.transform.composite",
-      "name": "composite \u00b7 rules+llm",
-      "params": {
-        "children": "rules+llm"
-      }
-    },
-    {
-      "id": "demo.transform.composite.rules-model.aa7bc6b4",
-      "node_id": "demo.transform.composite",
+      "id": "demo.act.composite.rules-model.c54145e6",
+      "node_id": "demo.act.composite",
       "name": "composite \u00b7 rules+model",
       "params": {
         "children": "rules+model"
       }
     },
     {
-      "id": "demo.transform.human_operator",
-      "node_id": "demo.transform.human_operator",
-      "name": "human operator"
+      "id": "demo.act.composite.rules-statistical.f962bfac",
+      "node_id": "demo.act.composite",
+      "name": "composite \u00b7 rules+statistical",
+      "params": {
+        "children": "rules+statistical"
+      }
     },
     {
-      "id": "demo.transform.browser_action",
-      "node_id": "demo.transform.browser_action",
-      "name": "browser action"
+      "id": "demo.act.browser",
+      "node_id": "demo.act.browser",
+      "name": "browser"
     },
     {
-      "id": "demo.verify.schema_json",
-      "node_id": "demo.verify.schema_json",
-      "name": "schema json"
+      "id": "demo.act.human",
+      "node_id": "demo.act.human",
+      "name": "human"
     },
     {
-      "id": "demo.verify.schema_typed",
-      "node_id": "demo.verify.schema_typed",
-      "name": "schema typed"
+      "id": "demo.shape.json_schema",
+      "node_id": "demo.shape.json_schema",
+      "name": "json schema"
     },
     {
-      "id": "demo.verify.oracle.reference-data.09137280",
-      "node_id": "demo.verify.oracle",
+      "id": "demo.shape.typed",
+      "node_id": "demo.shape.typed",
+      "name": "typed"
+    },
+    {
+      "id": "demo.shape.invariants",
+      "node_id": "demo.shape.invariants",
+      "name": "invariants"
+    },
+    {
+      "id": "demo.independent.oracle.reference-data.627dc70b",
+      "node_id": "demo.independent.oracle",
       "name": "oracle \u00b7 reference-data",
       "params": {
         "oracle": "reference-data"
       }
     },
     {
-      "id": "demo.verify.oracle.recomputation.844b8e66",
-      "node_id": "demo.verify.oracle",
+      "id": "demo.independent.oracle.recomputation.4a4e1683",
+      "node_id": "demo.independent.oracle",
       "name": "oracle \u00b7 recomputation",
       "params": {
         "oracle": "recomputation"
       }
     },
     {
-      "id": "demo.verify.consensus.unanimous.adaa2e59",
-      "node_id": "demo.verify.consensus",
+      "id": "demo.independent.consensus.unanimous.49599120",
+      "node_id": "demo.independent.consensus",
       "name": "consensus \u00b7 unanimous",
       "params": {
         "rule": "unanimous"
       }
     },
     {
-      "id": "demo.verify.consensus.majority.932f8596",
-      "node_id": "demo.verify.consensus",
+      "id": "demo.independent.consensus.majority.2ab5d86b",
+      "node_id": "demo.independent.consensus",
       "name": "consensus \u00b7 majority",
       "params": {
         "rule": "majority"
       }
     },
     {
-      "id": "demo.verify.consensus.weighted.513ff31a",
-      "node_id": "demo.verify.consensus",
+      "id": "demo.independent.consensus.weighted.06864205",
+      "node_id": "demo.independent.consensus",
       "name": "consensus \u00b7 weighted",
       "params": {
         "rule": "weighted"
       }
     },
     {
-      "id": "demo.verify.human_review",
-      "node_id": "demo.verify.human_review",
-      "name": "human review"
+      "id": "demo.independent.human",
+      "node_id": "demo.independent.human",
+      "name": "human"
     },
     {
-      "id": "demo.verify.visual_diff",
-      "node_id": "demo.verify.visual_diff",
-      "name": "visual diff"
+      "id": "demo.independent.visual",
+      "node_id": "demo.independent.visual",
+      "name": "visual"
     },
     {
-      "id": "demo.verify.ocr_check.rapidocr.ed28bda9",
-      "node_id": "demo.verify.ocr_check",
-      "name": "ocr check \u00b7 rapidocr",
+      "id": "demo.independent.ocr.rapidocr.c0d25c4c",
+      "node_id": "demo.independent.ocr",
+      "name": "ocr \u00b7 rapidocr",
       "params": {
         "backend": "rapidocr"
       }
     },
     {
-      "id": "demo.verify.ocr_check.tesseract.e437fbf8",
-      "node_id": "demo.verify.ocr_check",
-      "name": "ocr check \u00b7 tesseract",
+      "id": "demo.independent.ocr.tesseract.7cbac48f",
+      "node_id": "demo.independent.ocr",
+      "name": "ocr \u00b7 tesseract",
       "params": {
         "backend": "tesseract"
       }
     },
     {
-      "id": "demo.emit.file_json",
-      "node_id": "demo.emit.file_json",
-      "name": "file json"
-    },
-    {
-      "id": "demo.emit.file_columnar",
-      "node_id": "demo.emit.file_columnar",
-      "name": "file columnar"
-    },
-    {
-      "id": "demo.emit.api_publisher.at-least-once.f3328466",
-      "node_id": "demo.emit.api_publisher",
-      "name": "api publisher \u00b7 at-least-once",
+      "id": "demo.persist.file.json.0dbc9548",
+      "node_id": "demo.persist.file",
+      "name": "file \u00b7 json",
       "params": {
-        "delivery": "at-least-once"
+        "format": "json"
       }
     },
     {
-      "id": "demo.emit.api_publisher.exactly-once.3961c5ed",
-      "node_id": "demo.emit.api_publisher",
-      "name": "api publisher \u00b7 exactly-once",
+      "id": "demo.persist.file.columnar.5f9df947",
+      "node_id": "demo.persist.file",
+      "name": "file \u00b7 columnar",
       "params": {
-        "delivery": "exactly-once"
+        "format": "columnar"
       }
     },
     {
-      "id": "demo.emit.database_writer.append.7741c055",
-      "node_id": "demo.emit.database_writer",
-      "name": "database writer \u00b7 append",
+      "id": "demo.persist.database.append.55f09f96",
+      "node_id": "demo.persist.database",
+      "name": "database \u00b7 append",
       "params": {
         "mode": "append"
       }
     },
     {
-      "id": "demo.emit.database_writer.upsert.4de1eedc",
-      "node_id": "demo.emit.database_writer",
-      "name": "database writer \u00b7 upsert",
+      "id": "demo.persist.database.upsert.2c758294",
+      "node_id": "demo.persist.database",
+      "name": "database \u00b7 upsert",
       "params": {
         "mode": "upsert"
       }
     },
     {
-      "id": "demo.emit.evidence_bundler",
-      "node_id": "demo.emit.evidence_bundler",
-      "name": "evidence bundler"
+      "id": "demo.persist.publish.at-least-once.65609016",
+      "node_id": "demo.persist.publish",
+      "name": "publish \u00b7 at-least-once",
+      "params": {
+        "delivery": "at-least-once"
+      }
     },
     {
-      "id": "demo.emit.notifier",
-      "node_id": "demo.emit.notifier",
-      "name": "notifier"
+      "id": "demo.persist.publish.exactly-once.4c67c50f",
+      "node_id": "demo.persist.publish",
+      "name": "publish \u00b7 exactly-once",
+      "params": {
+        "delivery": "exactly-once"
+      }
+    },
+    {
+      "id": "demo.persist.memory",
+      "node_id": "demo.persist.memory",
+      "name": "memory"
+    },
+    {
+      "id": "demo.receipt.bundle.summary.3c3e5fcd",
+      "node_id": "demo.receipt.bundle",
+      "name": "bundle \u00b7 summary",
+      "params": {
+        "detail": "summary"
+      }
+    },
+    {
+      "id": "demo.receipt.bundle.full.b8a1dc48",
+      "node_id": "demo.receipt.bundle",
+      "name": "bundle \u00b7 full",
+      "params": {
+        "detail": "full"
+      }
+    },
+    {
+      "id": "demo.receipt.checkpoint",
+      "node_id": "demo.receipt.checkpoint",
+      "name": "checkpoint"
+    },
+    {
+      "id": "demo.receipt.notify",
+      "node_id": "demo.receipt.notify",
+      "name": "notify"
     }
   ],
   "stages": [
@@ -3459,86 +4007,126 @@
         "display",
         "transport"
       ],
-      "required_capabilities": [
-        "acquire"
-      ],
-      "candidates": [
-        "demo.acquire.browser_adapter.chrome.browserport.headless.02013536",
-        "demo.acquire.browser_adapter.chrome.browserport.headed.284863cb",
-        "demo.acquire.browser_adapter.chromium.browserport.headless.ad62b5ee",
-        "demo.acquire.browser_adapter.chromium.browserport.headed.eb97ce14",
-        "demo.acquire.browser_adapter.edge.browserport.headless.ff1cdf67",
-        "demo.acquire.browser_adapter.edge.browserport.headed.d3497d86",
-        "demo.acquire.browser_adapter.firefox.browserport.headless.2d92d84b",
-        "demo.acquire.browser_adapter.firefox.browserport.headed.382a54da",
-        "demo.acquire.browser_adapter.webkit.browserport.headless.eee81e7d",
-        "demo.acquire.browser_adapter.webkit.browserport.headed.acb96ce8",
-        "demo.acquire.browser_adapter.brave.browserport.headless.45013e6e",
-        "demo.acquire.browser_adapter.brave.browserport.headed.2e59efe5",
-        "demo.acquire.browser_adapter.chrome.playwright.headless.11b2e04d",
-        "demo.acquire.browser_adapter.chrome.playwright.headed.9f4e703f",
-        "demo.acquire.browser_adapter.chromium.playwright.headless.f918e9ee",
-        "demo.acquire.browser_adapter.chromium.playwright.headed.bdb4e881",
-        "demo.acquire.browser_adapter.edge.playwright.headless.fd1d93c6",
-        "demo.acquire.browser_adapter.edge.playwright.headed.a0092eca",
-        "demo.acquire.browser_adapter.firefox.playwright.headless.22984131",
-        "demo.acquire.browser_adapter.firefox.playwright.headed.19939504",
-        "demo.acquire.browser_adapter.webkit.playwright.headless.11758c0d",
-        "demo.acquire.browser_adapter.webkit.playwright.headed.d0410ba1",
-        "demo.acquire.browser_adapter.brave.playwright.headless.bfd125bd",
-        "demo.acquire.browser_adapter.brave.playwright.headed.dafcdda4",
-        "demo.acquire.browser_adapter.chrome.selenium.headless.525d7325",
-        "demo.acquire.browser_adapter.chrome.selenium.headed.5469438c",
-        "demo.acquire.browser_adapter.chromium.selenium.headless.ad5a26e9",
-        "demo.acquire.browser_adapter.chromium.selenium.headed.89acd76a",
-        "demo.acquire.browser_adapter.edge.selenium.headless.608bb3e7",
-        "demo.acquire.browser_adapter.edge.selenium.headed.4ed816ca",
-        "demo.acquire.browser_adapter.firefox.selenium.headless.5c20979d",
-        "demo.acquire.browser_adapter.firefox.selenium.headed.2cd57496",
-        "demo.acquire.browser_adapter.webkit.selenium.headless.13e11106",
-        "demo.acquire.browser_adapter.webkit.selenium.headed.1552c0f5",
-        "demo.acquire.browser_adapter.brave.selenium.headless.801d4f99",
-        "demo.acquire.browser_adapter.brave.selenium.headed.d5f0847d",
-        "demo.acquire.browser_adapter.chrome.puppeteer.headless.009ca7e8",
-        "demo.acquire.browser_adapter.chrome.puppeteer.headed.a9bbe5d3",
-        "demo.acquire.browser_adapter.chromium.puppeteer.headless.cb477762",
-        "demo.acquire.browser_adapter.chromium.puppeteer.headed.f1335ac8",
-        "demo.acquire.browser_adapter.edge.puppeteer.headless.aeca0b0c",
-        "demo.acquire.browser_adapter.edge.puppeteer.headed.e7e4fae1",
-        "demo.acquire.browser_adapter.firefox.puppeteer.headless.769aa5fc",
-        "demo.acquire.browser_adapter.firefox.puppeteer.headed.8f78d442",
-        "demo.acquire.browser_adapter.webkit.puppeteer.headless.b200a1d5",
-        "demo.acquire.browser_adapter.webkit.puppeteer.headed.0445ddf3",
-        "demo.acquire.browser_adapter.brave.puppeteer.headless.41223f3f",
-        "demo.acquire.browser_adapter.brave.puppeteer.headed.80df8067",
-        "demo.acquire.browser_adapter.chrome.cdp.headless.7b3d2d1a",
-        "demo.acquire.browser_adapter.chrome.cdp.headed.bf606d79",
-        "demo.acquire.browser_adapter.chromium.cdp.headless.dcb84e01",
-        "demo.acquire.browser_adapter.chromium.cdp.headed.b5f730a4",
-        "demo.acquire.browser_adapter.edge.cdp.headless.1018c1fd",
-        "demo.acquire.browser_adapter.edge.cdp.headed.8ccf465d",
-        "demo.acquire.browser_adapter.firefox.cdp.headless.c2301d7d",
-        "demo.acquire.browser_adapter.firefox.cdp.headed.c06b076b",
-        "demo.acquire.browser_adapter.webkit.cdp.headless.eac28b36",
-        "demo.acquire.browser_adapter.webkit.cdp.headed.d9646df0",
-        "demo.acquire.browser_adapter.brave.cdp.headless.1be4a10d",
-        "demo.acquire.browser_adapter.brave.cdp.headed.6313c7b2",
-        "demo.acquire.file_loader.file.7623f426",
-        "demo.acquire.file_loader.directory.acf57694",
-        "demo.acquire.file_loader.glob.27bbb52a",
-        "demo.acquire.api_loader.get.78b22e42",
-        "demo.acquire.api_loader.post.34eba557",
-        "demo.acquire.api_loader.put.ad214c53",
-        "demo.acquire.database_loader.postgres.c03717ca",
-        "demo.acquire.database_loader.mysql.bb783976",
-        "demo.acquire.database_loader.sqlite.cd9207b6",
-        "demo.acquire.database_loader.bigquery.1e1d27ee",
-        "demo.acquire.queue_kafka",
-        "demo.acquire.queue_sqs",
-        "demo.acquire.stream_http",
-        "demo.acquire.stream_websocket",
-        "demo.acquire.archive_zip",
-        "demo.acquire.archive_tar"
+      "substages": [
+        {
+          "id": "resolve",
+          "name": "Resolve target",
+          "description": "Turn the reference into an authorized, concrete target.",
+          "input_type": "TaskReference",
+          "output_type": "ResolvedTarget",
+          "success": "the target is concrete and authorized",
+          "required_capabilities": [
+            "resolve"
+          ],
+          "candidates": [
+            "demo.resolve.literal",
+            "demo.resolve.template.strict.8802fb2f",
+            "demo.resolve.template.lenient.6de9ec86",
+            "demo.resolve.directory"
+          ]
+        },
+        {
+          "id": "session",
+          "name": "Open session",
+          "description": "Open something capable of fetching that target.",
+          "input_type": "ResolvedTarget",
+          "output_type": "OpenSession",
+          "success": "a session exists and is usable",
+          "required_capabilities": [
+            "session"
+          ],
+          "candidates": [
+            "demo.session.browser.chrome.browserport.headless.5b950ef5",
+            "demo.session.browser.chrome.browserport.headed.cdd12df9",
+            "demo.session.browser.chromium.browserport.headless.5bb38c38",
+            "demo.session.browser.chromium.browserport.headed.52a5c9a7",
+            "demo.session.browser.edge.browserport.headless.9ac872b7",
+            "demo.session.browser.edge.browserport.headed.414bfb9b",
+            "demo.session.browser.firefox.browserport.headless.6c5fe25f",
+            "demo.session.browser.firefox.browserport.headed.fa250942",
+            "demo.session.browser.webkit.browserport.headless.d04bb699",
+            "demo.session.browser.webkit.browserport.headed.fb3443c7",
+            "demo.session.browser.brave.browserport.headless.8c69e70b",
+            "demo.session.browser.brave.browserport.headed.ebf2266c",
+            "demo.session.browser.chrome.playwright.headless.6cb0bdac",
+            "demo.session.browser.chrome.playwright.headed.fdd2ae1b",
+            "demo.session.browser.chromium.playwright.headless.648a65ee",
+            "demo.session.browser.chromium.playwright.headed.ab0d4fa1",
+            "demo.session.browser.edge.playwright.headless.bb9216f2",
+            "demo.session.browser.edge.playwright.headed.0a7f44d2",
+            "demo.session.browser.firefox.playwright.headless.7c49507d",
+            "demo.session.browser.firefox.playwright.headed.434a137b",
+            "demo.session.browser.webkit.playwright.headless.b016f221",
+            "demo.session.browser.webkit.playwright.headed.8b701695",
+            "demo.session.browser.brave.playwright.headless.0c6395b3",
+            "demo.session.browser.brave.playwright.headed.59d1baa8",
+            "demo.session.browser.chrome.selenium.headless.4736c125",
+            "demo.session.browser.chrome.selenium.headed.f5cf4ba2",
+            "demo.session.browser.chromium.selenium.headless.2f36574c",
+            "demo.session.browser.chromium.selenium.headed.4a12f8d0",
+            "demo.session.browser.edge.selenium.headless.184106bb",
+            "demo.session.browser.edge.selenium.headed.9cdddc92",
+            "demo.session.browser.firefox.selenium.headless.792e78cb",
+            "demo.session.browser.firefox.selenium.headed.9af38716",
+            "demo.session.browser.webkit.selenium.headless.a99fb360",
+            "demo.session.browser.webkit.selenium.headed.4e139d61",
+            "demo.session.browser.brave.selenium.headless.3b509bac",
+            "demo.session.browser.brave.selenium.headed.280e75bb",
+            "demo.session.browser.chrome.puppeteer.headless.0c5c5fd1",
+            "demo.session.browser.chrome.puppeteer.headed.e4b29656",
+            "demo.session.browser.chromium.puppeteer.headless.29755a7d",
+            "demo.session.browser.chromium.puppeteer.headed.b4130fc0",
+            "demo.session.browser.edge.puppeteer.headless.47efb6df",
+            "demo.session.browser.edge.puppeteer.headed.a2659d5d",
+            "demo.session.browser.firefox.puppeteer.headless.06ff75c8",
+            "demo.session.browser.firefox.puppeteer.headed.f79c17eb",
+            "demo.session.browser.webkit.puppeteer.headless.d9ee7772",
+            "demo.session.browser.webkit.puppeteer.headed.adb4e427",
+            "demo.session.browser.brave.puppeteer.headless.4b1de48f",
+            "demo.session.browser.brave.puppeteer.headed.4147534a",
+            "demo.session.browser.chrome.cdp.headless.8c268bb3",
+            "demo.session.browser.chrome.cdp.headed.5449b15b",
+            "demo.session.browser.chromium.cdp.headless.525d5f90",
+            "demo.session.browser.chromium.cdp.headed.2fc9a88e",
+            "demo.session.browser.edge.cdp.headless.d2cd01b1",
+            "demo.session.browser.edge.cdp.headed.319216dd",
+            "demo.session.browser.firefox.cdp.headless.b85361b2",
+            "demo.session.browser.firefox.cdp.headed.7a958eec",
+            "demo.session.browser.webkit.cdp.headless.e593fae0",
+            "demo.session.browser.webkit.cdp.headed.1e9e8f95",
+            "demo.session.browser.brave.cdp.headless.6f475faa",
+            "demo.session.browser.brave.cdp.headed.7a1f5e08",
+            "demo.session.filesystem.file.341fc310",
+            "demo.session.filesystem.directory.3bc3ce67",
+            "demo.session.filesystem.glob.d61234b1",
+            "demo.session.http.none.62a9a496",
+            "demo.session.http.bounded.47bb2a12",
+            "demo.session.database.postgres.c121dc81",
+            "demo.session.database.mysql.60aa87c7",
+            "demo.session.database.sqlite.c242c041",
+            "demo.session.database.bigquery.4dc14c41",
+            "demo.session.queue"
+          ]
+        },
+        {
+          "id": "read",
+          "name": "Read payload",
+          "description": "Read a versioned, hashed payload out of the session.",
+          "input_type": "OpenSession",
+          "output_type": "InputHandle",
+          "success": "the payload is readable, identified and versioned",
+          "required_capabilities": [
+            "read"
+          ],
+          "candidates": [
+            "demo.read.whole",
+            "demo.read.streamed.fixed.71cc7d8e",
+            "demo.read.streamed.adaptive.5011dca8",
+            "demo.read.rendered.load.bc101bff",
+            "demo.read.rendered.network-idle.473b5050",
+            "demo.read.rendered.mutation-quiet.065e5fb5"
+          ]
+        }
       ]
     },
     {
@@ -3548,7 +4136,6 @@
       "input_type": "InputHandle",
       "output_type": "CanonicalState",
       "success": "downstream nodes receive a typed, versioned representation",
-      "optional": true,
       "variant_axes": [
         "format",
         "schema",
@@ -3556,37 +4143,77 @@
         "locale",
         "precision"
       ],
-      "required_capabilities": [
-        "canonicalize"
-      ],
-      "candidates": [
-        "demo.canonicalize.text_normalizer.preserve.nfc.4b139767",
-        "demo.canonicalize.text_normalizer.fold.nfc.39c799a2",
-        "demo.canonicalize.text_normalizer.preserve.nfkc.163f8c8a",
-        "demo.canonicalize.text_normalizer.fold.nfkc.b7cf3e3e",
-        "demo.canonicalize.text_normalizer.preserve.nfd.beb9cd70",
-        "demo.canonicalize.text_normalizer.fold.nfd.092f62f1",
-        "demo.canonicalize.schema_mapper.strict.d7d3cfad",
-        "demo.canonicalize.schema_mapper.lenient.db56168a",
-        "demo.canonicalize.schema_mapper.inferred.fb02f3a7",
-        "demo.canonicalize.unit_metric",
-        "demo.canonicalize.unit_imperial",
-        "demo.canonicalize.encoding_chardet",
-        "demo.canonicalize.encoding_bom",
-        "demo.canonicalize.format_parser.json.61dc29a0",
-        "demo.canonicalize.format_parser.csv.7eb7a319",
-        "demo.canonicalize.format_parser.xml.dd052a3a",
-        "demo.canonicalize.format_parser.yaml.b0d363f5",
-        "demo.canonicalize.identity_resolver.natural.2477b2b9",
-        "demo.canonicalize.identity_resolver.surrogate.b30a0f13",
-        "demo.canonicalize.identity_resolver.composite.30f77fb4",
-        "demo.canonicalize.table_canonicalizer.first-row.a70894da",
-        "demo.canonicalize.table_canonicalizer.declared.5f2f8377",
-        "demo.canonicalize.table_canonicalizer.inferred.ac5137f6",
-        "demo.canonicalize.locale_normalizer.en-us.51a3c39a",
-        "demo.canonicalize.locale_normalizer.en-gb.910aa7ce",
-        "demo.canonicalize.locale_normalizer.de-de.528ee685",
-        "demo.canonicalize.passthrough"
+      "substages": [
+        {
+          "id": "decode",
+          "name": "Decode bytes",
+          "description": "Establish the encoding and normal form.",
+          "input_type": "InputHandle",
+          "output_type": "DecodedText",
+          "success": "the text is decoded and in a declared normal form",
+          "optional": true,
+          "required_capabilities": [
+            "decode"
+          ],
+          "candidates": [
+            "demo.decode.bom",
+            "demo.decode.statistical",
+            "demo.decode.unicode.nfc.9577ef78",
+            "demo.decode.unicode.nfkc.695abb5a",
+            "demo.decode.unicode.nfd.73ca57a7",
+            "demo.decode.passthrough"
+          ]
+        },
+        {
+          "id": "parse",
+          "name": "Parse structure",
+          "description": "Recover records from the text.",
+          "input_type": "DecodedText",
+          "output_type": "ParsedRecords",
+          "success": "records exist, with every repair recorded",
+          "required_capabilities": [
+            "parse"
+          ],
+          "candidates": [
+            "demo.parse.format.json.6fe77dbc",
+            "demo.parse.format.csv.a8650080",
+            "demo.parse.format.xml.f93bad96",
+            "demo.parse.format.yaml.623a098a",
+            "demo.parse.table.first-row.8c789915",
+            "demo.parse.table.declared.a36ceb19",
+            "demo.parse.table.inferred.8c72a3cf",
+            "demo.parse.tolerant",
+            "demo.parse.model.gemini.ba1c4b6a",
+            "demo.parse.model.deepseek.9bba6336",
+            "demo.parse.model.glm.95a90ac9"
+          ]
+        },
+        {
+          "id": "normalize",
+          "name": "Normalize values",
+          "description": "Make schema, units, locale and identity explicit.",
+          "input_type": "ParsedRecords",
+          "output_type": "CanonicalState",
+          "success": "downstream nodes receive a typed, versioned representation",
+          "optional": true,
+          "required_capabilities": [
+            "normalize"
+          ],
+          "candidates": [
+            "demo.normalize.units.metric.28d4f4ce",
+            "demo.normalize.units.imperial.12db79f9",
+            "demo.normalize.locale.en-us.68aa3aea",
+            "demo.normalize.locale.en-gb.fcbb3d2c",
+            "demo.normalize.locale.de-de.9c50d5c0",
+            "demo.normalize.identity.natural.16b1e59b",
+            "demo.normalize.identity.surrogate.73813150",
+            "demo.normalize.identity.composite.4533d1a8",
+            "demo.normalize.schema.strict.018cc9a6",
+            "demo.normalize.schema.lenient.e786b14f",
+            "demo.normalize.schema.inferred.00ebbccf",
+            "demo.normalize.passthrough"
+          ]
+        }
       ]
     },
     {
@@ -3596,29 +4223,53 @@
       "input_type": "CanonicalState",
       "output_type": "EnrichedState",
       "success": "every derived field carries a source and a freshness stamp",
-      "optional": true,
       "variant_axes": [
         "source",
         "recency",
         "depth"
       ],
-      "required_capabilities": [
-        "enrich"
-      ],
-      "candidates": [
-        "demo.enrich.context_joiner.inner.f8ebf160",
-        "demo.enrich.context_joiner.left.45f3d727",
-        "demo.enrich.context_joiner.fuzzy.f0b6ecb8",
-        "demo.enrich.reference_lookup.internal.7bcdbdbd",
-        "demo.enrich.reference_lookup.external.46429466",
-        "demo.enrich.embedding_enricher.small.d6798da8",
-        "demo.enrich.embedding_enricher.base.4054f14c",
-        "demo.enrich.embedding_enricher.large.66a187e7",
-        "demo.enrich.provenance_stamper",
-        "demo.enrich.freshness_ttl",
-        "demo.enrich.freshness_etag",
-        "demo.enrich.geocoder",
-        "demo.enrich.passthrough"
+      "substages": [
+        {
+          "id": "plan",
+          "name": "Plan context",
+          "description": "Decide what additional context the task actually needs.",
+          "input_type": "CanonicalState",
+          "output_type": "ContextPlan",
+          "success": "the plan names what is needed and why",
+          "optional": true,
+          "required_capabilities": [
+            "plan"
+          ],
+          "candidates": [
+            "demo.plan.none",
+            "demo.plan.rules",
+            "demo.plan.retrieval.bm25.a820e40d",
+            "demo.plan.retrieval.embedding.4c0ca6c4",
+            "demo.plan.retrieval.hybrid.13679b77"
+          ]
+        },
+        {
+          "id": "attach",
+          "name": "Attach evidence",
+          "description": "Attach it, with provenance and freshness.",
+          "input_type": "ContextPlan",
+          "output_type": "EnrichedState",
+          "success": "every derived field carries a source and a freshness stamp",
+          "required_capabilities": [
+            "attach"
+          ],
+          "candidates": [
+            "demo.attach.reference.internal.a4942519",
+            "demo.attach.reference.external.84f8b948",
+            "demo.attach.embedding.small.9c26c41e",
+            "demo.attach.embedding.base.0233fd38",
+            "demo.attach.embedding.large.ae5325f7",
+            "demo.attach.provenance",
+            "demo.attach.freshness.ttl.6a23c731",
+            "demo.attach.freshness.etag.4e8e920a",
+            "demo.attach.geocode"
+          ]
+        }
       ]
     },
     {
@@ -3633,24 +4284,53 @@
         "model",
         "strategy"
       ],
-      "required_capabilities": [
-        "transform"
-      ],
-      "candidates": [
-        "demo.transform.deterministic_rules.conservative.edeb0b14",
-        "demo.transform.deterministic_rules.aggressive.0686452c",
-        "demo.transform.llm_parser.gemini.single-schema.c1f4d978",
-        "demo.transform.llm_parser.gemini.field-by-field.c294af8f",
-        "demo.transform.llm_parser.deepseek.single-schema.4ea72f4c",
-        "demo.transform.llm_parser.deepseek.field-by-field.e6cbbbe5",
-        "demo.transform.llm_parser.glm.single-schema.37e19864",
-        "demo.transform.llm_parser.glm.field-by-field.7cc976f3",
-        "demo.transform.statistical_model.linear.54cc921b",
-        "demo.transform.statistical_model.tree.dbb904f7",
-        "demo.transform.composite.rules-llm.c20cf6f5",
-        "demo.transform.composite.rules-model.aa7bc6b4",
-        "demo.transform.human_operator",
-        "demo.transform.browser_action"
+      "substages": [
+        {
+          "id": "locate",
+          "name": "Locate target",
+          "description": "Find the thing to act on or read from.",
+          "input_type": "EnrichedState",
+          "output_type": "LocatedTarget",
+          "success": "the target is identified and still present",
+          "required_capabilities": [
+            "locate"
+          ],
+          "candidates": [
+            "demo.locate.selector",
+            "demo.locate.heuristic.nearest-label.0ca22a93",
+            "demo.locate.heuristic.role.8ae59c87",
+            "demo.locate.heuristic.text.7c7e4ed0",
+            "demo.locate.vision",
+            "demo.locate.recorded"
+          ]
+        },
+        {
+          "id": "act",
+          "name": "Apply or act",
+          "description": "Produce the result, or perform a permitted external effect.",
+          "input_type": "LocatedTarget",
+          "output_type": "CandidateResult",
+          "success": "a candidate result exists with its inputs recorded",
+          "required_capabilities": [
+            "act"
+          ],
+          "candidates": [
+            "demo.act.rules.conservative.8aae95f9",
+            "demo.act.rules.aggressive.09678d32",
+            "demo.act.model.gemini.single-schema.524960f3",
+            "demo.act.model.gemini.field-by-field.a1f650ec",
+            "demo.act.model.deepseek.single-schema.728b8b68",
+            "demo.act.model.deepseek.field-by-field.f912e481",
+            "demo.act.model.glm.single-schema.e59a44e1",
+            "demo.act.model.glm.field-by-field.1697d91e",
+            "demo.act.statistical.linear.f365d2a0",
+            "demo.act.statistical.tree.acad4637",
+            "demo.act.composite.rules-model.c54145e6",
+            "demo.act.composite.rules-statistical.f962bfac",
+            "demo.act.browser",
+            "demo.act.human"
+          ]
+        }
       ]
     },
     {
@@ -3665,21 +4345,45 @@
         "strictness",
         "sample"
       ],
-      "required_capabilities": [
-        "verify"
-      ],
-      "candidates": [
-        "demo.verify.schema_json",
-        "demo.verify.schema_typed",
-        "demo.verify.oracle.reference-data.09137280",
-        "demo.verify.oracle.recomputation.844b8e66",
-        "demo.verify.consensus.unanimous.adaa2e59",
-        "demo.verify.consensus.majority.932f8596",
-        "demo.verify.consensus.weighted.513ff31a",
-        "demo.verify.human_review",
-        "demo.verify.visual_diff",
-        "demo.verify.ocr_check.rapidocr.ed28bda9",
-        "demo.verify.ocr_check.tesseract.e437fbf8"
+      "substages": [
+        {
+          "id": "shape",
+          "name": "Check shape",
+          "description": "Check the result is the right shape before judging its content.",
+          "input_type": "CandidateResult",
+          "output_type": "ShapeVerdict",
+          "success": "the result satisfies its declared schema and invariants",
+          "required_capabilities": [
+            "shape"
+          ],
+          "candidates": [
+            "demo.shape.json_schema",
+            "demo.shape.typed",
+            "demo.shape.invariants"
+          ]
+        },
+        {
+          "id": "independent",
+          "name": "Check independently",
+          "description": "Judge the outcome independently of what produced it.",
+          "input_type": "ShapeVerdict",
+          "output_type": "VerifiedOutcome",
+          "success": "an independent check accepted the outcome",
+          "required_capabilities": [
+            "independent"
+          ],
+          "candidates": [
+            "demo.independent.oracle.reference-data.627dc70b",
+            "demo.independent.oracle.recomputation.4a4e1683",
+            "demo.independent.consensus.unanimous.49599120",
+            "demo.independent.consensus.majority.2ab5d86b",
+            "demo.independent.consensus.weighted.06864205",
+            "demo.independent.human",
+            "demo.independent.visual",
+            "demo.independent.ocr.rapidocr.c0d25c4c",
+            "demo.independent.ocr.tesseract.7cbac48f"
+          ]
+        }
       ]
     },
     {
@@ -3694,18 +4398,44 @@
         "durability",
         "format"
       ],
-      "required_capabilities": [
-        "emit"
-      ],
-      "candidates": [
-        "demo.emit.file_json",
-        "demo.emit.file_columnar",
-        "demo.emit.api_publisher.at-least-once.f3328466",
-        "demo.emit.api_publisher.exactly-once.3961c5ed",
-        "demo.emit.database_writer.append.7741c055",
-        "demo.emit.database_writer.upsert.4de1eedc",
-        "demo.emit.evidence_bundler",
-        "demo.emit.notifier"
+      "substages": [
+        {
+          "id": "persist",
+          "name": "Persist result",
+          "description": "Store or return the result.",
+          "input_type": "VerifiedOutcome",
+          "output_type": "StoredResult",
+          "success": "the result is durable or returned",
+          "required_capabilities": [
+            "persist"
+          ],
+          "candidates": [
+            "demo.persist.file.json.0dbc9548",
+            "demo.persist.file.columnar.5f9df947",
+            "demo.persist.database.append.55f09f96",
+            "demo.persist.database.upsert.2c758294",
+            "demo.persist.publish.at-least-once.65609016",
+            "demo.persist.publish.exactly-once.4c67c50f",
+            "demo.persist.memory"
+          ]
+        },
+        {
+          "id": "receipt",
+          "name": "Write receipt",
+          "description": "Record evidence, provenance and replay data.",
+          "input_type": "StoredResult",
+          "output_type": "TaskReceipt",
+          "success": "the run is replayable from the receipt",
+          "required_capabilities": [
+            "receipt"
+          ],
+          "candidates": [
+            "demo.receipt.bundle.summary.3c3e5fcd",
+            "demo.receipt.bundle.full.b8a1dc48",
+            "demo.receipt.checkpoint",
+            "demo.receipt.notify"
+          ]
+        }
       ]
     }
   ],
@@ -3715,17 +4445,25 @@
       "name": "Cheapest route",
       "status": "baseline",
       "route": {
-        "acquire": "demo.acquire.file_loader.file.7623f426",
-        "canonicalize": "demo.canonicalize.encoding_bom",
-        "enrich": "demo.enrich.provenance_stamper",
-        "transform": "demo.transform.deterministic_rules.conservative.edeb0b14",
-        "verify": "demo.verify.schema_json",
-        "emit": "demo.emit.file_json"
+        "resolve": "demo.resolve.literal",
+        "session": "demo.session.filesystem.file.341fc310",
+        "read": "demo.read.whole",
+        "decode": "demo.decode.bom",
+        "parse": "demo.parse.format.json.6fe77dbc",
+        "normalize": "demo.normalize.schema.strict.018cc9a6",
+        "plan": "demo.plan.rules",
+        "attach": "demo.attach.provenance",
+        "locate": "demo.locate.selector",
+        "act": "demo.act.rules.conservative.8aae95f9",
+        "shape": "demo.shape.json_schema",
+        "independent": "demo.independent.oracle.recomputation.4a4e1683",
+        "persist": "demo.persist.file.json.0dbc9548",
+        "receipt": "demo.receipt.bundle.summary.3c3e5fcd"
       },
       "description": "What runs before there is any evidence: no browser, no model, no external effect.",
       "metrics": {
-        "quality": 0.84,
-        "latency_ms": 41,
+        "quality": 0.78,
+        "latency_ms": 320,
         "cost_usd": 0.0
       },
       "tags": [
@@ -3738,24 +4476,32 @@
       "name": "Accuracy-first route",
       "status": "candidate",
       "route": {
-        "acquire": "demo.acquire.database_loader.postgres.c03717ca",
-        "canonicalize": "demo.canonicalize.schema_mapper.strict.d7d3cfad",
-        "enrich": "demo.enrich.reference_lookup.internal.7bcdbdbd",
-        "transform": "demo.transform.composite.rules-llm.c20cf6f5",
-        "verify": "demo.verify.consensus.majority.932f8596",
-        "emit": "demo.emit.evidence_bundler"
+        "resolve": "demo.resolve.directory",
+        "session": "demo.session.database.postgres.c121dc81",
+        "read": "demo.read.whole",
+        "decode": "demo.decode.unicode.nfkc.695abb5a",
+        "parse": "demo.parse.format.json.6fe77dbc",
+        "normalize": "demo.normalize.schema.strict.018cc9a6",
+        "plan": "demo.plan.retrieval.hybrid.13679b77",
+        "attach": "demo.attach.reference.internal.a4942519",
+        "locate": "demo.locate.selector",
+        "act": "demo.act.composite.rules-model.c54145e6",
+        "shape": "demo.shape.invariants",
+        "independent": "demo.independent.consensus.majority.2ab5d86b",
+        "persist": "demo.persist.database.upsert.2c758294",
+        "receipt": "demo.receipt.bundle.full.b8a1dc48"
       },
-      "description": "Composite transformation with independent consensus, and a human as the last fallback.",
+      "description": "Composite action with independent consensus, and a human as the last fallback.",
       "fallbacks": {
-        "verify": [
-          "demo.verify.oracle.reference-data.09137280",
-          "demo.verify.human_review"
+        "independent": [
+          "demo.independent.oracle.reference-data.627dc70b",
+          "demo.independent.human"
         ]
       },
       "metrics": {
-        "quality": 0.97,
-        "latency_ms": 1420,
-        "cost_usd": 0.031
+        "quality": 0.95,
+        "latency_ms": 3400,
+        "cost_usd": 0.036
       },
       "tags": [
         "quality",
@@ -3767,26 +4513,34 @@
       "name": "Learned route",
       "status": "learned",
       "route": {
-        "acquire": "demo.acquire.browser_adapter.firefox.playwright.headless.22984131",
-        "canonicalize": "demo.canonicalize.text_normalizer.fold.nfkc.b7cf3e3e",
-        "enrich": "demo.enrich.provenance_stamper",
-        "transform": "demo.transform.llm_parser.glm.field-by-field.7cc976f3",
-        "verify": "demo.verify.ocr_check.rapidocr.ed28bda9",
-        "emit": "demo.emit.evidence_bundler"
+        "resolve": "demo.resolve.template.lenient.6de9ec86",
+        "session": "demo.session.browser.firefox.playwright.headless.7c49507d",
+        "read": "demo.read.rendered.mutation-quiet.065e5fb5",
+        "decode": "demo.decode.unicode.nfkc.695abb5a",
+        "parse": "demo.parse.tolerant",
+        "normalize": "demo.normalize.identity.composite.4533d1a8",
+        "plan": "demo.plan.rules",
+        "attach": "demo.attach.provenance",
+        "locate": "demo.locate.heuristic.nearest-label.0ca22a93",
+        "act": "demo.act.model.glm.field-by-field.1697d91e",
+        "shape": "demo.shape.typed",
+        "independent": "demo.independent.ocr.rapidocr.c0d25c4c",
+        "persist": "demo.persist.file.json.0dbc9548",
+        "receipt": "demo.receipt.bundle.full.b8a1dc48"
       },
-      "description": "Where evidence moved the choice: a defended source needed a real browser, and OCR caught a result that was present in the data and invisible on the page.",
+      "description": "Where evidence moved the choice: a defended source needed a real browser, the DOM stopped being trustworthy, and OCR caught a result that was present in the data and invisible on the page.",
       "fallbacks": {
-        "acquire": [
-          "demo.acquire.browser_adapter.chrome.selenium.headless.525d7325"
+        "session": [
+          "demo.session.browser.chrome.selenium.headless.4736c125"
         ],
-        "transform": [
-          "demo.transform.deterministic_rules.aggressive.0686452c"
+        "act": [
+          "demo.act.rules.aggressive.09678d32"
         ]
       },
       "metrics": {
-        "quality": 0.94,
-        "latency_ms": 4300,
-        "cost_usd": 0.018
+        "quality": 0.91,
+        "latency_ms": 6200,
+        "cost_usd": 0.019
       },
       "tags": [
         "learned",
@@ -3799,17 +4553,25 @@
       "name": "Fastest route",
       "status": "candidate",
       "route": {
-        "acquire": "demo.acquire.file_loader.file.7623f426",
-        "canonicalize": "demo.canonicalize.passthrough",
-        "enrich": "demo.enrich.passthrough",
-        "transform": "demo.transform.deterministic_rules.aggressive.0686452c",
-        "verify": "demo.verify.schema_json",
-        "emit": "demo.emit.file_json"
+        "resolve": "demo.resolve.literal",
+        "session": "demo.session.filesystem.file.341fc310",
+        "read": "demo.read.whole",
+        "decode": "demo.decode.passthrough",
+        "parse": "demo.parse.format.json.6fe77dbc",
+        "normalize": "demo.normalize.passthrough",
+        "plan": "demo.plan.none",
+        "attach": "demo.attach.provenance",
+        "locate": "demo.locate.recorded",
+        "act": "demo.act.rules.aggressive.09678d32",
+        "shape": "demo.shape.json_schema",
+        "independent": "demo.independent.oracle.recomputation.4a4e1683",
+        "persist": "demo.persist.memory",
+        "receipt": "demo.receipt.checkpoint"
       },
-      "description": "Every stage taking its cheapest admitted candidate.",
+      "description": "Every sub-step taking its cheapest admitted candidate.",
       "metrics": {
-        "quality": 0.7,
-        "latency_ms": 30,
+        "quality": 0.61,
+        "latency_ms": 240,
         "cost_usd": 0.0
       },
       "tags": [
@@ -3822,18 +4584,26 @@
       "name": "Human-in-the-loop route",
       "status": "candidate",
       "route": {
-        "acquire": "demo.acquire.api_loader.get.78b22e42",
-        "canonicalize": "demo.canonicalize.format_parser.json.61dc29a0",
-        "enrich": "demo.enrich.freshness_etag",
-        "transform": "demo.transform.human_operator",
-        "verify": "demo.verify.human_review",
-        "emit": "demo.emit.notifier"
+        "resolve": "demo.resolve.directory",
+        "session": "demo.session.http.bounded.47bb2a12",
+        "read": "demo.read.streamed.adaptive.5011dca8",
+        "decode": "demo.decode.statistical",
+        "parse": "demo.parse.format.json.6fe77dbc",
+        "normalize": "demo.normalize.locale.en-gb.fcbb3d2c",
+        "plan": "demo.plan.rules",
+        "attach": "demo.attach.freshness.etag.4e8e920a",
+        "locate": "demo.locate.selector",
+        "act": "demo.act.human",
+        "shape": "demo.shape.invariants",
+        "independent": "demo.independent.human",
+        "persist": "demo.persist.publish.exactly-once.4c67c50f",
+        "receipt": "demo.receipt.notify"
       },
       "description": "For effects that are hard to undo: a person decides, and a person checks.",
       "metrics": {
-        "quality": 0.99,
-        "latency_ms": 2100000,
-        "cost_usd": 5.5
+        "quality": 0.985,
+        "latency_ms": 2150000,
+        "cost_usd": 5.6
       },
       "tags": [
         "authority",
@@ -4021,7 +4791,9 @@
   "metadata": {
     "generator": "browsergraph.demo",
     "metrics_note": "Every metric here is an illustrative prior, not a measurement. Real optimization consumes real receipts.",
-    "route_count": 32864832,
-    "transition_count": 2827
+    "route_count": 3802314700800,
+    "transition_count": 1337,
+    "stage_count": 6,
+    "leaf_count": 14
   }
 }

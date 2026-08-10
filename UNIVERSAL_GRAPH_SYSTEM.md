@@ -61,18 +61,31 @@ filters may hide candidates temporarily; the viewer prints `149 of 149
 candidates visible` so a filtered view can never be mistaken for the whole
 registry.
 
-## The arithmetic
+## Sub-steps, and the arithmetic
 
-Six stages with 76, 27, 13, 14, 11 and 8 candidates is 149 things to choose
-from — and
+A stage may decompose into ordered **sub-steps**, each with its own candidate
+matrix, recursively and to any depth. This is not cosmetic. "Acquire inputs" as
+one decision with seventy-odd candidates is the same mistake as drawing a
+parameter family as one candidate — it hides choices that genuinely exist, from
+the search as well as from the reader.
 
 ```
-76 × 27 × 13 × 14 × 11 × 8 = 32,864,832 complete primary routes
-                             2,827 adjacent-stage transitions
+6 stages / 14 sub-steps · 57 definitions · 166 atomic candidates
+3,802,314,700,800 complete routes · 1,337 adjacent transitions
 ```
 
-Routes **multiply**. That number is the difference between "we support several
-options" and the actual size of the space a search works in.
+Pool every candidate in a stage into one choice — what a coarse diagram
+implicitly claims — and you count **85,747,200**. The sub-steps expose
+**3,802,314,700,800**: the coarse view was hiding **44,343×** of the space.
+`coarse_route_count()` and `route_count()` both ship, so the gap can be shown
+rather than asserted.
+
+Routes **multiply**. That is the difference between "we support several options"
+and the actual size of the space a search works in.
+
+A stage is either a **leaf** that holds candidates or a **composite** that holds
+sub-steps — never both, or "one choice per stage" stops being well defined. A
+route selects one candidate per *leaf*, however deep the leaf sits.
 
 ## The pieces
 
@@ -289,16 +302,16 @@ hard-coding the six-stage demonstration as universal.
 Measured on this implementation, not asserted:
 
 ```
-6 stages · 48 definitions · 149 atomic candidates
-32,864,832 complete routes · 2,827 adjacent transitions
+6 stages / 14 sub-steps · 57 definitions · 166 atomic candidates
+3,802,314,700,800 complete routes · 1,337 adjacent transitions
 5 named routes + an interactive custom route · 8 feedback channels · 4 profiles
 ```
 
 The studio is opened in a real headless browser as part of verification, and
 every projection is asserted to render with **zero JavaScript errors** —
-149 candidate cards, 149 network nodes, 2,827 background transitions, 5 compare
+166 candidate cards over 14 sub-step columns, 166 network nodes, 5 compare
 rows, 8 feedback rows, 4 profile rows. Revoking `browser` authority in the
-builder blocks exactly the 60 browser-adapter candidates, each stating its
+builder blocks exactly the 60 browser-session candidates, each stating its
 reason, and the route validator reports the violation.
 
 That check is there because two genuine bugs — `Node.append()` returning

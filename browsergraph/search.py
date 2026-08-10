@@ -74,7 +74,7 @@ class Proposal:
         lines = [f"{self.strategy} search under {self.profile_id!r} — score "
                  f"{self.score:.3f}, better than {self.percentile:.1%} of the "
                  f"reference sample"]
-        for stage in workbench.stages:
+        for stage in workbench.leaf_stages:
             cid = self.route.get(stage.id, "")
             chosen = names.get(cid)
             blocked = self.blocked.get(stage.id, 0)
@@ -151,7 +151,7 @@ def propose(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
         raise ValueError(f"unknown strategy {strategy!r}; "
                          f"known: {', '.join(STRATEGIES)}")
     policy = policy or Policy.permissive()
-    stages = list(workbench.stages)
+    stages = list(workbench.leaf_stages)
     proposal = Proposal(strategy=strategy, profile_id=profile.id,
                         total=workbench.route_count())
     if not stages:
