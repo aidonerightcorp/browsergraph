@@ -503,7 +503,14 @@ def measured_metrics(evidence: Evidence, candidates: Sequence[str],
         weight = posterior.confidence
         prior = priors.get(candidate, posterior.rate)
         shrunk = (1.0 - weight) * prior + weight * posterior.rate
-        metrics = {"quality": min(1.0, shrunk + explore * posterior.spread)}
+        # Not clamped to 1.0, and that is not an oversight. Clamping saturated
+        # every candidate whose prior plus bonus reached 1.0 — which, since an
+        # undeclared prior *is* 1.0, meant almost all of them. Tried and untried
+        # came out identical, the search went blind, and `solve` could not
+        # explore past its first route. Quality is normalised against a
+        # reference sample before it is scored, so a value above 1 is
+        # meaningful and a saturated one is not.
+        metrics = {"quality": shrunk + explore * posterior.spread}
         if posterior.measured and posterior.latency_ms:
             metrics["latency_ms"] = posterior.latency_ms
         out[candidate] = metrics

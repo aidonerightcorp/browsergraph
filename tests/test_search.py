@@ -658,8 +658,13 @@ def test_evidence_changes_which_route_is_chosen(bench, locked):
             store.observe(Observation(candidate=candidate, context="global",
                                       ok=rng.random() < truth[candidate]))
 
+    # `explore=0` asks "what is the best you know", which is what this test is
+    # about. The default asks "what should I try next", and the honest answer
+    # to that is sometimes a deliberate experiment that scores worse — measured
+    # here as 0.39 against a cold 0.43, while the best-known answer was 0.53.
+    # The sibling test below already asked the right question; this one did not.
     warm = search.within(bench, bench.optimization_profiles[0], policy=locked,
-                         evaluations=300, evidence=store)
+                         evaluations=300, evidence=store, explore=0.0)
 
     assert warm.route != cold.route, "evidence made no difference at all"
     assert _mean_true_quality(warm.route, truth) > \

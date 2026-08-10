@@ -59,6 +59,13 @@ from browsergraph.manifest import (
 from browsergraph.ports import BrowserPort, Context, Element, ExtendedPort, PageState
 from browsergraph.receipt import Recorder, TaskReceipt
 from browsergraph.router import Role, Router
+
+# Exported as `solve_task`, not `solve`. The module is `browsergraph.solve`
+# and binding the function to the same name at package level shadows it, so
+# `from browsergraph import solve` stopped being the module and every
+# `solve.solve(...)` call broke. Same collision as `Edge`/`GraphEdge`.
+from browsergraph.solve import Solution
+from browsergraph.solve import solve as solve_task
 from browsergraph.types import Lattice
 from browsergraph.viz import Figure as VizFigure
 from browsergraph.viz import report as viz_report
@@ -98,6 +105,8 @@ __all__ = [
     # open description: types bind, facets rank
     "FacetSpec", "WELL_KNOWN_FACETS", "facet_fields", "facet_keywords",
     "facet_specs_for", "merge_facets", "normalize_facet", "validate_facets",
+    # one call that tries, judges and keeps a fallback
+    "solve_task", "Solution",
     # durable evidence, and a clock and ceiling on one step
     "Journal", "Limits", "LimitExceeded", "bound", "bounded_runtime",
     # a model may suggest; the compiler still decides

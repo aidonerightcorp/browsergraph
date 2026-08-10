@@ -81,6 +81,25 @@ def step(step_id: str, name: str, takes: Ports, gives: Ports, capability: str,
         candidates=tuple(candidates))
 
 
+def passthrough(node_id: str, capability: str, port_type: str,
+                *, name: str = "in") -> NodeManifest:
+    """A node that hands its input straight through, unchanged.
+
+    An optional step is not the same as a missing one. "Impute the gaps" is a
+    real obligation even when this dataset has none, and the honest way to say
+    "nothing needed doing here" is a candidate that does nothing — not a stage
+    quietly deleted from the graph.
+
+    That matters for comparison more than for execution. Two routes differing
+    only in whether they imputed are comparable when both have an impute step.
+    They are two different graphs when one does not, and evidence from each
+    cannot be pooled.
+    """
+    return node(node_id, capability, [(name, port_type)], [("out", port_type)],
+                description=f"Passes {port_type} through unchanged.",
+                deterministic=True)
+
+
 def link(source: str, target: str, from_port: str = "", to_port: str = "") -> Edge:
     """One typed connection. Name the ports when either end has more than one."""
     return Edge(source=source, target=target, from_port=from_port, to_port=to_port)

@@ -16,6 +16,7 @@ python examples/01_smallest_useful_graph.py
 | 04 | [When a step fails](04_fallbacks_and_bounds.py) | fallbacks, and a clock and ceiling on one step |
 | 05 | [Get better at it](05_learn_from_receipts.py) | run, keep the receipt, choose better next time |
 | 06 | [Ask a model](06_model_suggests_you_check.py) | a model proposes, the compiler disposes |
+| 07 | [Solve it for me](07_solve_it_for_me.py) | one call: try, judge, champion plus fallback |
 
 They are meant to be read in order and copied out of. Every one is short enough
 to hold in your head, which is the point — a 300-line example teaches the
