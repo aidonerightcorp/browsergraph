@@ -77,6 +77,23 @@ for art in run.artifacts:
 '''
 
 
+def show_timeline(title: str = "") -> str:
+    """A picture of the run that just happened, not of the graph.
+
+    Every one of these notebooks drew its graph and then described its run in
+    prose. The graph says which steps *could* overlap; only this says where the
+    time actually went, and which steps were cached, skipped or fell back —
+    three outcomes that all finish without raising and mean different things.
+    """
+    caption = f", title={title!r}" if title else ""
+    return f'''
+# Where the time actually went. Colour carries the outcome: a step that was
+# cached, one skipped by a branch and one that fell back to another candidate
+# all "succeeded", and they are not the same thing.
+viz.timeline(run{caption})
+'''
+
+
 # =========================== 12 · browse and scrape ==========================
 
 scrape = Notebook("12-browse-and-scrape", "Browse and scrape")
@@ -276,6 +293,7 @@ print("\\nsave step reported:", run.output("save"))
 ''')
 
 scrape.code(show_artifacts())
+scrape.code(show_timeline('scraping a page, step by step'))
 
 scrape.md("""
 ## Reading the saved file back
@@ -593,6 +611,7 @@ three and why.
 """)
 
 ingest.code(show_artifacts())
+ingest.code(show_timeline('ingesting into a schema'))
 
 
 # ====================== 14 · check and process an image =====================
@@ -779,6 +798,7 @@ fine.
 """)
 
 image.code(show_artifacts())
+image.code(show_timeline('checking and processing an image'))
 
 image.md("""
 ## Look at what came out
@@ -1054,6 +1074,7 @@ trace.
 """)
 
 clean.code(show_artifacts())
+clean.code(show_timeline('cleaning a messy table'))
 
 
 # ============================== 16 · fit a model ============================

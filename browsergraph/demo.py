@@ -786,3 +786,56 @@ def workbench() -> WorkbenchDefinition:
                                   "not a measurement. Real optimization consumes "
                                   "real receipts."},
     ).assert_valid()
+
+
+def tabular() -> WorkbenchDefinition:
+    """A small, real graph: the shape a supervised tabular pipeline actually has.
+
+    `workbench()` is the big one — fifteen sub-steps and trillions of routes,
+    which is the right size for demonstrating that a search is necessary and the
+    wrong size for demonstrating anything else. Documentation needs a graph a
+    reader can hold: four steps, a genuine fan-out and join, and few enough
+    candidates to count on your fingers.
+
+    Kept in the library rather than pasted into the README because a diagram in
+    a document drifts from the code the moment either changes, and a diagram
+    that used to be true is worse than none. `tests/test_docs.py` renders this
+    and checks the README still matches.
+    """
+    from browsergraph.quick import fanin, fanout, graph, node, step
+
+    nodes = [
+        node("load.csv", "load", gives=[("out", "Table")]),
+        node("load.parquet", "load", gives=[("out", "Table")]),
+        node("numeric.standard", "numeric", [("in", "Table")], [("out", "Matrix")]),
+        node("numeric.quantile", "numeric", [("in", "Table")], [("out", "Matrix")]),
+        node("categorical.onehot", "categorical", [("in", "Table")],
+             [("out", "Matrix")]),
+        node("categorical.target", "categorical", [("in", "Table")],
+             [("out", "Matrix")]),
+        node("fit.linear", "fit", [("numeric", "Matrix"), ("categorical", "Matrix")],
+             [("out", "Model")]),
+        node("fit.trees", "fit", [("numeric", "Matrix"), ("categorical", "Matrix")],
+             [("out", "Model")]),
+    ]
+    steps = [
+        step("load", "Load the table", [], [("out", "Table")], "load",
+             ["load.csv", "load.parquet"]),
+        step("numeric", "Encode the numbers", [("in", "Table")],
+             [("out", "Matrix")], "numeric",
+             ["numeric.standard", "numeric.quantile"]),
+        step("categorical", "Encode the categories", [("in", "Table")],
+             [("out", "Matrix")], "categorical",
+             ["categorical.onehot", "categorical.target"]),
+        step("fit", "Fit the model",
+             [("numeric", "Matrix"), ("categorical", "Matrix")],
+             [("out", "Model")], "fit", ["fit.linear", "fit.trees"]),
+    ]
+    links = [*fanout("load", ["numeric", "categorical"]),
+             # The join names the port each side lands on. Swap them and the
+             # types disagree before anything runs, rather than after the model
+             # has trained on the wrong columns.
+             *fanin({"numeric": "numeric", "categorical": "categorical"}, "fit")]
+    return graph("A tabular pipeline",
+                 "Load a table, encode two kinds of column at once, fit a model.",
+                 steps, nodes, links, strict=True)

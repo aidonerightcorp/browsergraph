@@ -19,7 +19,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from build_notebooks import Notebook  # noqa: E402
-from build_problems import SETUP, show_artifacts  # noqa: E402
+from build_problems import SETUP, show_artifacts, show_timeline  # noqa: E402
 
 # ========================= 17 · batch process many files ====================
 
@@ -198,6 +198,7 @@ have left you to find that yourself across forty files.
 """)
 
 batch.code(show_artifacts())
+batch.code(show_timeline('one map step over forty files'))
 
 
 # ========================= 18 · retry and fall back =========================
@@ -557,6 +558,7 @@ without mentioning what it never looked at is telling you half the answer.
 """)
 
 dedupe.code(show_artifacts())
+dedupe.code(show_timeline('blocking, then comparing'))
 
 
 # ========================= 20 · forecast next month =========================
