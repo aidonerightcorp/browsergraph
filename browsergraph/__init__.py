@@ -21,6 +21,7 @@ from browsergraph.dimensions import (
     is_valid,
     validate,
 )
+from browsergraph.evidence import Evidence, Observation, Posterior
 from browsergraph.graph import Edge, EdgeKind, Graph, RunResult, run
 from browsergraph.manifest import (
     NodeDefinition,
@@ -60,4 +61,5 @@ __all__ = [
     "candidate_id", "expand_node_candidates",
     # evidence, capability and model routing
     "ExtendedPort", "TaskReceipt", "Recorder", "Router", "Role",
+    "Evidence", "Observation", "Posterior",
 ]

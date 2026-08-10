@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Core deps: none](https://img.shields.io/badge/core%20deps-stdlib--only-brightgreen)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-865%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-884%20passing-brightgreen)](tests/)
 [![Studio](https://img.shields.io/badge/studio-explore%20live-2f6fed)](https://aidonerightcorp.github.io/browsergraph/)
 [![Kaggle](https://img.shields.io/badge/Kaggle-run%20it%20now-20BEFF?logo=kaggle)](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 
@@ -234,6 +234,7 @@ chromedriver/snap version skew, a dependency that ships broken source.
 | **Isolation** | conflicting engines in per-engine virtualenvs, over a worker protocol |
 | **Notebooks** | Jupyter/Kaggle/Colab run cells inside an asyncio loop; the sync API is driven from a worker thread so it just works |
 | **Universal graph** | portable node manifests, atomic candidates, stage/route validation and a five-view studio — [UNIVERSAL_GRAPH_SYSTEM.md](UNIVERSAL_GRAPH_SYSTEM.md) |
+| **Evidence** | per-candidate, per-context posteriors; Thompson-samples a route at *sum* cost instead of enumerating, and reports how many **bits** of the choice remain |
 | **Route search** | policy gates first, then greedy / beam / exhaustive over the eligible space, reporting how much of it was actually examined |
 | **Capabilities** | each engine declares what it can do — press, select, upload, download, frames, cookies, viewport, PDF — checked against a graph *before* a browser launches, with the engines that could run it |
 | **Receipts** | every run writes durable evidence: route, engine, per-step timing, artifacts with content hashes, which steps verified, and a pasteable replay line — for failures too |
@@ -247,6 +248,8 @@ chromedriver/snap version skew, a dependency that ships broken source.
 | | |
 |---|---|
 | [HOW_IT_WORKS.md](HOW_IT_WORKS.md) | **start here** — the architecture in plain English |
+| [AGENTS.md](AGENTS.md) | instructions for an LLM harness, written as checkable constraints |
+| [docs/TOWARD_A_GENERAL_MODEL.md](docs/TOWARD_A_GENERAL_MODEL.md) | a critical review — what is still wrong, and what to fix first |
 | [QUICKSTART.md](QUICKSTART.md) | first graph, first real browser, first task |
 | [UNIVERSAL_GRAPH_SYSTEM.md](UNIVERSAL_GRAPH_SYSTEM.md) | stages, candidates, routes, contracts, feedback, optimization |
 | [docs/ROUTE_SEARCH_REPORT.md](docs/ROUTE_SEARCH_REPORT.md) | policy gating and route search, measured end to end |
@@ -272,7 +275,7 @@ breaks something.
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                  # 865 tests; browser suites skip when absent
+pytest -q                                  # 884 tests; browser suites skip when absent
 mypy browsergraph --ignore-missing-imports
 ruff check browsergraph tests
 ```

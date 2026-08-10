@@ -15,6 +15,8 @@
     browsergraph workbench -o studio.html     stages, candidates, routes, feedback
     browsergraph fetch chromedriver           download a browser or driver
     browsergraph route --compare              propose a route; show the search
+    browsergraph check my-graph.json          is this a valid graph solution?
+    browsergraph evidence --suggest           a route worth trying, from evidence
     browsergraph capabilities                 what each engine can actually do
     browsergraph models                       which model for which job, and why
 """
@@ -311,6 +313,107 @@ def cmd_workbench(args) -> int:
     return 0
 
 
+def cmd_evidence(args) -> int:
+    """What has been learned, and how much of the choice is still open."""
+    from browsergraph.demo import workbench as demo_workbench
+    from browsergraph.evidence import Evidence, context_chain, stages_of
+    from browsergraph.policy import Policy
+    from browsergraph.workbench import WorkbenchDefinition
+
+    bench = (WorkbenchDefinition.load(args.config) if args.config
+             else demo_workbench())
+    store = Evidence.load(args.store)
+    stages = stages_of(bench, Policy.permissive())
+    context = context_chain(*(args.context or []))
+    if args.suggest:
+        route = store.suggest(stages, context)
+        names = bench.candidates_by_id
+        for stage in bench.leaf_stages:
+            chosen = route.get(stage.id, "")
+            posterior = store.posterior(chosen, context)
+            print(f"  {stage.name:<24} "
+                  f"{names[chosen].name if chosen in names else chosen:<40} "
+                  f"p={posterior.rate:.2f} n={posterior.runs}")
+        return 0
+    print(store.report(stages, context))
+    return 0
+
+
+def cmd_check(args) -> int:
+    """Is this a valid graph solution? Fast, local, and specific about the fix.
+
+    The command an LLM harness runs after every edit. Documentation does not
+    stop a model inventing a field; a check that answers in under a second and
+    names the fix does — and it works the same for a person.
+    """
+    import time
+
+    from browsergraph.workbench import WorkbenchDefinition
+
+    started = time.monotonic()
+    findings: list[dict] = []
+    bench = None
+    try:
+        if args.config:
+            bench = WorkbenchDefinition.load(args.config)
+        else:
+            from browsergraph.demo import workbench as demo_workbench
+            bench = demo_workbench()
+    except Exception as e:
+        findings.append({"severity": "error", "where": args.config or "demo",
+                         "message": f"{type(e).__name__}: {e}",
+                         "fix": "the file must be JSON matching "
+                                "browsergraph/schemas/workbench.schema.json"})
+
+    summary: dict[str, Any] = {}
+    if bench is not None:
+        for problem in bench.validate():
+            findings.append({"severity": "error", "where": "workbench",
+                             "message": problem, "fix": ""})
+        leaves = bench.leaf_stages
+        summary = {"stages": len(bench.stages), "sub_steps": len(leaves),
+                   "definitions": len(bench.nodes),
+                   "candidates": len(bench.candidates),
+                   "routes": bench.route_count(),
+                   "solutions": len(bench.solutions)}
+        # Advice, not errors: a sub-step with one candidate is a hard-coded
+        # choice wearing a graph's clothes, and a stage nobody can route
+        # through is a design mistake the type checker cannot see.
+        for leaf in leaves:
+            if len(leaf.candidates) == 1:
+                findings.append({
+                    "severity": "advice", "where": leaf.id,
+                    "message": f"only one candidate admitted to {leaf.id!r}",
+                    "fix": "either add an alternative or fold this into its "
+                           "neighbour — a sub-step with one option is a "
+                           "hard-coded choice, not a decision"})
+        if not bench.solutions:
+            findings.append({"severity": "advice", "where": "solutions",
+                             "message": "no named route",
+                             "fix": "declare at least one, so there is "
+                                    "something to compare against"})
+
+    seconds = time.monotonic() - started
+    errors = [f for f in findings if f["severity"] == "error"]
+    if args.json:
+        print(json.dumps({"ok": not errors, "seconds": round(seconds, 3),
+                          "summary": summary, "findings": findings}, indent=2))
+        return 1 if errors else 0
+
+    for finding in findings:
+        mark = "ERROR" if finding["severity"] == "error" else "advice"
+        print(f"[{mark}] {finding['where']}: {finding['message']}")
+        if finding["fix"]:
+            print(f"         fix: {finding['fix']}")
+    if summary:
+        print(f"\n{summary['stages']} stages / {summary['sub_steps']} sub-steps · "
+              f"{summary['candidates']} candidates · "
+              f"{summary['routes']:,} routes")
+    print(("FAILED — " + str(len(errors)) + " error(s)") if errors
+          else f"valid ({seconds:.2f}s)")
+    return 1 if errors else 0
+
+
 def cmd_capabilities(args) -> int:
     """Which engines can do what, and which could run a given graph."""
     from browsergraph import capabilities as caps
@@ -581,6 +684,20 @@ def main(argv: list[str] | None = None) -> int:
     bs.add_argument("--no-install", action="store_true", help="do not pip/download anything")
     bs.add_argument("--no-apt", action="store_true", help="do not install system libraries")
     bs.set_defaults(fn=cmd_bootstrap)
+
+    ev = sub.add_parser("evidence", help="what has been learned, in bits")
+    ev.add_argument("config", nargs="?", help="a workbench JSON file")
+    ev.add_argument("--store", default="evidence.json")
+    ev.add_argument("--context", action="append",
+                    help="context key, most specific first (repeatable)")
+    ev.add_argument("--suggest", action="store_true",
+                    help="propose a route by sampling the posteriors")
+    ev.set_defaults(fn=cmd_evidence)
+
+    ck = sub.add_parser("check", help="validate a graph solution, fast")
+    ck.add_argument("config", nargs="?", help="a workbench JSON file (default: the demo)")
+    ck.add_argument("--json", action="store_true", help="machine-readable findings")
+    ck.set_defaults(fn=cmd_check)
 
     cp = sub.add_parser("capabilities", help="what each engine can do")
     cp.add_argument("config", nargs="?", help="a graph config, to check against")
