@@ -171,3 +171,39 @@ def test_unreachable_pairs_are_not_forced():
     axes = {"engine": [Engine.CAMOUFOX], "binary": list(Binary)}
     specs = sample_specs(axes)
     assert specs and all(s.binary is Binary.FIREFOX for s in specs)
+
+
+def test_the_packaged_version_matches_the_package():
+    """These lived in two files and drifted.
+
+    `pyproject.toml` said 0.1.0 while `browsergraph.__version__` said 0.2.0, so
+    the release artifact would have shipped under the wrong version. The version
+    is now single-sourced from `browsergraph/_version.py`, which is a module
+    containing nothing but a literal so setuptools can read it *statically* —
+    given anything else it falls back to importing the package, which fails in an
+    isolated build environment and silently yields 0.0.0.
+    """
+    import browsergraph
+    from browsergraph._version import __version__ as source
+
+    assert browsergraph.__version__ == source
+
+    try:
+        import importlib.metadata as md
+        installed = md.version("browsergraph")
+    except Exception:
+        return          # not installed as a distribution; nothing to compare
+    assert installed == source, (
+        f"distribution says {installed}, package says {source}")
+
+
+def test_the_version_module_holds_only_a_literal():
+    """An import in here would break static parsing and yield 0.0.0."""
+    import pathlib
+
+    import browsergraph
+    src = (pathlib.Path(browsergraph.__file__).parent / "_version.py").read_text()
+    code = [ln for ln in src.splitlines()
+            if ln.strip() and not ln.strip().startswith("#")]
+    code = [ln for ln in code if not ln.strip().startswith(('"""', "'''"))]
+    assert not any(ln.startswith(("import ", "from ")) for ln in code), src

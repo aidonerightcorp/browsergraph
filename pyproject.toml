@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "browsergraph"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Composable browser automation: any engine x binary x transport x stealth x behaviour, driven by reusable nodes in a graph."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -43,6 +43,9 @@ Issues = "https://github.com/aidonerightcorp/browsergraph/issues"
 
 [project.entry-points."browsergraph.plugins"]
 # third-party packages advertise plugins here; see PLUGINS.md
+
+[tool.setuptools.dynamic]
+version = {attr = "browsergraph._version.__version__"}
 
 [tool.setuptools]
 packages = [
