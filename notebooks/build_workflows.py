@@ -41,16 +41,9 @@ from browsergraph.manifest import NodeManifest, PortSpec
 from browsergraph.workbench import NodeCandidate
 from dataclasses import replace
 
-def node(node_id, capability, ins, outs, *, effects=(), permissions=(),
-         facets=None, deterministic=True):
-    """A node manifest in one line. A real pack writes these as JSON."""
-    return NodeManifest(
-        id=node_id, kind="function", description=f"{{capability}} via {{node_id}}",
-        capabilities=(capability,),
-        inputs=tuple(PortSpec(n, t) for n, t in ins),
-        outputs=tuple(PortSpec(n, t) for n, t in outs),
-        effects=tuple(effects), permissions=tuple(permissions),
-        runtime={{"deterministic": deterministic}}, facets=dict(facets or {{}}))
+# From the library, not redefined here. A notebook that teaches helpers
+# browsergraph does not have is a notebook nobody can build on.
+from browsergraph.quick import chain, fanin, fanout, link, node, problems, step
 
 print("browsergraph", bg.__version__)
 '''

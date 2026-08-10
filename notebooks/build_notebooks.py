@@ -224,6 +224,21 @@ load ───────┤               ├────── report
 
 A sequence of stages cannot express this. Edges can.
 """)
+one.md("""
+The two helpers below are local to this notebook on purpose. `01`-`03` are about
+the primitives — `NodeManifest`, `StageDefinition`, and discovery via
+`with_discovered_candidates` — so they build them by hand where the later
+notebooks would not.
+
+For a real project there is a short way that ships with the library:
+
+```python
+from browsergraph.quick import chain, fanin, fanout, graph, link, node, step
+```
+
+Same objects, less ceremony. It is used from notebook 04 onwards.
+""")
+
 one.code("""
 from browsergraph import Edge, WorkbenchDefinition
 

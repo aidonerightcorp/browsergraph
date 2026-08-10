@@ -45,24 +45,10 @@ print("browsergraph", bg.__version__)
 '''
 
 HELPER = '''
-def node(node_id, capability, ins, outs, *, effects=(), permissions=(),
-         params=None, facets=None, deterministic=True, kind="function"):
-    """A node manifest in one line, because the notebook is about graphs.
-
-    Real packs write these as JSON in a registry; the shape is the same.
-    """
-    return NodeManifest(
-        id=node_id, kind=kind, description=f"{capability} via {node_id}",
-        capabilities=(capability,),
-        inputs=tuple(PortSpec(n, t) for n, t in ins),
-        outputs=tuple(PortSpec(n, t) for n, t in outs),
-        parameters=tuple(params or ()),
-        effects=tuple(effects), permissions=tuple(permissions),
-        runtime={"deterministic": deterministic},
-        facets=dict(facets or {}),
-    )
+# From the library, not redefined here. A notebook that teaches helpers
+# browsergraph does not have is a notebook nobody can build on.
+from browsergraph.quick import chain, fanin, fanout, link, node, problems, step
 '''
-
 
 # --- 04 ---------------------------------------------------------------------
 
@@ -148,7 +134,7 @@ nodes = [
          [("train", "Frame"), ("valid", "Frame")]),
     node("tab.split.kfold",     "data.split",      [("in", "Frame")],
          [("train", "Frame"), ("valid", "Frame")],
-         params=[ParameterSpec("k", "int", choices=(5, 10), default=5)]),
+         parameters=[ParameterSpec("k", "int", choices=(5, 10), default=5)]),
 
     node("tab.clean.median",    "data.clean",      [("in", "Frame")], [("out", "Frame")]),
     node("tab.clean.drop",      "data.clean",      [("in", "Frame")], [("out", "Frame")]),

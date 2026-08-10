@@ -42,12 +42,23 @@ Ports = Sequence[tuple[str, str]]
 
 
 def node(node_id: str, capability: str, takes: Ports = (), gives: Ports = (),
-         *, description: str = "", **extra: Any) -> NodeManifest:
+         *, description: str = "", deterministic: bool | None = None,
+         **extra: Any) -> NodeManifest:
     """One node manifest, with the boilerplate filled in.
 
     `extra` goes straight to `NodeManifest`, so `effects=`, `permissions=`,
-    `runtime=`, `metrics=` and `facets=` all work unchanged.
+    `metrics=`, `parameters=` and `facets=` all work unchanged.
+
+    `deterministic=` is lifted out because it is the one thing everybody sets
+    and it does not live at the top level — it belongs inside `runtime`, and
+    making each caller remember that produced a lot of nodes that quietly
+    claimed determinism they did not have.
     """
+    runtime = dict(extra.pop("runtime", {}) or {})
+    if deterministic is not None:
+        runtime["deterministic"] = deterministic
+    if runtime:
+        extra["runtime"] = runtime
     return NodeManifest(
         id=node_id, kind=extra.pop("kind", "function"),
         description=description or f"{capability} via {node_id}",
