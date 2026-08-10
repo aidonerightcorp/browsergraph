@@ -244,7 +244,8 @@ def check_route(workbench: WorkbenchDefinition, route: Mapping[str, str],
 
 
 def aggregate(workbench: WorkbenchDefinition, route: Mapping[str, str],
-              overrides: Mapping[str, Mapping[str, float]] | None = None
+              overrides: Mapping[str, Mapping[str, float]] | None = None,
+              pairs: Mapping[frozenset, float] | None = None
               ) -> dict[str, float]:
     """What a whole route costs, from its parts.
 
@@ -278,6 +279,19 @@ def aggregate(workbench: WorkbenchDefinition, route: Mapping[str, str],
         cost += float(metrics.get("cost_usd", 0.0))
     if not seen:
         return {}
+
+    # Pairs that measurably do worse (or better) together than apart. Without
+    # this the search knew about an interaction and then scored every route as
+    # though it did not exist, so sampling could walk straight back into a pair
+    # it had already been told to avoid.
+    if pairs:
+        chosen = [route.get(stage.id, "") for stage in workbench.leaf_stages]
+        for index, left in enumerate(chosen):
+            for right in chosen[index + 1:]:
+                factor = pairs.get(frozenset((left, right)))
+                if factor is not None:
+                    quality *= factor
+
     return {"quality": quality, "latency_ms": latency, "cost_usd": cost}
 
 

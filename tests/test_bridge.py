@@ -176,3 +176,76 @@ def test_the_summary_reads_as_a_report_rather_than_a_dump():
     text = bridge.summary(_filled(T.get("software.release")))
     for expected in ("program", "slots", "registry", "effects", "permissions"):
         assert expected in text
+
+
+# --- the strict core's belief model, finally built ---------------------------
+
+def _measured(bench, clash=True, runs=200, seed=1):
+    import random
+
+    from browsergraph.evidence import Evidence, Observation
+
+    rng = random.Random(seed)
+    store = Evidence()
+    ids = [s.candidates[0] for s in bench.leaf_stages if s.candidates]
+    for _ in range(runs):
+        for candidate in ids:
+            store.observe(Observation(candidate=candidate, context="global",
+                                      ok=rng.random() < 0.8))
+        store.routes.append((tuple(ids), "global", 0.2 if clash else 0.9))
+        store.routes.append((tuple(ids[:2]), "global", 0.9))
+    return store
+
+
+def test_a_belief_model_is_built_from_measurements():
+    """solutiongraph shipped a belief model with interaction weights and
+    nothing outside its own package ever built one, so the most expressive part
+    of the merge sat unused."""
+    bench = _filled(T.get("data.quality"))
+    model = bridge.belief_model(bench, _measured(bench))
+    assert model.candidate_weights, "no candidate weights were learned"
+    assert model.interaction_weights, "no pairwise weights were learned"
+    assert model.validate() == []
+
+
+def test_the_weights_are_logs_so_the_strict_scorer_multiplies_them():
+    """`incremental_score` adds them, and adding logs is multiplying — which is
+    how route quality composes everywhere else here."""
+    import math
+
+    from browsergraph.evidence import Evidence, Observation
+
+    bench = _filled(T.get("data.quality"))
+    store = Evidence()
+    candidate = bench.leaf_stages[0].candidates[0]
+    for _ in range(40):
+        store.observe(Observation(candidate=candidate, context="global",
+                                  ok=False))
+    model = bridge.belief_model(bench, store)
+    weight = next(w for w in model.candidate_weights
+                  if w.candidate_id == candidate)
+    assert weight.log_weight < 0, "a candidate that always failed should be negative"
+    assert weight.log_weight == pytest.approx(
+        math.log(store.posterior(candidate).rate), rel=1e-6)
+
+
+def test_a_candidate_with_no_evidence_gets_no_weight():
+    """Silence is not a measurement, and inventing a weight for it would make
+    the model's revision string a lie about how much it knows."""
+    bench = _filled(T.get("data.quality"))
+    from browsergraph.evidence import Evidence
+
+    model = bridge.belief_model(bench, Evidence())
+    assert model.candidate_weights == ()
+    assert model.revision.endswith("0u-0p")
+
+
+def test_the_model_scores_a_selection_with_attribution():
+    bench = _filled(T.get("data.quality"))
+    model = bridge.belief_model(bench, _measured(bench))
+    selection = {f"slot.{s.id}": s.candidates[0] for s in bench.leaf_stages}
+    stage = bench.leaf_stages[1]
+    score, contributions = model.incremental_score(
+        selection, f"slot.{stage.id}", stage.candidates[0])
+    assert contributions, "a score with no attribution is an assertion"
+    assert any(name.startswith("candidate:") for name, _ in contributions)

@@ -434,3 +434,56 @@ def test_a_wrong_prior_is_overruled_by_running_things():
     assert picks[-10:].count("f.gamma") >= 8, \
         f"did not settle on the truly best candidate: {picks[-10:]}"
     assert picks.count("f.beta") + picks.count("f.gamma") > 10, "never explored"
+
+
+# --- pair effects reach the score --------------------------------------------
+
+def test_a_measured_pair_effect_changes_a_route_score():
+    """`interactions()` found the pairs and nothing consumed the number. The
+    search nudged its *starting route* away from a known-bad pair and then
+    scored every route as though the pair did not exist, so sampling could walk
+    straight back into it."""
+    from browsergraph.demo import workbench
+    from browsergraph.policy import aggregate
+
+    bench = workbench()
+    route = {s.id: s.candidates[0] for s in bench.leaf_stages if s.candidates}
+    chosen = list(route.values())
+    plain = aggregate(bench, route)
+    halved = aggregate(bench, route, None,
+                       {frozenset((chosen[0], chosen[1])): 0.5})
+    assert halved["quality"] == pytest.approx(plain["quality"] * 0.5)
+
+
+def test_a_pair_that_is_not_in_the_route_changes_nothing():
+    from browsergraph.demo import workbench
+    from browsergraph.policy import aggregate
+
+    bench = workbench()
+    route = {s.id: s.candidates[0] for s in bench.leaf_stages if s.candidates}
+    assert aggregate(bench, route, None, {frozenset(("nope", "also.nope")): 0.1}) \
+        == aggregate(bench, route)
+
+
+def test_pair_effects_multiply_because_quality_compounds():
+    """The same shape as the rest of route scoring. A pair that halves the odds
+    halves the route's quality; it does not subtract a constant."""
+    effects = pair_effects_from(-0.4)
+    assert effects == pytest.approx(0.6)
+
+
+def pair_effects_from(gap: float) -> float:
+    return max(0.0, 1.0 + gap)
+
+
+def test_a_pair_measured_as_better_together_is_kept_too():
+    """Two things that work better together is a real finding, and there is no
+    reason to report only the bad half."""
+    from browsergraph.evidence import Evidence, pair_effects
+
+    store = Evidence()
+    for _ in range(20):
+        store.routes.append((("a", "b", "z"), "global", 0.95))
+        store.routes.append((("a", "c", "z"), "global", 0.20))
+    effects = pair_effects(store, minimum=10)
+    assert effects.get(frozenset(("a", "b")), 0) > 1.0

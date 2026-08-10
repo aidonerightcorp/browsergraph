@@ -149,7 +149,7 @@ REFERENCE = 513
 
 
 def _reference_sample(workbench: WorkbenchDefinition, stages, eligible,
-                      overrides=None) -> list[dict[str, float]]:
+                      overrides=None, pairs=None) -> list[dict[str, float]]:
     """A deterministic spread of the eligible space, for scale.
 
     Seeded rather than random: a score that moves between runs because the
@@ -159,7 +159,7 @@ def _reference_sample(workbench: WorkbenchDefinition, stages, eligible,
     out = []
     for _ in range(REFERENCE - 1):
         route = {stage.id: rng.choice(eligible[stage.id]) for stage in stages}
-        out.append(aggregate(workbench, route, overrides))
+        out.append(aggregate(workbench, route, overrides, pairs))
     return out
 
 
@@ -172,14 +172,14 @@ def _eligible_by_stage(workbench: WorkbenchDefinition, policy: Policy
 
 
 def _score_routes(workbench: WorkbenchDefinition, profile: OptimizationProfile,
-                  routes: Sequence[Mapping[str, str]], overrides=None
-                  ) -> list[tuple[int, float]]:
+                  routes: Sequence[Mapping[str, str]], overrides=None,
+                  pairs=None) -> list[tuple[int, float]]:
     """Score whole routes against each other, never in isolation.
 
     The comparison set is the routes under consideration, which is what makes
     the weights mean anything — see OptimizationProfile.score.
     """
-    metrics = [aggregate(workbench, route, overrides) for route in routes]
+    metrics = [aggregate(workbench, route, overrides, pairs) for route in routes]
     spans = profile.ranges(metrics)          # once, not once per route
     return [(index, profile.score_within(m, spans))
             for index, m in enumerate(metrics)]
@@ -190,7 +190,7 @@ def propose(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
             beam: int = 8, limit: int = EXHAUSTIVE_LIMIT,
             budget: int = DEFAULT_BUDGET, seed: int = 0,
             around: Mapping[str, str] | None = None,
-            overrides=None) -> Proposal:
+            overrides=None, pairs=None) -> Proposal:
     """The best route this profile can find, under this policy.
 
     Policy first, always: candidates are gated before a single score is
@@ -233,36 +233,36 @@ def propose(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
     # Stable ranges for every strategy that scores partial routes, computed
     # once from the reference sample.
     spans = profile.ranges(_reference_sample(workbench, stages, eligible,
-                                             overrides))
+                                             overrides, pairs))
 
     if chosen == "greedy":
         route, examined = _greedy(workbench, profile, stages, eligible,
-                                  overrides)
+                                  overrides, pairs)
         proposal.notes += ("greedy scores each stage independently; route "
                            "quality compounds, so this is a baseline rather "
                            "than an optimum",)
     elif chosen == "sprouts":
         route, examined = _sprouts(workbench, profile, stages, eligible, spans,
-                                   budget, seed, around, overrides)
+                                   budget, seed, around, overrides, pairs)
         proposal.notes += (f"sampled {examined:,} routes of {space:,} under a "
                            f"budget of {budget:,} — a good score here is the "
                            f"best seen, not a proven best",)
     elif chosen == "halving":
         route, examined = _halving(workbench, profile, stages, eligible, spans,
-                                   budget, seed, overrides)
+                                   budget, seed, overrides, pairs)
         proposal.notes += (f"successive halving inside a budget of {budget:,}; "
                            f"{examined:,} routes of {space:,} were scored",)
     elif chosen == "exhaustive":
         route, examined = _exhaustive(workbench, profile, stages, eligible,
-                                      spans, limit, overrides)
+                                      spans, limit, overrides, pairs)
     else:
         route, examined = _beam(workbench, profile, stages, eligible, beam,
-                                spans, overrides)
+                                spans, overrides, pairs)
         proposal.notes += (f"beam width {beam}",)
 
     proposal.route = route
     proposal.examined = examined
-    proposal.metrics = aggregate(workbench, route, overrides)
+    proposal.metrics = aggregate(workbench, route, overrides, pairs)
 
     # Score the winner against a fixed reference sample rather than against
     # whatever each strategy happened to look at. Greedy examines 56 routes and
@@ -275,7 +275,7 @@ def propose(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
     # scale, and a good search finds routes better than anything sampled. That
     # is informative but reads like a bug, so the headline number is a
     # percentile against the same sample, which cannot.
-    reference = _reference_sample(workbench, stages, eligible, overrides)
+    reference = _reference_sample(workbench, stages, eligible, overrides, pairs)
     beaten = sum(1 for m in reference
                  if profile.score_within(m, spans) < proposal.score)
     proposal.percentile = beaten / len(reference) if reference else 0.0
@@ -370,7 +370,7 @@ def _route_problems(workbench: WorkbenchDefinition, proposal: Proposal,
     return problems
 
 
-def _greedy(workbench, profile, stages, eligible, overrides=None
+def _greedy(workbench, profile, stages, eligible, overrides=None, pairs=None
             ) -> tuple[dict[str, str], int]:
     nodes = workbench.nodes_by_id
     candidates = workbench.candidates_by_id
@@ -392,7 +392,7 @@ class SpaceTooLarge(ValueError):
 
 
 def _exhaustive(workbench, profile, stages, eligible, spans,
-                limit: int = EXHAUSTIVE_LIMIT, overrides=None
+                limit: int = EXHAUSTIVE_LIMIT, overrides=None, pairs=None
                 ) -> tuple[dict[str, str], int]:
     """Every eligible route, scored, streamed.
 
@@ -430,7 +430,7 @@ def _exhaustive(workbench, profile, stages, eligible, spans,
     best_score, examined = float("-inf"), 0
     for combo in itertools.product(*[eligible[k] for k in keys]):
         route = dict(zip(keys, combo, strict=True))
-        score = profile.score_within(aggregate(workbench, route, overrides), spans)
+        score = profile.score_within(aggregate(workbench, route, overrides, pairs), spans)
         examined += 1
         if score > best_score or (score == best_score and not best):
             best, best_score = route, score
@@ -438,7 +438,7 @@ def _exhaustive(workbench, profile, stages, eligible, spans,
 
 
 def _beam(workbench, profile, stages, eligible, width, spans,
-          overrides=None) -> tuple[dict[str, str], int]:
+          overrides=None, pairs=None) -> tuple[dict[str, str], int]:
     """Keep the best `width` partial routes at each stage.
 
     Partial routes are scored against **fixed** ranges, and that detail is the
@@ -459,7 +459,7 @@ def _beam(workbench, profile, stages, eligible, width, spans,
         grown = [dict(partial, **{stage.id: cid})
                  for partial in partials for cid in eligible[stage.id]]
         examined += len(grown)
-        metrics = [aggregate(workbench, route, overrides) for route in grown]
+        metrics = [aggregate(workbench, route, overrides, pairs) for route in grown]
         scored = [(index, profile.score_within(m, spans))
                   for index, m in enumerate(metrics)]
         scored.sort(key=lambda pair: (-pair[1], grown[pair[0]].get(stage.id, "")))
@@ -469,7 +469,7 @@ def _beam(workbench, profile, stages, eligible, width, spans,
 
 def _sprouts(workbench, profile, stages, eligible, spans, budget: int,
              seed: int = 0, around: Mapping[str, str] | None = None,
-             overrides=None) -> tuple[dict[str, str], int]:
+             overrides=None, pairs=None) -> tuple[dict[str, str], int]:
     """Sample routes instead of enumerating them, and stay inside a budget.
 
     Beam is good but its shape is fixed: it commits stage by stage, so a route
@@ -491,7 +491,7 @@ def _sprouts(workbench, profile, stages, eligible, spans, budget: int,
     pools = {key: list(eligible[key]) for key in keys}
 
     def score_of(route: Mapping[str, str]) -> float:
-        return profile.score_within(aggregate(workbench, route, overrides), spans)
+        return profile.score_within(aggregate(workbench, route, overrides, pairs), spans)
 
     best = dict(around) if around else {k: pools[k][0] for k in keys}
     best_score, examined = score_of(best), 1
@@ -513,7 +513,8 @@ def _sprouts(workbench, profile, stages, eligible, spans, budget: int,
 
 
 def _halving(workbench, profile, stages, eligible, spans, budget: int,
-             seed: int = 0, overrides=None) -> tuple[dict[str, str], int]:
+             seed: int = 0, overrides=None, pairs=None
+             ) -> tuple[dict[str, str], int]:
     """Look at many routes cheaply, then spend what is left on the survivors.
 
     Successive halving. Draw a wide field, score it, keep the better half, and
@@ -530,7 +531,7 @@ def _halving(workbench, profile, stages, eligible, spans, budget: int,
     pools = {key: list(eligible[key]) for key in keys}
 
     def score_of(route):
-        return profile.score_within(aggregate(workbench, route, overrides), spans)
+        return profile.score_within(aggregate(workbench, route, overrides, pairs), spans)
 
     field = [{k: rng.choice(pools[k]) for k in keys}
              for _ in range(max(2, budget // 2))]
@@ -616,6 +617,7 @@ def within(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
     # completely. Fifty runs of a nine-route job picked the same route every
     # time and never tried the other six candidates.
     overrides = None
+    pairs = None
     if evidence is not None:
         from browsergraph.evidence import measured_metrics
         nodes = workbench.nodes_by_id
@@ -626,12 +628,16 @@ def within(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
         overrides = measured_metrics(
             evidence, [c for pool in eligible.values() for c in pool],
             context, priors, explore=explore) or None
+        # Pairwise effects reach the score too, not just the starting route.
+        from browsergraph.evidence import pair_effects
+        pairs = pair_effects(evidence) or None
 
     if space <= evaluations:
         # Enumerating scores every route on measured metrics where they exist,
         # so this is the *best* case for evidence, not an excuse to skip it.
         return propose(workbench, profile, policy=policy, strategy="exhaustive",
-                       limit=max(evaluations, space), overrides=overrides)
+                       limit=max(evaluations, space), overrides=overrides,
+                       pairs=pairs)
 
     learned = None
     if evidence is not None:
@@ -692,7 +698,7 @@ def within(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
 
     refined = propose(workbench, profile, policy=policy, strategy="sprouts",
                       budget=remaining, seed=seed, around=start_route,
-                      overrides=overrides)
+                      overrides=overrides, pairs=pairs)
 
     if refined.score >= start_score:
         best = refined

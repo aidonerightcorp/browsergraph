@@ -276,6 +276,59 @@ def to_workbench(program: ProgramGraph, registry: Registry | None = None
                                metadata={"program_digest": program.digest})
 
 
+def belief_model(bench: WorkbenchDefinition, evidence, *,
+                 context=("global",), minimum: int = 10):
+    """browsergraph evidence as a solutiongraph `BeliefModel`.
+
+    The strict core shipped a belief model with *interaction* weights and
+    nothing outside its own package ever built one, so the most expressive part
+    of the merge sat unused. This makes one from measurements: a log weight per
+    candidate from its posterior, and a log weight per pair from the measured
+    contrast between routes holding both and routes holding one.
+
+    Log weights because `incremental_score` adds them, and adding logs is
+    multiplying — which is how route quality composes everywhere else here. A
+    pair that halves the odds contributes `log(0.5)`, and that lands as a
+    halving rather than as a subtraction of an arbitrary constant.
+    """
+    import math
+
+    from browsergraph.evidence import pair_effects
+    from solutiongraph.search import BeliefModel, CandidateWeight, InteractionWeight
+
+    def as_log(value: float) -> float:
+        return math.log(max(value, 1e-6))
+
+    stage_of = {cid: stage.id for stage in bench.leaf_stages
+                for cid in stage.candidates}
+
+    unary = []
+    for stage in bench.leaf_stages:
+        for cid in stage.candidates:
+            posterior = evidence.posterior(cid, context)
+            if not posterior.runs:
+                continue
+            unary.append(CandidateWeight(
+                slot_id=f"slot.{stage.id}", candidate_id=cid,
+                log_weight=as_log(posterior.rate),
+                evidence_count=posterior.runs,
+                uncertainty=posterior.spread))
+
+    pairwise = []
+    for pair, factor in pair_effects(evidence, minimum=minimum).items():
+        left, right = sorted(pair)
+        if left not in stage_of or right not in stage_of:
+            continue
+        pairwise.append(InteractionWeight(
+            left_slot=f"slot.{stage_of[left]}", left_candidate=left,
+            right_slot=f"slot.{stage_of[right]}", right_candidate=right,
+            log_weight=as_log(factor), evidence_count=minimum))
+
+    return BeliefModel(revision=f"from-evidence-{len(unary)}u-{len(pairwise)}p",
+                       candidate_weights=tuple(unary),
+                       interaction_weights=tuple(pairwise))
+
+
 def check(bench: WorkbenchDefinition) -> list[str]:
     """Run the strict compiler over a workbench and say what it complains about.
 

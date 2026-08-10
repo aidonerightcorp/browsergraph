@@ -510,6 +510,36 @@ def measured_metrics(evidence: Evidence, candidates: Sequence[str],
     return out
 
 
+def pair_effects(evidence: Evidence, minimum: int = 10,
+                 threshold: float = 0.05) -> dict[frozenset, float]:
+    """How much worse (or better) two candidates are together, as a multiplier.
+
+    `interactions()` finds the pairs and reports a gap. Nothing consumed that
+    number: the search nudged its *starting route* away from a known-bad pair
+    and then scored every route as though the pair did not exist, so sampling
+    could walk straight back into it.
+
+    A gap of -0.4 becomes a multiplier of 0.6 on any route holding both. That
+    is the same shape as the rest of route scoring, where quality compounds —
+    a pair that halves the odds should halve the route's quality, not subtract
+    a constant from it.
+
+    Positive gaps are kept too. Two things that work *better* together is a real
+    finding and there is no reason to report only the bad half.
+    """
+    out: dict[frozenset, float] = {}
+    for a, b, gap, _runs in evidence.interactions(minimum=minimum,
+                                                 threshold=threshold):
+        out[frozenset((a, b))] = max(0.0, 1.0 + gap)
+    # `interactions` only returns the negative side; ask again for the positive
+    # one by inverting the threshold test on the same measured contrast.
+    for a, b, gap, _runs in evidence.interactions(minimum=minimum,
+                                                 threshold=-1e9):
+        if gap > threshold:
+            out[frozenset((a, b))] = 1.0 + gap
+    return out
+
+
 def stages_of(workbench: Any, policy: Any = None) -> dict[str, list[str]]:
     """The eligible candidates per sub-step, as `suggest` wants them."""
     if policy is None:
