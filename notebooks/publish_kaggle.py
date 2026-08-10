@@ -34,7 +34,6 @@ import json
 import pathlib
 import shutil
 import subprocess
-import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 STAGE = HERE.parent / ".kaggle-kernels"
