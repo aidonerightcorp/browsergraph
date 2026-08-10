@@ -197,3 +197,44 @@ def test_a_figure_saves_as_a_standalone_file(diamond, tmp_path):
     out = viz.dag(diamond).save(tmp_path / "figures" / "shape.html")
     assert (tmp_path / "figures" / "shape.html").read_text().startswith("<!doctype")
     assert out.endswith("shape.html")
+
+
+# --- the kinds have to be visible --------------------------------------------
+
+def _kinded(bench, **kinds):
+    from dataclasses import replace
+    return replace(bench, stages=tuple(
+        replace(s, kind=kinds[s.id]) if s.id in kinds else s
+        for s in bench.stages))
+
+
+def test_a_map_stage_does_not_look_like_an_ordinary_one(diamond):
+    """Adding kinds without drawing them made the picture say something untrue,
+    and the whole case for these diagrams is that the shape is visible."""
+    plain = viz.dag(diamond).svg
+    mapped = viz.dag(_kinded(diamond, price="map")).svg
+    assert plain != mapped
+    assert "MAP" in mapped and "per item" in mapped
+
+
+def test_a_branch_stage_is_drawn_as_taking_one_way_out(diamond):
+    svg = viz.dag(_kinded(diamond, parse="branch")).svg
+    assert "BRANCH" in svg
+    assert "stroke-dasharray" in svg
+
+
+def test_the_caption_explains_the_outlines_it_used(diamond):
+    assert "once per item" in viz.dag(_kinded(diamond, price="map")).note
+    assert "outline" not in viz.dag(diamond).note
+
+
+def test_mermaid_uses_its_own_shapes_for_the_kinds(diamond):
+    assert "price[[" in viz.to_mermaid(_kinded(diamond, price="map"))
+    assert "parse{{" in viz.to_mermaid(_kinded(diamond, parse="branch"))
+
+
+def test_the_json_form_carries_the_kind(diamond):
+    import json
+    data = json.loads(viz.to_json(_kinded(diamond, price="map")))
+    kinds = {s["id"]: s["kind"] for s in data["stages"]}
+    assert kinds["price"] == "map" and kinds["parse"] == "atomic"

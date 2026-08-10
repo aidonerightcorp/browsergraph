@@ -185,13 +185,36 @@ def dag(bench: WorkbenchDefinition, *, route: Mapping[str, str] | None = None,
             n = len(stage.candidates)
             picked = (route or {}).get(stage_id)
             border = CHOSEN if picked else EDGE
+            kind = getattr(stage, "kind", "atomic")
+
+            # A map stage runs its node once per item and a branch takes one of
+            # its outputs. Drawing all three the same made the picture say
+            # something untrue the moment those kinds existed — and the whole
+            # case for these diagrams is that the shape is visible.
+            #
+            # A doubled outline for map (many runs, one box) and a dashed one
+            # for branch (only one way out is taken). Shape, not just a word,
+            # so it survives being skimmed.
+            shadow = ""
+            if kind == "map":
+                shadow = (f'<rect x="{x + 5}" y="{y + 5}" width="{box_w}" '
+                          f'height="{box_h}" rx="7" fill="none" stroke="{EDGE}" '
+                          f'stroke-width="1" opacity=".45"/>')
+            dash = ' stroke-dasharray="6 3"' if kind == "branch" else ""
+
             parts.append(
-                f'<g><rect x="{x}" y="{y}" width="{box_w}" height="{box_h}" rx="7" '
-                f'fill="{FILL}" stroke="{border}" stroke-width="{2 if picked else 1}"/>'
+                f'<g>{shadow}<rect x="{x}" y="{y}" width="{box_w}" '
+                f'height="{box_h}" rx="7" fill="{FILL}" stroke="{border}" '
+                f'stroke-width="{2 if picked else 1}"{dash}/>'
                 f'<text x="{x + 9}" y="{y + 19}" font-size="11.5" font-weight="700" '
-                f'fill="{INK}">{_esc(stage.name[:24])}</text>'
-                f'<text x="{x + 9}" y="{y + 34}" font-size="9.5" fill="{MUTED}">'
-                f'{n} candidate{"s" if n != 1 else ""}</text>'
+                f'fill="{INK}">{_esc(stage.name[:22])}</text>'
+                + (f'<text x="{x + box_w - 9}" y="{y + 19}" text-anchor="end" '
+                   f'font-size="9" font-weight="700" fill="{COLD}">'
+                   f'{kind.upper()}</text>' if kind != "atomic" else '')
+                + f'<text x="{x + 9}" y="{y + 34}" font-size="9.5" fill="{MUTED}">'
+                f'{n} candidate{"s" if n != 1 else ""}'
+                + (" · per item" if kind == "map" else
+                   " · one way out" if kind == "branch" else "") + '</text>'
                 + (f'<text x="{x + 9}" y="{y + 46}" font-size="9.5" fill="{CHOSEN}">'
                    f'{_esc(names.get(picked, picked)[:26])}</text>' if picked else '')
                 + '</g>')
@@ -217,6 +240,12 @@ def dag(bench: WorkbenchDefinition, *, route: Mapping[str, str] | None = None,
 
     shape = ("a chain" if bench.is_chain
              else f"{len(layers)} layers, widest {rows}")
+    kinds = {getattr(s, "kind", "atomic") for s in bench.leaf_stages} - {"atomic"}
+    if kinds:
+        shape += (". " + " and ".join(
+            "a doubled outline runs once per item" if k == "map"
+            else "a dashed outline takes only one way out"
+            for k in sorted(kinds, reverse=True)).capitalize())
     defs = (f'<defs><marker id="{uid}-arrow" viewBox="0 0 10 10" refX="9" refY="5" '
             f'markerWidth="7" markerHeight="7" orient="auto-start-end">'
             f'<path d="M0,0 L10,5 L0,10 z" fill="{EDGE}"/></marker></defs>')
@@ -494,9 +523,16 @@ def to_mermaid(bench: WorkbenchDefinition,
     lines = ["graph LR"]
     for stage_id, stage in leaves.items():
         picked = (route or {}).get(stage_id)
+        kind = getattr(stage, "kind", "atomic")
         label = stage.name + (f"<br/><i>{picked}</i>" if picked else
                               f"<br/>{len(stage.candidates)} options")
-        lines.append(f'  {stage_id}["{label}"]')
+        if kind != "atomic":
+            label += f"<br/>[{kind}]"
+        # Mermaid's own shapes carry the meaning where it has one: a subroutine
+        # box for map, a rhombus for branch.
+        open_, close = (("[[", "]]") if kind == "map"
+                        else ("{{", "}}") if kind == "branch" else ("[", "]"))
+        lines.append(f'  {stage_id}{open_}"{label}"{close}')
     for edge in bench.wiring():
         port = f'|{edge.to_port}|' if edge.to_port else ""
         lines.append(f"  {edge.source} -->{port} {edge.target}")
@@ -517,6 +553,7 @@ def to_json(bench: WorkbenchDefinition,
         "title": bench.title,
         "layers": bench.layers(),
         "stages": [{"id": s.id, "name": s.name,
+                    "kind": getattr(s, "kind", "atomic"),
                     "candidates": list(s.candidates),
                     "inputs": [p.name + ":" + p.type for p in s.inputs],
                     "outputs": [p.name + ":" + p.type for p in s.outputs]}

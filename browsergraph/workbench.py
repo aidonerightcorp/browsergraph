@@ -338,10 +338,22 @@ class StageDefinition:
         return replace(self, candidates=found)
 
     def to_dict(self) -> dict:
+        # The shorthand is written from the ports when it was never set, and
+        # this is not a tidiness detail — it was a bug that silently destroyed
+        # graphs. A stage built with `inputs=(PortSpec("in", "Profile"),)` and
+        # no `input_type` wrote neither field: the shorthand was empty, and the
+        # port list below is skipped for a single port named "in". Loading it
+        # back gave a stage with no ports at all, and every edge then failed
+        # with "names a port that does not exist" — on a workbench that had
+        # been perfectly valid before it was saved.
+        single_in = (self.inputs[0].type if len(self.inputs) == 1
+                     and self.inputs[0].name == "in" else "")
+        single_out = (self.outputs[0].type if len(self.outputs) == 1
+                      and self.outputs[0].name == "out" else "")
         out: dict[str, Any] = {"id": self.id, "name": self.name,
                                "description": self.description,
-                               "input_type": self.input_type,
-                               "output_type": self.output_type,
+                               "input_type": self.input_type or single_in,
+                               "output_type": self.output_type or single_out,
                                "success": self.success}
         if self.optional:
             out["optional"] = True

@@ -860,3 +860,65 @@ def test_a_supertype_is_not_accepted_where_a_subtype_is_required():
     ).with_discovered_candidates(nodes, expand_node_candidates(nodes))
 
     assert stage.candidates == ()
+
+
+# --- saving must not destroy the thing being saved ---------------------------
+
+def test_a_stage_keeps_its_ports_through_json():
+    """This was a bug that silently wrecked graphs.
+
+    A stage built with `inputs=(PortSpec("in", "Profile"),)` and no
+    `input_type` wrote *neither* field: the shorthand was empty and the port
+    list is skipped for a single port named "in". Loading it back gave a stage
+    with no ports, and every edge then failed with "names a port that does not
+    exist" — on a workbench that had been perfectly valid before it was saved.
+    """
+    from browsergraph.manifest import PortSpec
+    from browsergraph.workbench import StageDefinition
+
+    stage = StageDefinition(id="profile",
+                            inputs=(PortSpec("in", "Profile"),),
+                            outputs=(PortSpec("out", "Findings"),))
+    back = StageDefinition.from_dict(stage.to_dict())
+    assert [(p.name, p.type) for p in back.inputs] == [("in", "Profile")]
+    assert [(p.name, p.type) for p in back.outputs] == [("out", "Findings")]
+
+
+def test_a_whole_workbench_survives_a_round_trip_and_still_compiles():
+    """The portable format is the claim that another language could read this.
+    A round trip that loses ports makes that claim false."""
+    from dataclasses import replace
+
+    from browsergraph import templates
+    from browsergraph.compile import compile_route
+    from browsergraph.manifest import NodeManifest, PortSpec
+    from browsergraph.workbench import WorkbenchDefinition
+
+    template = templates.get("data.quality")
+    nodes = tuple(NodeManifest(
+        id=f"probe.{s.id}", kind="probe", description=f"Probe {s.id}.",
+        capabilities=(s.capabilities[0],),
+        inputs=tuple(PortSpec(n, t) for n, t in s.inputs),
+        outputs=tuple(PortSpec(n, t) for n, t in s.outputs))
+        for s in template.slots)
+    bench = replace(template.instantiate(
+        {s.id: [f"probe.{s.id}"] for s in template.slots}), nodes=nodes)
+
+    reloaded = WorkbenchDefinition.from_dict(bench.to_dict())
+    route = {s.id: f"probe.{s.id}" for s in template.slots}
+    assert reloaded.validate() == bench.validate()
+    assert compile_route(reloaded, route).digest == compile_route(bench, route).digest
+
+
+def test_a_named_port_still_round_trips():
+    """The shorthand only covers the single in/out case. Named ports must keep
+    using the explicit list."""
+    from browsergraph.manifest import PortSpec
+    from browsergraph.workbench import StageDefinition
+
+    stage = StageDefinition(id="join",
+                            inputs=(PortSpec("price", "Money"),
+                                    PortSpec("title", "Text")),
+                            outputs=(PortSpec("out", "Record"),))
+    back = StageDefinition.from_dict(stage.to_dict())
+    assert [p.name for p in back.inputs] == ["price", "title"]

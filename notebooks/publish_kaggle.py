@@ -68,6 +68,12 @@ KERNELS: dict[str, str] = {
     "14-check-and-process-image": "Graph Jobs 3 Check and Process an Image",
     "15-clean-up-data": "Graph Jobs 4 Clean Up Messy Data",
     "16-fit-a-model": "Graph Jobs 5 Fit a Model",
+    "17-batch-many-files": "Graph Jobs 6 Batch Process Many Files",
+    "18-retry-and-fall-back": "Graph Jobs 7 Retry and Fall Back",
+    "19-find-duplicates": "Graph Jobs 8 Find Duplicate Records",
+    "20-forecast-next-month": "Graph Jobs 9 Forecast Next Month",
+    "21-watch-for-changes": "Graph Jobs 10 Watch for Changes",
+    "22-sort-text": "Graph Jobs 11 Sort Text into Categories",
 }
 
 

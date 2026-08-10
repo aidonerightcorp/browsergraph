@@ -314,6 +314,72 @@ def cmd_workbench(args) -> int:
     return 0
 
 
+def cmd_execute(args) -> int:
+    """Run a compiled plan against real functions.
+
+    `run` was already taken by the browser graph runner, so this is `execute`.
+    The two are different things: `run` drives a browser through a node graph,
+    this runs any compiled plan against whatever functions you point it at.
+
+    The functions come from `--runtime module:name`, where `name` is either a
+    `Runtime` or a plain dict of candidate id to callable. Keeping them outside
+    the graph is the whole design — a dry run and a live run are the same plan
+    with a different runtime, not two code paths.
+    """
+    import importlib
+
+    from browsergraph import execute as _execute
+    from browsergraph.compile import CompileError, compile_route
+    from browsergraph.demo import workbench as demo_workbench
+    from browsergraph.workbench import WorkbenchDefinition
+
+    bench = (WorkbenchDefinition.load(args.config) if args.config
+             else demo_workbench())
+
+    solutions = {s.id: s for s in bench.solutions}
+    if args.route and args.route in solutions:
+        route = solutions[args.route].route
+    elif args.route:
+        print(f"unknown route {args.route!r}; known: {', '.join(solutions) or 'none'}")
+        return 1
+    else:
+        route = {s.id: s.candidates[0] for s in bench.leaf_stages if s.candidates}
+
+    try:
+        plan = compile_route(bench, route, source=args.route or "first")
+    except CompileError as problem:
+        print("cannot compile:")
+        for line in problem.problems:
+            print("  " + line)
+        return 1
+
+    runtime = _execute.Runtime()
+    if args.runtime:
+        module_name, _, attribute = args.runtime.partition(":")
+        module = importlib.import_module(module_name)
+        found = getattr(module, attribute or "RUNTIME")
+        runtime = found if isinstance(found, _execute.Runtime) else _execute.Runtime(found)
+
+    missing = runtime.missing(plan)
+    if missing:
+        print(f"{len(missing)} step(s) have no function behind them:")
+        for candidate in missing:
+            print("  " + candidate)
+        print("\nPoint --runtime at a module holding them, e.g. "
+              "--runtime mypkg.nodes:RUNTIME")
+        return 1
+
+    result = _execute.run(plan, runtime, workspace=args.workspace,
+                          workers=args.workers,
+                          allow_effects=not args.dry_run,
+                          strict=not args.keep_going)
+    print(result.text())
+    if args.receipt:
+        written = result.receipt(task=args.route or "").write(args.receipt)
+        print(f"\nreceipt: {written}")
+    return 0 if result.ok else 1
+
+
 def cmd_compile(args) -> int:
     """Resolve a route into an immutable, content-addressed plan."""
     from browsergraph.compile import CompileError, compile_route
@@ -725,6 +791,20 @@ def main(argv: list[str] | None = None) -> int:
     cm.add_argument("--against", help="diff against another named route")
     cm.add_argument("--json", action="store_true")
     cm.set_defaults(fn=cmd_compile)
+
+    ex = sub.add_parser("execute", help="run a compiled plan against real functions")
+    ex.add_argument("route", nargs="?", help="a named solution (default: first candidates)")
+    ex.add_argument("config", nargs="?", help="a workbench JSON file")
+    ex.add_argument("--runtime", help="module:name holding the functions")
+    ex.add_argument("--workspace", help="folder for artifacts")
+    ex.add_argument("--workers", type=int, default=1,
+                    help="run independent steps at once")
+    ex.add_argument("--dry-run", action="store_true",
+                    help="refuse any step that declares an effect")
+    ex.add_argument("--keep-going", action="store_true",
+                    help="do not stop at the first failure")
+    ex.add_argument("--receipt", help="write a run receipt to this path")
+    ex.set_defaults(fn=cmd_execute)
 
     ev = sub.add_parser("evidence", help="what has been learned, in bits")
     ev.add_argument("config", nargs="?", help="a workbench JSON file")
