@@ -64,6 +64,55 @@ ON_PATH: dict[str, tuple[str, ...]] = {
 }
 
 
+#: Where Playwright keeps the browsers it downloads, and the shape of each.
+#:
+#: Searching only the system locations made `doctor` report `binary:firefox` and
+#: `binary:webkit` as missing on a machine that had just driven both of them —
+#: they were present, merely not where a package manager would put them. A
+#: browser is "available" wherever it legitimately lives.
+PLAYWRIGHT_GLOBS: dict[str, tuple[str, ...]] = {
+    Binary.FIREFOX: ("firefox-*/firefox/firefox",),
+    Binary.WEBKIT: ("webkit-*/pw_run.sh", "webkit-*/minibrowser-*/MiniBrowser"),
+    Binary.BUNDLED_CHROMIUM: (
+        "chromium-*/chrome-linux/chrome",
+        "chromium-*/chrome-mac/Chromium.app/Contents/MacOS/Chromium",
+        "chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell",
+    ),
+}
+
+
+def playwright_cache() -> str:
+    """The directory Playwright downloads browsers into on this platform."""
+    import os
+    import sys
+    override = os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "").strip()
+    if override and override != "0":
+        return override
+    if sys.platform == "darwin":
+        return os.path.expanduser("~/Library/Caches/ms-playwright")
+    if sys.platform.startswith("win"):
+        return os.path.expandvars(r"%USERPROFILE%\AppData\Local\ms-playwright")
+    return os.path.expanduser("~/.cache/ms-playwright")
+
+
+def find_bundled(binary: Binary | str) -> str:
+    """A Playwright-managed build of this browser, if one has been downloaded.
+
+    WebKit ships behind a launcher script rather than a bare executable, which
+    `is_real_program` would reject — correctly, for a driver that must supervise
+    the process, and unhelpfully for the question "is WebKit installed". Only
+    Playwright drives WebKit, and it knows what to do with its own launcher.
+    """
+    import glob
+    import os
+    root = playwright_cache()
+    for pattern in PLAYWRIGHT_GLOBS.get(binary, ()):
+        for hit in sorted(glob.glob(os.path.join(root, pattern)), reverse=True):
+            if os.access(hit, os.X_OK):
+                return hit
+    return ""
+
+
 def is_real_program(path: str) -> bool:
     """True for an executable that is not a shell-script wrapper.
 
@@ -87,12 +136,15 @@ class Resolved:
     binary: str
     path: str = ""
     wrapper: str = ""       # what was on PATH, when it was unusable
+    bundled: bool = False   # found in Playwright's cache, not a system location
 
     @property
     def ok(self) -> bool:
         return bool(self.path)
 
     def explain(self) -> str:
+        if self.ok and self.bundled:
+            return f"{self.binary}: {self.path} (playwright-managed)"
         if self.ok and self.wrapper:
             return (f"{self.binary}: using {self.path} "
                     f"(PATH had {self.wrapper}, a wrapper script a driver cannot use)")
@@ -124,13 +176,20 @@ def resolve(binary: Binary | str) -> Resolved:
         if not out.wrapper and not is_real_program(found):
             out.wrapper = found            # recorded so the report can say why
 
+    if not out.path:
+        # Nothing installed system-wide, but Playwright may have downloaded one.
+        bundled = find_bundled(binary)
+        if bundled:
+            out.path, out.bundled = bundled, True
+
     return out
 
 
 def report() -> list[Resolved]:
     """Every resolvable binary on this machine — used by `doctor`."""
     return [resolve(b) for b in (Binary.SYSTEM_CHROME, Binary.CHROME_FOR_TESTING,
-                                 Binary.FIREFOX, Binary.BRAVE)]
+                                 Binary.FIREFOX, Binary.WEBKIT, Binary.BRAVE,
+                                 Binary.BUNDLED_CHROMIUM)]
 
 
 # --- drivers ----------------------------------------------------------------
