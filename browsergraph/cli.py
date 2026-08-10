@@ -834,6 +834,136 @@ def cmd_graph(args) -> int:
     return 0 if result.ok else 1
 
 
+def _load_bench(config):
+    """A workbench from a path, or the demonstration one. Used by several."""
+    from browsergraph.demo import workbench as demo_workbench
+    from browsergraph.workbench import WorkbenchDefinition
+
+    return WorkbenchDefinition.load(config) if config else demo_workbench()
+
+
+def _load_attribute(reference: str, default: str = ""):
+    """`module:name`, the same convention `--runtime` already uses."""
+    import importlib
+
+    module_name, _, attribute = reference.partition(":")
+    return getattr(importlib.import_module(module_name), attribute or default)
+
+
+def cmd_draw(args) -> int:
+    """Draw a workbench: a self-contained page, or Mermaid, or JSON.
+
+    `viz` could draw any of this from the first day it existed and none of it
+    was reachable without writing Python. A library whose central argument is
+    "look at the shape before you believe it is that shape" should not require
+    a script to look.
+
+    The page is self-contained — no CDN, no fonts, no fetch — so it opens from
+    a `file://` URL on a machine with no network.
+    """
+    from browsergraph import viz
+
+    bench = _load_bench(args.config)
+    route = {}
+    if args.route:
+        named = {s.id: s for s in bench.solutions}
+        if args.route not in named:
+            print(f"unknown route {args.route!r}; known: "
+                  f"{', '.join(named) or 'none'}")
+            return 1
+        route = dict(named[args.route].route)
+
+    if args.format == "mermaid":
+        print(viz.to_mermaid(bench, route or None))
+        return 0
+    if args.format == "json":
+        print(viz.to_json(bench, route or None))
+        return 0
+
+    funnel = [("every route", bench.route_count())]
+    if bench.computation_count() != bench.route_count():
+        funnel.append(("distinguishable behaviours", bench.computation_count()))
+    written = viz.write_report(bench, args.out, route=route or None,
+                               search=funnel)
+    print(f"wrote {written}")
+    print(f"  {len(bench.leaf_stages)} sub-steps, "
+          f"{bench.route_count():,} routes"
+          + (f", {bench.computation_count():,} distinguishable behaviours"
+             if bench.computation_count() != bench.route_count() else ""))
+    return 0
+
+
+def cmd_solve(args) -> int:
+    """Try routes, run them, judge the *output*, keep the best and a fallback.
+
+    The library's shortest path from a graph to an answer, and it was reachable
+    only from Python. Everything it needs is already a command-line convention
+    here: `--runtime module:name` for the functions, `--verify module:name` for
+    the judge.
+
+    Without `--verify`, "did it work" means "did it not raise", which a route
+    returning nothing passes with full marks. That is exactly the failure this
+    whole design is arranged against, so it is refused rather than defaulted —
+    unless you say `--accept-anything`, which prints what it is agreeing to.
+    """
+    from browsergraph import solve as _solve
+    from browsergraph.execute import Runtime
+
+    bench = _load_bench(args.config)
+    if not bench.optimization_profiles:
+        print("this workbench carries no optimization profile, so there is "
+              "nothing to rank routes by. Add one, or use `execute`.")
+        return 1
+
+    runtime = Runtime()
+    if args.runtime:
+        found = _load_attribute(args.runtime, "RUNTIME")
+        runtime = found if isinstance(found, Runtime) else Runtime(found)
+
+    if args.verify:
+        verify = _load_attribute(args.verify, "verify")
+    elif args.stage:
+        verify = _solve.outputs_are_not_empty(*args.stage)
+    elif args.accept_anything:
+        print("no verifier: a route counts as working if nothing raised. A "
+              "route that returns an empty result will score full marks.\n")
+        verify = None
+    else:
+        print("solve needs to know what a good answer looks like. Pick one:\n"
+              "  --stage NAME          accept when that stage produced "
+              "something, and score on how much\n"
+              "  --verify module:name  your own judge, given the finished run\n"
+              "  --accept-anything     score on 'nothing raised', which cannot "
+              "tell empty from correct")
+        return 1
+
+    store = None
+    if args.evidence:
+        import pathlib
+
+        from browsergraph.evidence import Evidence
+        path = pathlib.Path(args.evidence)
+        store = Evidence.load(str(path)) if path.exists() else Evidence()
+
+    answer = _solve.solve(bench, runtime, verify=verify, attempts=args.attempts,
+                          budget=args.budget, workspace=args.workspace,
+                          workers=args.workers, evidence=store)
+    print(answer.text(bench))
+
+    if store is not None and args.evidence:
+        store.save(args.evidence)
+        print(f"\n  evidence updated: {args.evidence}")
+    if args.out:
+        from browsergraph import viz
+        written = viz.write_report(
+            bench, args.out, route=answer.champion or None,
+            alternative=answer.fallbacks[0] if answer.fallbacks else None,
+            run=answer.attempts[-1].run if answer.attempts else None,
+            solution=answer)
+        print(f"  report: {written}")
+    return 0 if answer.ok else 1
+
+
 def cmd_serve(args) -> int:
     from browsergraph.server import serve
     serve(port=args.port)
@@ -1019,6 +1149,31 @@ def main(argv: list[str] | None = None) -> int:
     wbp.add_argument("--export-data", help="also write the normalized JSON here")
     wbp.add_argument("--suite", help="write one file per projection into this directory")
     wbp.set_defaults(fn=cmd_workbench)
+
+    dw = sub.add_parser("draw", help="a picture of a workbench, as one HTML file")
+    dw.add_argument("config", nargs="?", help="a workbench JSON file (default: the demo)")
+    dw.add_argument("-o", "--out", default="workbench.html")
+    dw.add_argument("--route", help="a named solution to highlight")
+    dw.add_argument("--format", default="html", choices=("html", "mermaid", "json"),
+                    help="html writes a self-contained page; the others print")
+    dw.set_defaults(fn=cmd_draw)
+
+    sv = sub.add_parser("solve", help="try routes, judge the output, keep the best")
+    sv.add_argument("config", nargs="?", help="a workbench JSON file (default: the demo)")
+    sv.add_argument("--runtime", help="module:name holding the functions")
+    sv.add_argument("--verify", help="module:name of a judge, given the finished run")
+    sv.add_argument("--stage", action="append",
+                    help="accept when this stage produced something (repeatable)")
+    sv.add_argument("--accept-anything", action="store_true",
+                    help="score on 'nothing raised' — cannot tell empty from correct")
+    sv.add_argument("--attempts", type=int, default=8, help="routes to actually run")
+    sv.add_argument("--budget", type=int, default=60,
+                    help="routes to score while choosing each one")
+    sv.add_argument("--workers", type=int, default=1)
+    sv.add_argument("--workspace", help="folder for artifacts")
+    sv.add_argument("--evidence", help="an evidence JSON file to learn from and update")
+    sv.add_argument("-o", "--out", help="write a report page here")
+    sv.set_defaults(fn=cmd_solve)
 
     gr = sub.add_parser("graph", help="draw a graph and audit its contracts")
     gr.add_argument("config")

@@ -254,6 +254,35 @@ A chart of an opinion looks exactly like a chart of a measurement.
 
 ---
 
+## The whole loop, from a terminal
+
+Every one of these takes a workbench JSON, or the demonstration graph when you
+give it no file. The functions stay outside the graph — `--runtime module:name`
+is the only thing that differs between a dry run and a live one.
+
+```bash
+browsergraph check     job.json                      # valid? and what is advice vs error
+browsergraph draw      job.json -o job.html          # one self-contained page
+browsergraph draw      job.json --format mermaid     # for a README
+browsergraph route     job.json                      # propose one, and say why
+browsergraph compile   cheapest job.json             # freeze it into a hashed plan
+browsergraph execute   cheapest job.json --runtime mine:RUNTIME --workers 4
+browsergraph solve     job.json --runtime mine:RUNTIME --stage extract -o out.html
+browsergraph evidence  job.json --store evidence.json --suggest
+browsergraph verify    job.json --runtime mine:RUNTIME --expect-failure bad.node
+```
+
+`solve` refuses to run without being told what a good answer looks like —
+`--stage NAME`, `--verify module:name`, or an explicit `--accept-anything`. It
+is not defaulted, because the default would be "nothing raised", and a route
+that returns an empty result passes that with full marks.
+
+`verify` is the one worth wiring into CI. It runs many routes and checks the
+controls: the candidates you named with `--expect-failure` **must** fail. A test
+suite where nothing can fail is a test suite that has stopped measuring.
+
+---
+
 ## Hard rules
 
 1. **Every node declares typed input and output ports.** No untyped edges.

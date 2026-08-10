@@ -19,3 +19,6 @@ notebooks/work/
 
 # Example output
 examples/out/
+
+# Stray run output (examples write to a temp dir; this catches older ones)
+work/

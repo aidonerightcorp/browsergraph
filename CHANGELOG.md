@@ -3,6 +3,82 @@
 Notable changes. Dates are the release date; the format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) loosely.
 
+## [0.4.0] — 2026-08-10
+
+The theme is **running it, and looking at what happened**. 0.3.0 could describe a
+graph, check it and choose a route through it. It could not execute one, and it
+could not draw one without a domain baked into the drawing.
+
+### Added
+
+- **An executor.** `execute.py` runs a compiled plan against real functions:
+  map steps, branches, parallel workers, fallbacks, a cache, artifacts with
+  content hashes, and receipts for failures too. A step records `started` as
+  well as `seconds`, so a picture of a run can show two steps overlapping
+  rather than stacking them end to end.
+- **`solve`.** One call that tries routes, runs them, judges the **output** and
+  returns a champion *and* a fallback. Judging is a separate argument because
+  "did it work" must not mean "did it not raise" — a route returning an empty
+  record passes that test with full marks. A champion with no runner-up is a
+  single point of failure dressed as a result.
+- **Pictures of any workbench.** `viz.py`: `dag`, `route_space`, `funnel`,
+  `evidence`, `timeline`, `scoreboard` and `trend`, plus Mermaid, JSON and
+  matplotlib renderings and a self-contained HTML report. Domain-neutral — it
+  takes a graph and knows nothing else, which is the same claim the core makes,
+  tested a second way. Supersedes `spacemap` and `planmap`, which draw browsers.
+- **`browsergraph draw` and `browsergraph solve`.** Both of the above were
+  reachable only from Python. A library arguing "look at the shape before you
+  believe it is that shape" should not need a script to look.
+- **Problem templates.** `templates.py`: eleven skeletons across nine domains,
+  each carrying the anti-patterns that shape it.
+- **Bounded execution.** `bounded.py` gives a step its own process with a clock
+  and a memory ceiling. **Lifecycle isolation, not a sandbox**, and it says so
+  in its first paragraph: it contains a runaway step, not a hostile one.
+- **A tamper-evident journal.** `journal.py` hash-chains receipts, so evidence
+  survives the process and an edited history is detectable.
+- **Model-guided exploration.** `explore.py`. The model proposes, the compiler
+  disposes: a suggestion that does not type-check or that policy refuses is
+  recorded as refused, so a model quietly ignored looks different from one
+  quietly followed.
+- **`quick.py`.** The thirty lines every notebook was pasting, including
+  `passthrough` — doing nothing is a candidate, not a missing step.
+- **`bridge.py`.** A workbench becomes a `solutiongraph` program graph, and the
+  strict compiler checks it. Honest about what the translation cannot know.
+- **`computation_count`.** How many distinguishable things a graph can do,
+  counting each way a branch can go — a different question from `route_count`,
+  which stays the plain product because that is what the searcher ranges over.
+- **`search.eligible_routes`** and **`evidence.per_step_bits`**.
+
+### Fixed
+
+- **A run's verdict never reached the per-candidate posteriors.** `solve` stamps
+  the judge's answer onto `receipt.ok`, and `from_receipt` read only `step.ok`.
+  A reader returning an empty list raises nothing, so after six runs the reader
+  that produced two records and the reader that produced none had identical
+  posteriors and every per-step chart read flat zero.
+- **`solve` reported a champion "out of 48 possible"** on a space it could only
+  ever draw 24 routes from: `route_count` summed over branch paths while the
+  searcher took the product.
+- **`solve` could not cover a small space.** `within` enumerates when the space
+  fits its budget, so it returns the same winner however the seed moves;
+  `attempts=6` on a four-route graph produced two attempts and stopped silently.
+- **The clamp that made search blind.** `min(1.0, ...)` on the optimism bonus
+  saturated every candidate whose prior plus bonus reached 1.0 — which, since an
+  undeclared prior *is* 1.0, was almost all of them. Tried and untried scored
+  identically and the search stopped exploring.
+- **`interactions()` compared a route outcome against `rate(a) * rate(b)`**, a
+  category error rather than a tuning problem: on data built with no interaction
+  at all it reported eleven. Now both sides are whole routes of the same shape.
+- **Discovery and the compiler disagreed about types** — one used equality, the
+  other the subtype lattice — so a notebook reported zero legal routes forever.
+- **`compile_route` never checked candidate ports**, despite a comment saying it
+  did.
+- **Exhaustive search materialised the whole product**, which took 53GB and the
+  machine with it on a 3.8-trillion-route space. It now refuses above a limit,
+  with the number in the message, and streams below it.
+- **Artifacts were detected by name rather than by content**, so a second run
+  over the same folder reported that it had written nothing.
+
 ## [0.3.0] — 2026-08-10
 
 The theme is **being able to say why**. A run that reports success, a picture that

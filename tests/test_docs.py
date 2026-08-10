@@ -76,3 +76,53 @@ def test_the_test_count_badge_is_not_wildly_stale():
     assert found, f"could not count the tests\n{listing.stdout[-800:]}"
     assert abs(found - int(claimed.group(1))) <= max(20, found * 0.1), (
         f"the badge says {claimed.group(1)} and there are {found}")
+
+
+def test_the_changelog_covers_the_version_being_shipped():
+    """A changelog a version behind is worse than none: a reader diffing two
+    releases sees the older one's notes and concludes nothing changed."""
+    from browsergraph._version import __version__
+
+    changelog = (ROOT / "CHANGELOG.md").read_text()
+    assert f"## [{__version__}]" in changelog, (
+        f"_version.py says {__version__} and CHANGELOG.md has no entry for it")
+
+
+def test_every_public_viz_figure_is_named_in_the_module_docstring():
+    """The docstring lists the pictures and says how many. Adding one without
+    listing it is how the count drifted from four to seven unannounced."""
+    named = {name for name in dir(viz)
+             if not name.startswith("_")
+             and callable(getattr(viz, name))
+             and getattr(getattr(viz, name), "__module__", "") == viz.__name__
+             and getattr(viz, name).__doc__
+             and "Figure" in str(getattr(viz, name).__annotations__.get("return", ""))}
+    missing = [n for n in named if f"`{n}`" not in (viz.__doc__ or "")]
+    assert not missing, f"undocumented figures: {sorted(missing)}"
+
+
+def test_every_documented_command_exists():
+    """A README that names a command the parser does not have is worse than a
+    README with no commands in it — the reader blames their install."""
+    import re as _re
+    import subprocess
+    import sys
+
+    text = (ROOT / "AGENTS.md").read_text() + (ROOT / "README.md").read_text()
+    named = {m for m in _re.findall(r"^browsergraph (\w[\w-]*)", text, _re.MULTILINE)}
+    assert named, "no commands documented, so this proves nothing"
+
+    listing = subprocess.run([sys.executable, "-m", "browsergraph.cli", "--help"],
+                             capture_output=True, text=True, timeout=120,
+                             cwd=str(ROOT))
+    # argparse prints the subcommands as one comma-separated brace group. An
+    # earlier version of this scanned for `[\s,{](name)[,}]`, which consumed the
+    # separator it needed for the next match and so saw every other command —
+    # then reported half the README as undocumented.
+    group = _re.search(r"\{([a-z][a-z,-]+)\}", listing.stdout)
+    assert group, f"could not read the command list\n{listing.stdout[:600]}"
+    real = set(group.group(1).split(","))
+
+    missing = sorted(n for n in named if n not in real)
+    assert not missing, (
+        f"documented but not a command: {missing}\nreal: {sorted(real)}")

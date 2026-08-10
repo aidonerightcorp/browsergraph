@@ -207,3 +207,90 @@ def test_the_version_module_holds_only_a_literal():
             if ln.strip() and not ln.strip().startswith("#")]
     code = [ln for ln in code if not ln.strip().startswith(('"""', "'''"))]
     assert not any(ln.startswith(("import ", "from ")) for ln in code), src
+
+
+# --- draw and solve, the two the library could do and the CLI could not ------
+
+def _tiny_workbench():
+    from browsergraph.quick import chain, graph, node, step
+    from browsergraph.workbench import OptimizationObjective, OptimizationProfile
+
+    nodes = [node("load.good", "load", gives=[("out", "Rows")]),
+             node("load.empty", "load", gives=[("out", "Rows")]),
+             node("keep.all", "keep", [("in", "Rows")], [("out", "Rows")]),
+             node("keep.none", "keep", [("in", "Rows")], [("out", "Rows")])]
+    steps = [step("load", "Load", [], [("out", "Rows")], "load",
+                  ["load.good", "load.empty"]),
+             step("keep", "Keep", [("in", "Rows")], [("out", "Rows")], "keep",
+                  ["keep.all", "keep.none"])]
+    return graph("Tiny", "Load rows and keep the good ones.", steps, nodes,
+                 chain("load", "keep"),
+                 profiles=[OptimizationProfile(id="p", objectives=(
+                     OptimizationObjective("quality", "maximize", 1.0),))])
+
+
+@pytest.fixture
+def tiny(tmp_path):
+    path = tmp_path / "tiny.json"
+    path.write_text(json.dumps(_tiny_workbench().to_dict()))
+    return path
+
+
+def test_draw_writes_a_page_that_needs_no_network(tiny, tmp_path, capsys):
+    out = tmp_path / "page.html"
+    assert main(["draw", str(tiny), "-o", str(out)]) == 0
+    page = out.read_text()
+    assert "<svg" in page
+    for forbidden in ("http://", "https://", "<script src", "@import"):
+        assert forbidden not in page, f"the page reaches for {forbidden}"
+    assert "4 routes" in capsys.readouterr().out.replace(",", "")
+
+
+@pytest.mark.parametrize("form", ["mermaid", "json"])
+def test_draw_prints_the_text_forms(tiny, capsys, form):
+    assert main(["draw", str(tiny), "--format", form]) == 0
+    assert "load" in capsys.readouterr().out
+
+
+def test_draw_names_the_routes_it_knows_when_given_an_unknown_one(tiny, capsys):
+    assert main(["draw", str(tiny), "--route", "nope"]) == 1
+    assert "unknown route" in capsys.readouterr().out
+
+
+def test_solve_refuses_rather_than_defaulting_to_a_weak_judge(tiny, capsys):
+    """Defaulting to 'did it not raise' is the failure the design is arranged
+    against, so the command names the three ways to say what good means."""
+    assert main(["solve", str(tiny)]) == 1
+    said = capsys.readouterr().out
+    for option in ("--stage", "--verify", "--accept-anything"):
+        assert option in said
+
+
+def test_solve_finds_the_only_route_that_produces_anything(tiny, tmp_path,
+                                                           capsys, monkeypatch):
+    module = tmp_path / "tiny_runtime.py"
+    module.write_text(
+        "from browsergraph.execute import Runtime\n"
+        "RUNTIME = Runtime({'load.good': lambda **kw: [1, 2, 3],\n"
+        "                   'load.empty': lambda **kw: [],\n"
+        "                   'keep.all': lambda **kw: list(kw['in']),\n"
+        "                   'keep.none': lambda **kw: []})\n")
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    out = tmp_path / "report.html"
+    assert main(["solve", str(tiny), "--runtime", "tiny_runtime:RUNTIME",
+                 "--stage", "keep", "--attempts", "6", "-o", str(out)]) == 0
+    said = capsys.readouterr().out
+    assert "load.good" in said and "keep.all" in said
+    assert "3 did not work" in said, "the empty routes must be reported, not hidden"
+    assert out.exists() and "<svg" in out.read_text()
+
+
+def test_solve_says_so_when_there_is_nothing_to_rank_by(tmp_path, capsys):
+    from dataclasses import replace
+
+    bare = replace(_tiny_workbench(), optimization_profiles=())
+    path = tmp_path / "bare.json"
+    path.write_text(json.dumps(bare.to_dict()))
+    assert main(["solve", str(path), "--accept-anything"]) == 1
+    assert "optimization profile" in capsys.readouterr().out

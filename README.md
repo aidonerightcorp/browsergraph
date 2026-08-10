@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Core deps: none](https://img.shields.io/badge/core%20deps-stdlib--only-brightgreen)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-1331%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-1341%20passing-brightgreen)](tests/)
 [![Studio](https://img.shields.io/badge/studio-explore%20live-2f6fed)](https://aidonerightcorp.github.io/browsergraph/)
 [![Kaggle](https://img.shields.io/badge/Kaggle-run%20it%20now-20BEFF?logo=kaggle)](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 
@@ -38,21 +38,23 @@ browsergraph doctor           # what works here, and the command to fix what doe
 browsergraph bootstrap        # only if you want a browser; the core needs none
 ```
 
-**Install from git, not from the v0.3.0 release.** That wheel predates
-`templates`, `viz`, `execute`, `explore`, `journal`, `bounded` and `quick` —
-most of what the rest of this page describes. Following the old instruction gave
-you a build that could not run the examples on it, which is worse than no
-instruction. A tagged 0.4.0 release is not cut yet; git `main` is the honest
-place to point until it is.
+**v0.4.0 is the first release that matches this page.** The v0.3.0 wheel
+predates `execute`, `solve`, `viz`, `templates`, `explore`, `journal`, `bounded`
+and `quick` — most of what is described below — so following the old install
+line gave you a build that could not run the examples on it. If you pinned
+0.3.0, upgrade; [CHANGELOG.md](CHANGELOG.md) lists what changed and what was
+broken.
+
+The wheel has **no dependencies at all** — installing it into an empty
+environment pulls exactly one package. Every engine, OCR backend and plotting
+library is an optional extra, so a graph can be built, drawn, linted, compiled
+and mock-run with nothing else installed.
 
 With an engine, if you want one:
 
 ```bash
 pip install "browsergraph[playwright] @ git+https://github.com/aidonerightcorp/browsergraph.git"
 ```
-
-The core is **stdlib-only** — every engine is an optional extra, so a graph can be built,
-linted and mock-run with nothing installed.
 
 ## A job is a graph, and the graph is the point
 
@@ -84,6 +86,19 @@ from browsergraph import demo, viz
 bench = demo.tabular()
 viz.dag(bench)                  # the same thing as SVG, in a notebook
 ```
+
+Or without writing any Python at all:
+
+```bash
+browsergraph draw  job.json -o job.html                    # every figure, one file
+browsergraph solve job.json --runtime mine:RUNTIME --stage extract
+```
+
+`solve` tries routes, runs them, judges the **output**, and hands back the best
+one plus a fallback. It refuses to run until you say what a good answer looks
+like — the default would be "nothing raised", and a route that returns an empty
+result passes that with full marks. The full command list is in
+[AGENTS.md](AGENTS.md#the-whole-loop-from-a-terminal).
 
 **Explore it in your browser, installing nothing:**
 [the live studio](https://aidonerightcorp.github.io/browsergraph/) — all 166
