@@ -60,14 +60,18 @@ class Notebook:
 
 SETUP = """
 # Nothing here needs a browser, a model or a network. The core is stdlib-only.
+#
+# Installed from the repository rather than from a pinned release wheel: these
+# notebooks use `types`, `facets` and `viz`, and pinning v0.3.0 meant installing
+# a build from before those existed — so the notebook failed at cell one while
+# looking, from the source, entirely correct.
 try:
     import browsergraph  # noqa: F401
 except ImportError:
     import subprocess, sys
     subprocess.run([sys.executable, "-m", "pip", "install", "-q",
-                    "https://github.com/aidonerightcorp/browsergraph/releases/"
-                    "download/v0.3.0/browsergraph-0.3.0-py3-none-any.whl"],
-                   check=True)
+                    "browsergraph @ git+https://github.com/"
+                    "aidonerightcorp/browsergraph.git"], check=True)
 
 import browsergraph as bg
 print("browsergraph", bg.__version__)

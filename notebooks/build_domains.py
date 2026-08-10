@@ -26,11 +26,14 @@ from build_notebooks import Notebook  # noqa: E402
 # notebook that depends on a sibling file does not survive being downloaded on
 # its own, which is how notebooks are actually shared.
 SETUP = '''
-# browsergraph — install from PyPI, or from the repo if you have it checked out.
+# Installed from the repository, not from PyPI: this notebook uses `templates`
+# and `viz`, which no published release contains yet. A notebook that installs
+# something older than the API it calls fails at cell one, which is a confusing
+# way to introduce a library about checking things before they run.
 try:
     import browsergraph  # noqa: F401
 except ImportError:  # pragma: no cover
-    %pip install -q browsergraph
+    %pip install -q "browsergraph @ git+https://github.com/aidonerightcorp/browsergraph.git"
 
 import browsergraph as bg
 from browsergraph import templates as T, viz

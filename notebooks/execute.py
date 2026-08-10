@@ -61,7 +61,41 @@ def execute(path: pathlib.Path) -> tuple[bool, str]:
     return True, f"{filled}/{total} code cells produced output in {time.time() - started:.0f}s"
 
 
+def _assert_local_package() -> None:
+    """Refuse to run unless `browsergraph` resolves to this working tree.
+
+    Kernels start with their cwd in this folder, where `browsergraph` no longer
+    resolves to `../browsergraph` — it resolves to whatever is installed. If
+    that is a released build, the notebooks silently verify the *last release*
+    instead of the code being edited, and a run that says "11/11 ok" has tested
+    nothing you changed.
+
+    Worse, it cascades: an `ImportError` on a new module trips each notebook's
+    install-if-missing fallback, pip serves a cached wheel from an older commit,
+    and every subsequent notebook fails on the same missing module.
+    """
+    import subprocess
+
+    # Resolved in a subprocess whose cwd is this folder, because that is where
+    # the kernels run. Checking it in *this* process would resolve against the
+    # repository root, where the source directory shadows site-packages and the
+    # answer is right for the wrong reason.
+    probe = subprocess.run(
+        [sys.executable, "-c",
+         "import browsergraph, pathlib; print(pathlib.Path(browsergraph.__file__).resolve().parent)"],
+        cwd=str(HERE), capture_output=True, text=True)
+    resolved = probe.stdout.strip()
+    expected = str((HERE.parent / "browsergraph").resolve())
+    if resolved != expected:
+        raise SystemExit(
+            f"browsergraph resolves to {resolved or '(not importable)'},\n"
+            f"not {expected}.\n"
+            f"These notebooks would verify that copy instead of this one. Fix:\n"
+            f"  pip uninstall -y browsergraph && pip install -e . --no-deps")
+
+
 def main(argv: list[str]) -> int:
+    _assert_local_package()
     _cap_memory()
     print(f"memory cap {MEMORY_CAP_GB}GB per kernel "
           f"(BG_NOTEBOOK_MEMORY_GB to change)")
