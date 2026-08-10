@@ -442,6 +442,7 @@ the identical graph, driven by different engines, each capturing its own screens
 code("""
 from browsergraph.doctor import available_engines
 import matplotlib.image as mpimg
+import numpy as np
 
 gallery_graph = (Graph('gallery')
                  .add(Navigate(f'{BASE}/index.html'))
@@ -479,10 +480,19 @@ if shots:
     fig, axes = plt.subplots(1, len(shots), figsize=(5.2 * len(shots), 4.6))
     axes = [axes] if len(shots) == 1 else list(axes)
     for ax, (label, path, confirmed) in zip(axes, shots):
-        ax.imshow(mpimg.imread(path)); ax.axis('off')
-        ax.set_title(f'{label}\\n{confirmed[:34] if confirmed else "NO CONFIRMATION"}',
-                     fontsize=9.5,
-                     color='#1f8a4c' if confirmed else '#c0392b')
+        img = mpimg.imread(path)
+        ax.imshow(img); ax.axis('off')
+        # A screenshot can be structurally perfect and contain no text at all —
+        # a browser with no usable font lays the page out and draws no glyphs,
+        # without erroring. Every data check passes: the run is ok, the click
+        # lands, the value extracts. Counting distinct colours is a crude but
+        # effective tell, and it is better than nobody noticing.
+        colours = len(np.unique(img.reshape(-1, img.shape[-1]), axis=0))
+        textless = colours < 600
+        note = ('RENDERED NO TEXT — the layout is right and the glyphs are missing'
+                if textless else (confirmed[:34] or 'NO CONFIRMATION'))
+        ax.set_title(f'{label}\\n{note}', fontsize=9.5,
+                     color='#c0392b' if (textless or not confirmed) else '#1f8a4c')
     fig.suptitle('one graph, different engines — each screenshot taken by that engine',
                  fontsize=12, y=1.02)
     plt.tight_layout(); save_fig('02-engine-gallery')
@@ -492,6 +502,13 @@ md("""
 Same nodes, same assertions, different rendering engines. The green line in each shot is
 the element that only exists **after** the click — the graph waited for it, so every one
 of these is a verified run rather than an optimistic one.
+
+If a panel is flagged **RENDERED NO TEXT**, that engine drew the page without a single
+glyph. It is worth dwelling on how such a run looks from the inside: the graph reports
+success, the click lands, the element appears, and the value extracts correctly. Every
+data-level check passes. On this image WebKit does exactly that, and no amount of reading
+the output would reveal it — only the picture does. Which is the whole argument of this
+library, arriving from a direction it was not watching.
 """)
 
 
