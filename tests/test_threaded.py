@@ -273,3 +273,20 @@ def test_bootstrap_uses_a_system_browser_when_the_bundled_one_fails(monkeypatch)
                         lambda engine=None, executable_path="": (bool(executable_path), "no"))
     rep = bs.ensure_browser(install=False, apt=False)
     assert rep.ok and rep.executable_path == "/usr/bin/google-chrome"
+
+
+def test_bootstrap_installs_fonts():
+    """A browser with no font renders a page with no text — and does not error.
+
+    The run reports success, the click lands, the value extracts, and the
+    screenshot is silently empty of glyphs. WebKit on a slim image does exactly
+    this, so fonts belong in the dependency list rather than being assumed.
+    """
+    from browsergraph.bootstrap import APT_PACKAGES
+    assert any("fonts-" in p for p in APT_PACKAGES), APT_PACKAGES
+    assert "fontconfig" in APT_PACKAGES
+
+
+def test_font_presence_is_reported():
+    from browsergraph.bootstrap import has_fonts
+    assert isinstance(has_fonts(), bool)

@@ -70,6 +70,13 @@ from browsergraph.drivers import build
 # installs those too when it can, which is why the gallery further down can show
 # the same graph on Blink, Gecko and WebKit rather than just Chromium.
 boot = ensure_browser(verbose=True, browsers=('chromium', 'firefox', 'webkit'))
+
+# A browser with no fonts does not fail. It lays the page out perfectly and
+# draws no glyphs at all — the run reports success, the click lands, the value
+# extracts, and the screenshot is silently empty of text. WebKit on a slim
+# image did exactly that here, and only looking at the picture revealed it.
+from browsergraph.bootstrap import has_fonts
+print('fonts available for text rendering:', has_fonts())
 print()
 print(boot.text())
 HAVE_BROWSER = boot.ok

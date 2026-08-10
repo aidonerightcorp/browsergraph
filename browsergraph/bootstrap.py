@@ -48,6 +48,12 @@ APT_PACKAGES = (
     "libatk1.0-0", "libatk-bridge2.0-0", "libcups2", "libdrm2", "libxkbcommon0",
     "libxcomposite1", "libxdamage1", "libxfixes3", "libxrandr2", "libgbm1",
     "libasound2", "libpango-1.0-0", "libcairo2", "libnss3", "libnspr4",
+    # Fonts, which are not optional and are easy to forget. A browser with no
+    # font renders a page whose layout is perfect and whose text is *entirely
+    # absent* — and it does not error, so the run reports success, the click
+    # lands, and the value extracts. WebKit on a slim image does exactly this.
+    # Only looking at the screenshot reveals it.
+    "fonts-liberation", "fonts-dejavu-core", "fontconfig",
 )
 
 
@@ -228,6 +234,7 @@ def ensure_browser(engine: Engine = Engine.PLAYWRIGHT, *, install: bool = True,
                 s = report.add(Step("apt-get install libraries", ok=code == 0,
                                     detail="" if code == 0 else out[-160:]))
                 say(str(s))
+                _run(["fc-cache", "-f"], timeout=120)   # newly installed fonts
             ok, log = launches(engine)
             if ok:
                 report.ok = True
@@ -252,3 +259,20 @@ def ensure_browser(engine: Engine = Engine.PLAYWRIGHT, *, install: bool = True,
     report.add(Step("browser-less fallback available", ok=True,
                     detail="engine=http needs no browser (no JavaScript)"))
     return report
+
+
+def has_fonts() -> bool:
+    """Is there any font for a browser to render text with?
+
+    Worth asking separately, because a browser with no fonts does not fail. It
+    lays the page out perfectly and draws no glyphs at all, so the run reports
+    success and the screenshot is silently empty of text.
+    """
+    import glob
+    import os
+    for root in ("/usr/share/fonts", "/usr/local/share/fonts",
+                 os.path.expanduser("~/.fonts")):
+        if glob.glob(os.path.join(root, "**", "*.tt[fc]"), recursive=True) or \
+                glob.glob(os.path.join(root, "**", "*.otf"), recursive=True):
+            return True
+    return False
