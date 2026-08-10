@@ -6,6 +6,7 @@ nodes. Action nodes talk to a `BrowserPort`, never to an engine directly, so a
 node written once runs on every engine.
 """
 from browsergraph._version import __version__ as __version__
+from browsergraph.bounded import LimitExceeded, Limits, bound, bounded_runtime
 from browsergraph.compile import Plan, Step, compile_route
 from browsergraph.contracts import Contract, ContractError, contract_of
 from browsergraph.dimensions import (
@@ -46,6 +47,7 @@ from browsergraph.facets import validate as validate_facets
 # that says which one it is instead of silently shadowing.
 from browsergraph.graph import Edge as GraphEdge
 from browsergraph.graph import EdgeKind, Graph, RunResult, run
+from browsergraph.journal import Journal
 from browsergraph.manifest import (
     NodeDefinition,
     NodeManifest,
@@ -96,6 +98,8 @@ __all__ = [
     # open description: types bind, facets rank
     "FacetSpec", "WELL_KNOWN_FACETS", "facet_fields", "facet_keywords",
     "facet_specs_for", "merge_facets", "normalize_facet", "validate_facets",
+    # durable evidence, and a clock and ceiling on one step
+    "Journal", "Limits", "LimitExceeded", "bound", "bounded_runtime",
     # a model may suggest; the compiler still decides
     "guided", "Suggestion", "ollama_proposer",
     # pictures of any workbench — `import browsergraph.viz` for the rest

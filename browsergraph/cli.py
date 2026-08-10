@@ -314,6 +314,94 @@ def cmd_workbench(args) -> int:
     return 0
 
 
+def cmd_verify(args) -> int:
+    """Run every route of a workbench and report what actually happened.
+
+    `check` validates a description. `execute` runs one route. Neither answers
+    the question you have before shipping: *does all of this still work?*
+
+    Negative controls are the part worth having. A verifier that only reports
+    successes cannot tell "everything passed" from "nothing ran" — so a route
+    expected to fail and passing is reported as a failure of the verifier, not
+    a happy surprise.
+    """
+    import importlib
+    import itertools
+
+    from browsergraph import execute as _execute
+    from browsergraph.compile import CompileError, compile_route
+    from browsergraph.demo import workbench as demo_workbench
+    from browsergraph.workbench import WorkbenchDefinition
+
+    bench = (WorkbenchDefinition.load(args.config) if args.config
+             else demo_workbench())
+
+    runtime = _execute.Runtime()
+    if args.runtime:
+        module_name, _, attribute = args.runtime.partition(":")
+        found = getattr(importlib.import_module(module_name),
+                        attribute or "RUNTIME")
+        runtime = (found if isinstance(found, _execute.Runtime)
+                   else _execute.Runtime(found))
+
+    expected_failures = set(args.expect_failure or ())
+    leaves = [s for s in bench.leaf_stages if s.candidates]
+    pools = [list(s.candidates[:args.per_stage]) for s in leaves]
+    total = 1
+    for pool in pools:
+        total *= len(pool)
+
+    if total > args.limit:
+        print(f"{total:,} route combinations exceeds the {args.limit:,} limit; "
+              f"lower --per-stage or raise --limit")
+        return 1
+
+    print(f"{bench.title}: verifying {total:,} route(s)")
+    passed = failed = controls = surprises = 0
+
+    for combo in itertools.product(*pools):
+        route = {stage.id: cid for stage, cid in zip(leaves, combo, strict=True)}
+        label = ",".join(f"{k}={v}" for k, v in sorted(route.items()))
+        control = any(cid in expected_failures for cid in combo)
+        try:
+            plan = compile_route(bench, route)
+        except CompileError as problem:
+            if control:
+                controls += 1
+                continue
+            failed += 1
+            print(f"  FAIL compile  {label[:70]}")
+            print(f"       {problem.problems[0]}")
+            continue
+
+        result = _execute.run(plan, runtime, strict=True)
+        if result.ok and not control:
+            passed += 1
+        elif not result.ok and control:
+            controls += 1
+        elif not result.ok:
+            failed += 1
+            bad = next((s for s in result.steps if not s.ok), None)
+            print(f"  FAIL run      {label[:70]}")
+            if bad:
+                print(f"       {bad.stage}: {bad.error[:90]}")
+        else:
+            # Expected to fail and did not. Reported as a verifier failure:
+            # a control that stops controlling is how a suite quietly starts
+            # proving nothing.
+            surprises += 1
+            print(f"  SURPRISE      {label[:70]}")
+            print("       expected this route to fail, and it passed")
+
+    print(f"\n{passed} passed, {controls} negative control(s) failed as "
+          f"intended, {failed} unexpected failure(s), {surprises} surprise(s)")
+    if not passed and not controls:
+        print("nothing ran — a verifier that reports no failures because it "
+              "attempted nothing is worse than none")
+        return 1
+    return 0 if not failed and not surprises else 1
+
+
 def cmd_execute(args) -> int:
     """Run a compiled plan against real functions.
 
@@ -833,6 +921,17 @@ def main(argv: list[str] | None = None) -> int:
     ex.add_argument("--evidence", help="an evidence JSON file to learn from and update")
     ex.add_argument("--receipt", help="write a run receipt to this path")
     ex.set_defaults(fn=cmd_execute)
+
+    vf = sub.add_parser("verify", help="run every route and check the controls")
+    vf.add_argument("config", nargs="?", help="a workbench JSON file")
+    vf.add_argument("--runtime", help="module:name holding the functions")
+    vf.add_argument("--per-stage", type=int, default=2,
+                    help="candidates per step to combine (default 2)")
+    vf.add_argument("--limit", type=int, default=200,
+                    help="refuse to verify more routes than this")
+    vf.add_argument("--expect-failure", action="append",
+                    help="a candidate whose routes must fail (repeatable)")
+    vf.set_defaults(fn=cmd_verify)
 
     ev = sub.add_parser("evidence", help="what has been learned, in bits")
     ev.add_argument("config", nargs="?", help="a workbench JSON file")
