@@ -103,6 +103,62 @@ it.
 
 ---
 
+## Run it
+
+A plan is not a run. `browsergraph.execute` does the running.
+
+```python
+from browsergraph import execute
+from browsergraph.compile import compile_route
+
+runtime = execute.Runtime({"load.csv": load_csv, "clean.rows": clean_rows})
+plan = compile_route(bench, route)
+
+print(runtime.missing(plan))          # every step with no code behind it
+run = execute.run(plan, runtime, {"load": "data.csv"}, workspace="work")
+print(run.text())
+```
+
+Writing a node function:
+
+* Take your input ports by name. Return your one output.
+* Several output ports? Return a dict keyed by port name.
+* **One** output port? The return value *is* the value, dict or not.
+* Ask for `workspace` and you get a folder. Files you write there come back as
+  artifacts with a size and a hash.
+* Ask for `step` or `params` if the node needs its own settings.
+
+`execute.dry_run(...)` runs everything that touches nothing and refuses the
+first step that declares an effect. The plan already knows which those are, so
+this needs no flag on the node and no second implementation.
+
+The type check at each hand-off is the part that earns its keep. A node that
+promises `Records` and returns `None` is caught at that node, not three steps
+later somewhere unrelated.
+
+---
+
+## The strict model
+
+`solutiongraph` is the domain-neutral core. It says things a workbench cannot:
+port cardinality, four levels of determinism, idempotency, failure modes, and
+slot kinds for branch, map, reduce and loop.
+
+You do not have to write in it. `browsergraph.bridge` crosses over:
+
+```python
+from browsergraph import bridge
+
+print(bridge.check(bench))        # what the strict compiler objects to, with codes
+print(bridge.summary(bench))      # slots, edges, effects, permissions
+space = bridge.admitted(bench)    # what is allowed in each slot, and why not
+```
+
+Use it when you want a second opinion with error codes a program can act on,
+rather than prose a person has to read.
+
+---
+
 ## Look at what you built
 
 `browsergraph.viz` draws any workbench — it knows nothing about any domain.
