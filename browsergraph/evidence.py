@@ -459,35 +459,51 @@ class Evidence:
 
 def measured_metrics(evidence: Evidence, candidates: Sequence[str],
                      context: Sequence[str] = ("global",),
-                     prior_quality: Mapping[str, float] | None = None
+                     prior_quality: Mapping[str, float] | None = None,
+                     explore: float = 1.0
                      ) -> dict[str, dict[str, float]]:
-    """Per-candidate metrics with the prior pulled toward what was measured.
+    """Per-candidate metrics: the prior pulled toward measurement, plus optimism.
 
-    This is the step that was missing, and the search was quietly wrong without
-    it. Evidence was used to *start* the search while scoring still ran on the
-    numbers somebody wrote down when the graph was drawn — so the search walked
-    straight back to whatever the priors liked, and two hundred real runs
-    changed the answer not at all.
+    Two things happen here and both are load-bearing.
 
-    Shrinkage, not replacement. One observation should nudge a prior; fifty
-    should overrule it. `Posterior.confidence` is exactly that weight and says
-    so in its own docstring — it is deliberately not a p-value, it is how much
-    to trust the measurement against the guess.
+    **Shrinkage.** One observation should nudge a prior; fifty should overrule
+    it. `Posterior.confidence` is exactly that weight and says so in its own
+    docstring — deliberately not a p-value, just how much to trust the
+    measurement against the guess.
 
-        effective = (1 - confidence) * prior + confidence * measured
+        shrunk = (1 - confidence) * prior + confidence * measured
 
-    Latency is taken straight from the measurement when there is one, because a
-    stopwatch is not a belief.
+    **Optimism.** The shrunk mean alone is not enough, and the failure is not
+    subtle. Given a workbench whose declared prior said the worst candidate was
+    the best one, a search on means picked it sixty times out of sixty and never
+    tried either alternative — each failure lowered its score a little, and the
+    untried candidates sat at their own priors with nothing to raise them. The
+    loop cannot learn about a thing it never runs.
+
+    So the score is the shrunk mean plus a bonus for not knowing:
+
+        effective = shrunk + explore * spread
+
+    `spread` is the Beta standard deviation: wide when little has been seen,
+    narrow once a lot has. That makes an untried candidate attractive *because*
+    it is untried, and stops being attractive once it has been tried enough —
+    the whole of optimism under uncertainty, with no schedule to tune.
+
+    Every candidate gets an entry now, measured or not. Returning only the
+    measured ones was the other half of the same bug: an unmeasured candidate
+    fell back to its declared prior with no credit for being unknown.
+
+    `explore=0` gives the plain shrunk mean, for when you want the current best
+    guess rather than the next thing worth trying.
     """
     out: dict[str, dict[str, float]] = {}
     priors = dict(prior_quality or {})
     for candidate in candidates:
         posterior = evidence.posterior(candidate, context)
-        if not posterior.runs:
-            continue
         weight = posterior.confidence
         prior = priors.get(candidate, posterior.rate)
-        metrics = {"quality": (1.0 - weight) * prior + weight * posterior.rate}
+        shrunk = (1.0 - weight) * prior + weight * posterior.rate
+        metrics = {"quality": min(1.0, shrunk + explore * posterior.spread)}
         if posterior.measured and posterior.latency_ms:
             metrics["latency_ms"] = posterior.latency_ms
         out[candidate] = metrics

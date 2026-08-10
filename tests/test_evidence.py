@@ -327,3 +327,110 @@ def test_both_sides_of_the_comparison_are_whole_routes():
         store.routes.append((("a", "c", "x", "y", "z"), "global", 0.5))
     assert store.interactions(minimum=10) == [], \
         "equal outcomes must not register as a clash however long the route"
+
+
+# --- optimism, or the loop never learns --------------------------------------
+
+def test_an_untried_candidate_is_attractive_because_it_is_untried():
+    """The shrunk mean alone locks in. Given a workbench whose prior said the
+    worst candidate was the best, a search on means picked it sixty times out
+    of sixty and never tried either alternative — each failure lowered its
+    score a little, and the untried ones sat at their own priors with nothing
+    to raise them. A loop cannot learn about a thing it never runs."""
+    from browsergraph.evidence import Evidence, Observation, measured_metrics
+
+    store = Evidence()
+    for _ in range(30):
+        store.observe(Observation(candidate="tried", context="global", ok=False))
+
+    scores = measured_metrics(store, ["tried", "untried"], ("global",),
+                              {"tried": 0.95, "untried": 0.30})
+    assert scores["untried"]["quality"] > scores["tried"]["quality"], \
+        "a candidate failing 30 times still outranks one never tried"
+
+
+def test_every_candidate_gets_an_entry_measured_or_not():
+    """Returning only the measured ones was the other half of the same bug: an
+    unmeasured candidate fell back to its prior with no credit for being
+    unknown."""
+    from browsergraph.evidence import Evidence, measured_metrics
+
+    got = measured_metrics(Evidence(), ["a", "b"], ("global",), {"a": 0.5, "b": 0.5})
+    assert set(got) == {"a", "b"}
+
+
+def test_optimism_fades_as_evidence_accumulates():
+    """It has to, or the search keeps chasing things it already understands."""
+    from browsergraph.evidence import Evidence, Observation, measured_metrics
+
+    store = Evidence()
+    early = None
+    for count in (1, 200):
+        while store.posterior("c").runs < count:
+            store.observe(Observation(candidate="c", context="global", ok=True))
+        bonus = (measured_metrics(store, ["c"], ("global",), {"c": 0.5})["c"]["quality"]
+                 - measured_metrics(store, ["c"], ("global",), {"c": 0.5},
+                                    explore=0.0)["c"]["quality"])
+        if early is None:
+            early = bonus
+    assert bonus < early, "the uncertainty bonus did not shrink with evidence"
+
+
+def test_explore_zero_gives_the_plain_shrunk_mean():
+    """For when you want the current best guess rather than the next thing
+    worth trying."""
+    from browsergraph.evidence import Evidence, Observation, measured_metrics
+
+    store = Evidence()
+    for _ in range(20):
+        store.observe(Observation(candidate="c", context="global", ok=True))
+    plain = measured_metrics(store, ["c"], ("global",), {"c": 0.5}, explore=0.0)
+    assert plain["c"]["quality"] <= store.posterior("c").rate + 1e-9
+
+
+def test_a_wrong_prior_is_overruled_by_running_things():
+    """End to end: the prior says the worst candidate is the best one."""
+    import random
+
+    from browsergraph import search
+    from browsergraph.evidence import Evidence, Observation
+    from browsergraph.manifest import NodeManifest, PortSpec
+    from browsergraph.workbench import (
+        NodeCandidate,
+        OptimizationObjective,
+        OptimizationProfile,
+        StageDefinition,
+        WorkbenchDefinition,
+    )
+
+    prior = {"f.alpha": 0.95, "f.beta": 0.30, "f.gamma": 0.30}
+    truth = {"f.alpha": 0.20, "f.beta": 0.55, "f.gamma": 0.90}
+    nodes = tuple(NodeManifest(
+        id=nid, kind="fn", description="fetch", capabilities=("fetch",),
+        outputs=(PortSpec("out", "R"),),
+        metrics={"source": "illustrative-prior", "quality": prior[nid]})
+        for nid in prior)
+    bench = WorkbenchDefinition(
+        title="lockin",
+        stages=(StageDefinition(id="fetch", required_capabilities=("fetch",),
+                                outputs=(PortSpec("out", "R"),),
+                                candidates=tuple(prior)),),
+        nodes=nodes,
+        candidates=tuple(NodeCandidate(id=n.id, node_id=n.id) for n in nodes),
+        optimization_profiles=(OptimizationProfile(id="p", objectives=(
+            OptimizationObjective("quality", "maximize", 1.0),)),))
+
+    rng = random.Random(4)
+    store = Evidence()
+    picks = []
+    for index in range(80):
+        found = search.within(bench, bench.optimization_profiles[0],
+                              evaluations=20, evidence=store, seed=index)
+        chosen = found.route["fetch"]
+        picks.append(chosen)
+        store.observe(Observation(candidate=chosen, context="global",
+                                  ok=rng.random() < truth[chosen]))
+
+    assert picks[-10:].count("f.gamma") >= 8, \
+        f"did not settle on the truly best candidate: {picks[-10:]}"
+    assert picks.count("f.beta") + picks.count("f.gamma") > 10, "never explored"

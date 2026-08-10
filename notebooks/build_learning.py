@@ -36,7 +36,7 @@ The loop is four steps and they are all real here:
 4. let the next search start from what is known.
 
 **In:** a job with three ways to do each of three steps.
-**Out:** a route that gets better over fifty runs, and the numbers to prove it.
+**Out:** a route that reaches the best one there is, and the numbers to prove it.
 """)
 
 learn.code(SETUP)
@@ -152,7 +152,7 @@ learn.code('''
 store = Evidence()
 history = []
 
-for run_index in range(50):
+for run_index in range(120):
     found = search.within(bench, bench.optimization_profiles[0],
                           evaluations=40, evidence=store, seed=run_index)
     plan = compile_route(bench, found.route)
@@ -179,12 +179,14 @@ learn.code('''
 def block(rows):
     return sum(h["true"] for h in rows) / len(rows)
 
-first, last = history[:10], history[-10:]
-print(f"{'first 10 runs':<18}{block(first):>8.3f}   average true quality of the route chosen")
-print(f"{'last 10 runs':<18}{block(last):>8.3f}")
-print(f"{'the best possible':<18}{true_quality(best_route):>8.3f}")
+print(f"{'runs':<18}{'true quality of the route chosen':>34}")
+for start in range(0, len(history), 20):
+    window = history[start:start + 20]
+    print(f"{f'{start + 1}-{start + len(window)}':<18}{block(window):>34.3f}")
+print()
+print(f"{'the best possible':<18}{true_quality(best_route):>34.3f}")
 print(f"{'picking at random':<18}"
-      f"{sum(TRUTH[c] for c in SOURCES)/3 * sum(TRUTH[c] for c in TIDIERS)/3 * sum(TRUTH[c] for c in CHECKS)/3:>8.3f}")
+      f"{sum(TRUTH[c] for c in SOURCES)/3 * sum(TRUTH[c] for c in TIDIERS)/3 * sum(TRUTH[c] for c in CHECKS)/3:>34.3f}")
 ''')
 
 learn.md("""
@@ -213,14 +215,18 @@ expected and fine: a candidate is judged on whether the *step* worked, and the
 search only needs the ordering to be right to pick correctly.
 
 The **runs** column is uneven, and that is the loop working. Once a candidate
-looks bad it gets tried less, so its count stops growing. That is the point of
-sampling from the posterior rather than round-robin — the budget goes where it
-might change the answer.
+looks bad it gets tried less, so its count stops growing — but it is never cut
+off entirely, because a candidate scores on what is known *plus* a bonus for
+how little that is. Without that bonus the loop locks in: given a prior naming
+the worst candidate best, a search on averages alone picked it sixty times out
+of sixty and never tried the other two.
 """)
 
 learn.code('''
+# explore=0 asks "what is the best you know", not "what should I try next".
+# The loop above wanted the second question; this cell wants the first.
 final = search.within(bench, bench.optimization_profiles[0],
-                      evaluations=40, evidence=store, seed=999)
+                      evaluations=40, evidence=store, seed=999, explore=0.0)
 print("what it would pick now:")
 for stage_id, candidate in final.route.items():
     right = "correct" if candidate == best_route[stage_id] else \\
@@ -282,8 +288,15 @@ a job you cared about you would want more.
   pointless.
 * The next search started from that evidence, and the numbers written into the
   graph when it was drawn stopped mattering.
-* The route it picks now is better than the route it picked cold, measured
-  against a truth it was never shown.
+* The route it picks now is the best one there is, measured against a truth it
+  was never shown.
+
+Worth stating the cost as well. Optimism is what stops the loop locking on to a
+bad prior, and it is not free: a search that only ever exploited reached a
+decent route inside fifty runs here, where this one was still exploring. It
+overtakes by about a hundred and then sits on the exact optimum. Faster to a
+good answer, or slower to the best one — that is a real choice, and `explore`
+is where you make it.
 
 That is the argument this library makes, running rather than described.
 """)

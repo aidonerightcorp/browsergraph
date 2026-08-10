@@ -557,7 +557,8 @@ def _halving(workbench, profile, stages, eligible, spans, budget: int,
 def within(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
            evaluations: int = DEFAULT_BUDGET, policy: Policy | None = None,
            seed: int = 0, evidence=None,
-           context: Sequence[str] = ("global",)) -> Proposal:
+           context: Sequence[str] = ("global",),
+           explore: float = 1.0) -> Proposal:
     """The best route findable in this many evaluations. Budget first.
 
     Every other entry point asks *how* to search. This one asks *how much*,
@@ -585,6 +586,18 @@ def within(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
     starts from what actually happened rather than from the metrics somebody
     guessed when the graph was drawn. Priors do not become measurements by
     being searched over.
+
+    `explore` decides which question you are asking, and they are different
+    questions:
+
+    * `explore > 0` — *what should I run next?* Untried candidates get credit
+      for being untried, so the loop keeps learning. This is the default,
+      because a search fed evidence is usually about to produce more of it.
+      Without it the loop locks in: given a prior that named the worst
+      candidate best, a search on means picked it sixty times out of sixty.
+    * `explore = 0` — *what is the best I currently know?* No optimism, just the
+      prior pulled toward what was measured. Use this when the answer is going
+      into production rather than into another experiment.
     """
     eligible, _blocked = _eligible_by_stage(workbench, policy or Policy.permissive())
     stages = list(workbench.leaf_stages)
@@ -608,7 +621,7 @@ def within(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
                   if cid in by_id and by_id[cid].node_id in nodes}
         overrides = measured_metrics(
             evidence, [c for pool in eligible.values() for c in pool],
-            context, priors) or None
+            context, priors, explore=explore) or None
 
     if space <= evaluations:
         # Enumerating scores every route on measured metrics where they exist,

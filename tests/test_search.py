@@ -689,8 +689,12 @@ def test_more_evidence_keeps_moving_the_answer_the_right_way(bench, locked):
                 store.observe(Observation(candidate=candidate, context="global",
                                           ok=rng.random() < truth[candidate]))
             store.routes.append((tuple(route.values()), "global", 1.0))
+        # `explore=0` asks "what is the best you currently know", which is the
+        # question this test is about. The default asks "what should I try
+        # next", and the honest answer to that is sometimes a deliberate
+        # experiment rather than the current best.
         got = search.within(bench, bench.optimization_profiles[0], policy=locked,
-                            evaluations=300, evidence=store)
+                            evaluations=300, evidence=store, explore=0.0)
         scores.append(_mean_true_quality(got.route, truth))
 
     assert scores[-1] > scores[0], f"no improvement across evidence: {scores}"
@@ -715,11 +719,18 @@ def test_one_observation_nudges_a_prior_and_fifty_overrule_it():
 
 
 def test_a_candidate_with_no_evidence_keeps_its_prior():
-    """Silence is not a measurement of zero."""
+    """Silence is not a measurement of zero.
+
+    It used to return nothing at all for an unmeasured candidate, which read as
+    "no opinion" and in practice meant "fall back to the declared prior with no
+    credit for being unknown" — half of why the loop locked in. It now returns
+    the prior itself, so with `explore=0` the answer is exactly the prior.
+    """
     from browsergraph.evidence import Evidence, measured_metrics
 
-    assert measured_metrics(Evidence(), ["c.unseen"], ("global",),
-                            {"c.unseen": 0.9}) == {}
+    got = measured_metrics(Evidence(), ["c.unseen"], ("global",),
+                           {"c.unseen": 0.9}, explore=0.0)
+    assert got["c.unseen"]["quality"] == pytest.approx(0.9)
 
 
 def test_metrics_can_be_overridden_per_candidate_not_only_per_node(bench):
