@@ -153,8 +153,13 @@ Mostly diagrams. Useful if you would rather see the thing than read about it.
 
 | | Notebook | What it shows |
 |---|---|---|
-| 24 | [Every picture and why](notebooks/24-the-picture-book.ipynb) | all seven figures on one job, and what the flat version of each would hide |
+| 24 | [Every picture and why](notebooks/24-the-picture-book.ipynb) | seven figures on one job, and what the flat version of each would hide |
 | 25 | [The shapes a job comes in](notebooks/25-the-shapes-a-job-comes-in.ipynb) | nine shapes — chain, fan-out, diamond, map, branch, gate, fallback, reuse, tournament — each drawn, each with the lines that build it |
+
+The eighth figure, the learning curve, needs a loop to draw, so it lives in
+[23 · Get better by doing it](notebooks/23-get-better-by-doing-it.ipynb) — a
+hundred and twenty passes of the evidence loop against the best route there is
+and the one you would get by guessing.
 
 Both found real bugs while being written, which is the argument for drawing
 things: `24` caught `solve` reporting a champion "out of 48 possible" on a space
@@ -349,6 +354,7 @@ chromedriver/snap version skew, a dependency that ships broken source.
 | **Notebooks** | Jupyter/Kaggle/Colab run cells inside an asyncio loop; the sync API is driven from a worker thread so it just works |
 | **Universal graph** | portable node manifests, atomic candidates, stage/route validation and a five-view studio — [UNIVERSAL_GRAPH_SYSTEM.md](UNIVERSAL_GRAPH_SYSTEM.md) |
 | **Evidence** | per-candidate, per-context posteriors; Thompson-samples a route at *sum* cost instead of enumerating, and reports how many **bits** of the choice remain |
+| **Pictures** | seven figures of any workbench — shape, route space, funnel, per-step evidence, run timeline, solve scoreboard, learning trend — as self-contained SVG, Mermaid, JSON or matplotlib. Domain-neutral: `viz` takes a graph and knows nothing else |
 | **Route search** | policy gates first, then greedy / beam / exhaustive over the eligible space, reporting how much of it was actually examined |
 | **Capabilities** | each engine declares what it can do — press, select, upload, download, frames, cookies, viewport, PDF — checked against a graph *before* a browser launches, with the engines that could run it |
 | **Receipts** | every run writes durable evidence: route, engine, per-step timing, artifacts with content hashes, which steps verified, and a pasteable replay line — for failures too |

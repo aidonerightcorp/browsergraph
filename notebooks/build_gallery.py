@@ -462,8 +462,14 @@ viz.dag(bench)                       # any workbench
 viz.route_space(bench, route=r)      # any route
 viz.timeline(run)                    # any finished run
 viz.scoreboard(answer)               # any solve result
+viz.trend(scores, reference={...})   # any series, against what it should beat
 viz.write_report(bench, "out.html", route=r, run=run, solution=answer)
 ```
+
+There is an eighth figure not shown here, because it needs something this
+notebook does not have: a loop. `viz.trend` draws a series over time against the
+lines it should be judged by — notebook 23 runs the evidence loop a hundred and
+twenty times and draws exactly that.
 
 If your problem can be written as steps with typed ports, it can be drawn, and
 no drawing code changes. That is the whole claim, and this notebook is the test
