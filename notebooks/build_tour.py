@@ -1522,7 +1522,8 @@ print(proposal.text(wb))
 
 import json
 (OUT / 'proposal.json').write_text(json.dumps(proposal.to_dict(), indent=2))
-print(f'\nwrote {OUT}/proposal.json')
+print()
+print(f'wrote {OUT}/proposal.json')
 """)
 
 md("""
