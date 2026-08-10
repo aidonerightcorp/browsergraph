@@ -62,7 +62,7 @@ code("""
 # is the only proof that counts. It prints exactly what it tried.
 from browsergraph import Engine, Spec
 from browsergraph.bootstrap import ensure_browser
-from browsergraph.dimensions import Display, Stealth
+from browsergraph.dimensions import Binary, Display, Stealth
 from browsergraph.drivers import build
 
 boot = ensure_browser(verbose=True)
@@ -399,7 +399,70 @@ video_html
 
 # ------------------------------------------------------- engines compared --
 md("""
-## 7. The same graph on different engines — including no engine at all
+## 7. The same page, three engines, three screenshots
+
+The claim this library makes is that one graph runs anywhere. Here it is as pictures:
+the identical graph, driven by different engines, each capturing its own screenshot.
+""")
+
+code("""
+from browsergraph.doctor import available_engines
+import matplotlib.image as mpimg
+
+gallery_graph = (Graph('gallery')
+                 .add(Navigate(f'{BASE}/index.html'))
+                 .add(WaitFor('#quote'))
+                 .add(Click('#quote'))
+                 .add(WaitFor('#out', name='confirm'))
+                 .add(Extract('#out', into='confirmation'))   # so the caption is true
+                 .add(Screenshot('')))          # path set per engine below
+
+shots, usable = [], set(available_engines())
+candidates = [(Engine.PLAYWRIGHT, Binary.BUNDLED_CHROMIUM, 'chromium'),
+              (Engine.PLAYWRIGHT, Binary.FIREFOX, 'firefox'),
+              (Engine.PLAYWRIGHT, Binary.WEBKIT, 'webkit'),
+              (Engine.PATCHRIGHT, Binary.SYSTEM_CHROME, 'patchright'),
+              (Engine.SELENIUM, Binary.SYSTEM_CHROME, 'selenium')]
+
+for engine, binary, label in candidates:
+    if engine not in usable:
+        continue
+    path = str(TMP / f'shot_{label}.png')
+    gallery_graph.nodes['screenshot'].path = path
+    try:
+        sp = Spec(engine=engine, binary=binary, display=Display.HEADLESS)
+        r = run(gallery_graph, sp, build(sp))
+        if r.ok and pathlib.Path(path).exists():
+            shots.append((label, path, r.context.data.get('confirmation', '')))
+    except Exception as e:
+        print(f'{label:<12} unavailable: {type(e).__name__}')
+
+print(f'{len(shots)} engine(s) drove the identical graph')
+""")
+
+code("""
+if shots:
+    fig, axes = plt.subplots(1, len(shots), figsize=(5.2 * len(shots), 4.6))
+    axes = [axes] if len(shots) == 1 else list(axes)
+    for ax, (label, path, confirmed) in zip(axes, shots):
+        ax.imshow(mpimg.imread(path)); ax.axis('off')
+        ax.set_title(f'{label}\\n{confirmed[:34] if confirmed else "NO CONFIRMATION"}',
+                     fontsize=9.5,
+                     color='#1f8a4c' if confirmed else '#c0392b')
+    fig.suptitle('one graph, different engines — each screenshot taken by that engine',
+                 fontsize=12, y=1.02)
+    plt.tight_layout(); plt.show()
+""")
+
+md("""
+Same nodes, same assertions, different rendering engines. The green line in each shot is
+the element that only exists **after** the click — the graph waited for it, so every one
+of these is a verified run rather than an optimistic one.
+""")
+
+
+md("""
+## 8. The same graph on different engines — including no engine at all
 
 Most pages are server-rendered and need no browser. The catch is that anti-bot vendors
 fingerprint the **TLS handshake** before any JavaScript runs, so a stock Python client is
@@ -461,7 +524,73 @@ finally:
 
 # ------------------------------------------------------------ token costs --
 md("""
-## 8. Against the live web
+## 9. What actually runs here — the capability matrix
+
+Not a table copied from documentation. Every cell below was produced by *launching* that
+combination against the page above, in this kernel, just now.
+""")
+
+code("""
+from browsergraph.dimensions import validate
+from browsergraph.doctor import available_engines
+import numpy as np
+
+ENGINES = [Engine.HTTP, Engine.PLAYWRIGHT, Engine.PLAYWRIGHT_STEALTH, Engine.PATCHRIGHT,
+           Engine.SELENIUM, Engine.SELENIUM_UC, Engine.ZENDRIVER, Engine.CAMOUFOX]
+BINARIES = [Binary.BUNDLED_CHROMIUM, Binary.SYSTEM_CHROME, Binary.FIREFOX, Binary.WEBKIT]
+
+usable = set(available_engines())
+grid = np.full((len(ENGINES), len(BINARIES)), np.nan)
+for i, e in enumerate(ENGINES):
+    for j, b in enumerate(BINARIES):
+        sp = Spec(engine=e, binary=b, display=Display.HEADLESS)
+        if validate(sp):
+            grid[i, j] = 0            # the validator rejects the combination
+        elif e not in usable:
+            grid[i, j] = 1            # declared and valid, package not installed
+        else:
+            try:
+                br = build(sp); br.start()
+                grid[i, j] = 3 if br.goto(f'{BASE}/index.html').title else 2
+                br.stop()
+            except Exception:
+                grid[i, j] = 2        # valid and installed, would not launch
+print('measured', int(np.isfinite(grid).sum()), 'combinations')
+""")
+
+code("""
+from matplotlib.colors import ListedColormap
+labels = {0: 'rejected', 1: 'not installed', 2: 'failed to launch', 3: 'launched'}
+cmap = ListedColormap(['#eceff3', '#f3f0e2', '#fadbd8', '#d6efdd'])
+
+fig, ax = plt.subplots(figsize=(1.5 * len(BINARIES) + 3.5, 0.55 * len(ENGINES) + 2))
+ax.imshow(grid, cmap=cmap, vmin=0, vmax=3, aspect='auto')
+ax.set_xticks(range(len(BINARIES)), [b.value for b in BINARIES], rotation=20, ha='right')
+ax.set_yticks(range(len(ENGINES)), [e.value for e in ENGINES])
+for i in range(len(ENGINES)):
+    for j in range(len(BINARIES)):
+        v = grid[i, j]
+        ax.text(j, i, {0: '·', 1: '–', 2: '✕', 3: '✓'}[int(v)], ha='center', va='center',
+                fontsize=13, color={0: '#b9c0c9', 1: '#a08a4a', 2: '#c0392b', 3: '#1f8a4c'}[int(v)])
+ax.set_xticks(np.arange(-.5, len(BINARIES), 1), minor=True)
+ax.set_yticks(np.arange(-.5, len(ENGINES), 1), minor=True)
+ax.grid(which='minor', color='white', linewidth=2); ax.tick_params(which='minor', length=0)
+ax.set_title('engine x binary, measured in this kernel\\n'
+             '✓ launched   ✕ would not launch   – package absent   · rejected by the validator',
+             fontsize=10, loc='left')
+plt.tight_layout(); plt.show()
+""")
+
+md("""
+The grey cells are the interesting ones: the validator **rejected** the combination before
+anything was launched — `stealth=undetected` on an engine with no evasion, WebKit under
+Selenium, a browser an engine cannot drive. Catching those without starting a browser is
+the entire point of having a dimension space rather than a pile of flags.
+""")
+
+
+md("""
+## 10. Against the live web
 
 Everything so far ran against a page served from this kernel — deterministic, but it
 proves nothing about the real internet. So here are real public sites, fetched now.
@@ -586,7 +715,7 @@ print('\\nNothing invented where there was nothing to find — an empty field is
 
 
 md("""
-## 9. When one configuration fails, try the others — automatically
+## 11. When one configuration fails, try the others — automatically
 
 A graph is portable, but not every *spec* can run it. The page below renders its
 price with JavaScript, so the browser-less engine cannot possibly succeed no matter
@@ -665,7 +794,7 @@ learning system in section 13 generalises the same idea across *similar* sites.
 
 
 md("""
-## 10. Token reduction: eight strategies, then focus
+## 12. Token reduction: eight strategies, then focus
 
 Raw HTML is mostly framework noise. Preprocessing trades structure against size; `focus`
 then keeps only the chunks that answer the question **plus their neighbours** — because
@@ -703,7 +832,7 @@ plt.tight_layout(); plt.show()
 
 # -------------------------------------------------------------- the linter -
 md("""
-## 11. The linter, and the failure that motivated it
+## 13. The linter, and the failure that motivated it
 
 **BG003 — a graph that changes remote state but never verifies the outcome.**
 
@@ -734,7 +863,7 @@ plt.tight_layout(); plt.show()
 
 # ------------------------------------------------------------ combinations -
 md("""
-## 12. Don't enumerate the space — sample it
+## 14. Don't enumerate the space — sample it
 
 Incompatible combinations are rejected *with reasons*. Full enumeration explodes, so
 `sample` builds a pairwise covering array: most failures are two-value interactions, and
@@ -780,7 +909,7 @@ plt.tight_layout(); plt.show()
 
 # ------------------------------------------------------------- learning ----
 md("""
-## 13. Every dimension, every path
+## 15. Every dimension, every path
 
 A `Spec` is one point in a nine-dimensional space. Counting the combinations tells you
 almost nothing; what you actually want to know is **which choices are expensive** — and
@@ -830,7 +959,7 @@ none:
 
 
 md("""
-## 14. The actual architecture: planes, candidates, routes
+## 16. The actual architecture: planes, candidates, routes
 
 The dimension space above is a catalogue of settings. It is not the point.
 
@@ -905,7 +1034,7 @@ Two details that decide whether this is honest:
 
 
 md("""
-## 15. Self-tuning: learn from similar sites
+## 17. Self-tuning: learn from similar sites
 
 Outcomes generalise `site -> org -> sector -> platform -> global`, weighted by
 specificity. Evidence is reported honestly: one success is *p≈0.67, n=1* after smoothing,
@@ -978,7 +1107,7 @@ print('failure            :', Outcome(ok=False, tokens=10).utility(),
 
 # --------------------------------------------------------------- errors ----
 md("""
-## 16. A CAPTCHA is not a missing element
+## 18. A CAPTCHA is not a missing element
 
 Retrying is not a universal remedy. A bot wall must **abort** — retrying into one is how
 accounts get banned. Classification reads the page, not just the error string, because a
@@ -1019,7 +1148,7 @@ plt.tight_layout(); plt.show()
 
 # -------------------------------------------------------------- throttle ---
 md("""
-## 17. Politeness belongs where the contention is
+## 19. Politeness belongs where the contention is
 
 A per-crawler delay lets ten concurrent tasks make ten requests per second at one host.
 The limiter is **per-domain and process-wide**, and honours a robots `Crawl-delay` when
@@ -1048,7 +1177,7 @@ print('robots delay honoured:', lim.policy_for('slow.example').min_interval)
 
 # ------------------------------------------------------------ extraction ---
 md("""
-## 18. Deterministic extraction — conservative on purpose
+## 20. Deterministic extraction — conservative on purpose
 
 No model involved. A false positive silently poisons a dataset; a miss is a visible empty
 field. So dates, repeated digits and asset filenames are rejected rather than guessed at.
@@ -1083,7 +1212,7 @@ for label, text in [('this page', page.text),
 
 # ------------------------------------------------------------- the rest ----
 md("""
-## 19. Tasks, control flow and model routing
+## 21. Tasks, control flow and model routing
 
 Control flow lives *inside* the graph — `branch`, `for_each`, `subgraph`, `frontier`,
 `retry_until` are nodes, so healing, supervision and the linter apply to crawling too.
@@ -1118,7 +1247,7 @@ than being silently substituted.
 """)
 
 md("""
-## 20. Real models, on real pages
+## 22. Real models, on real pages
 
 Everything so far is deterministic. The LLM nodes are not, and they are the ones where a
 wrong answer is most expensive: a model asked to confirm an outcome will confirm it, if
@@ -1138,9 +1267,17 @@ try:
     os.environ.setdefault('OLLAMA_HOST', 'https://ollama.com')
     print('Ollama key loaded from Kaggle Secrets')
 except Exception as e:
-    print('no Kaggle secret;', 'using OLLAMA_API_KEY from the environment'
-          if os.environ.get('OLLAMA_API_KEY') else
-          f'LLM section will be skipped ({type(e).__name__})')
+    if os.environ.get('OLLAMA_API_KEY'):
+        print('no Kaggle secret; using OLLAMA_API_KEY from the environment')
+    else:
+        print(f'LLM section will be skipped ({type(e).__name__})')
+        if type(e).__name__ == 'ConnectionError':
+            # Measured, not guessed: with the secret attached in the editor, a
+            # version pushed through the API still cannot reach the secrets
+            # service. Only a run started from the editor can.
+            print('  If you have attached OLLAMA_API_KEY, note that a version pushed')
+            print('  via `kaggle kernels push` cannot read secrets. Open the notebook')
+            print('  and use Save Version -> Run All to get this section to execute.')
 
 # Reads OLLAMA_HOST / OLLAMA_API_KEY / OLLAMA_MODEL — the variables you already
 # have set, whether that is a local daemon, Ollama Cloud or a gateway.

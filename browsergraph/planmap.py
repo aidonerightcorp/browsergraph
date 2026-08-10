@@ -306,11 +306,22 @@ def to_html(planes_: list[Plane], *, before: Route | None = None,
             badge = (f'<text x="{x + half - 5}" y="{y + 11}" text-anchor="end" '
                      f'font-size="7.5" fill="#8a6d1f">p={cand.p:.2f} n={cand.evidence:.0f}'
                      f'</text>' if cand.p is not None else "")
+            # Inline attributes, not CSS classes: Kaggle's viewer drops the
+            # <style> block, and a diagram styled only by classes collapses
+            # there into unreadable boxes on the host theme's background.
+            fc, ec = "#eef1f5", "#aab3bf"
+            if cand.kind == "engine":
+                fc, ec = "#e8f0fb", "#2d6cb5"
+            elif cand.kind == "builtin":
+                fc, ec = "#f3f6f2", "#7fa07f"
+            if cand.note == "model":
+                fc, ec = "#fdf3e2", "#c98a2b"
             parts.append(
                 f'<g class="{cls}" data-id="{_sid(plane.name, cand.name)}">'
-                f'<rect x="{x - half}" y="{y - 12}" width="{half * 2}" height="25" rx="6"/>'
-                f'<text x="{x}" y="{y + 1}" text-anchor="middle" font-size="10.5">'
-                f'{_esc(cand.label)}</text>'
+                f'<rect x="{x - half}" y="{y - 12}" width="{half * 2}" height="25" rx="6" '
+                f'fill="{fc}" stroke="{ec}" stroke-width="1.2"/>'
+                f'<text x="{x}" y="{y + 1}" text-anchor="middle" font-size="10.5" '
+                f'fill="#22303f">{_esc(cand.label)}</text>'
                 f'<text x="{x - half + 5}" y="{y + 11}" text-anchor="start" '
                 f'font-size="7.5" fill="#8794a3">{_esc(cand.note)}</text>{badge}</g>')
 
@@ -320,7 +331,15 @@ def to_html(planes_: list[Plane], *, before: Route | None = None,
                        f"{pos[(p.name, route.picks[p.name])][0] + half},"
                        f"{pos[(p.name, route.picks[p.name])][1]}"
                        for p in planes_)
-        return f'<polyline class="{cls}" points="{pts}"/>'
+        colour, wdt, dash = {
+            f"{uid}-r": ("#9fb4cc", 1.0, ""),
+            f"{uid}-before": ("#c98a2b", 2.6, ' stroke-dasharray="7 4"'),
+            f"{uid}-after": ("#1f8a4c", 3.0, ""),
+        }[cls]
+        opacity = "0.10" if cls == f"{uid}-r" else "0.95"
+        return (f'<polyline class="{cls}" points="{pts}" fill="none" '
+                f'stroke="{colour}" stroke-width="{wdt}" '
+                f'stroke-opacity="{opacity}"{dash}/>')
 
     faint = []
     for route in routes(planes_, limit=600):
@@ -336,7 +355,7 @@ def to_html(planes_: list[Plane], *, before: Route | None = None,
         f'<span class="{uid}-k {uid}-ka"></span>after learning from outcomes'
         '<span style="opacity:.7">every faint line is another runnable route</span>')
 
-    return f"""<div class="{uid}-wrap">
+    return f"""<div class="{uid}-wrap" style="background:#ffffff;color:#22303f;border:1px solid #e3e8ee;border-radius:10px;padding:10px 12px 6px;font-family:-apple-system,Segoe UI,Roboto,sans-serif">
 <style>
  .{uid}-wrap{{font-family:-apple-system,Segoe UI,Roboto,sans-serif;border:1px solid #e3e8ee;
    border-radius:10px;padding:10px 12px 6px;background:#fff}}
@@ -358,12 +377,12 @@ def to_html(planes_: list[Plane], *, before: Route | None = None,
  .{uid}-kb{{border-color:#c98a2b;border-top-style:dashed}}
  .{uid}-ka{{border-color:#1f8a4c}}
 </style>
-<h4>{_esc(title)}</h4>
-<p class="{uid}-sub">a task is decomposed into planes; each plane offers
+<h4 style="margin:0 0 1px;font-size:13.5px;color:#22303f">{_esc(title)}</h4>
+<p class="{uid}-sub" style="font-size:11px;color:#5b6472;margin:0 0 6px">a task is decomposed into planes; each plane offers
  interchangeable candidates; a route through them is one candidate solution</p>
 <svg viewBox="0 0 {width} {height}" width="100%" style="display:block">
 {''.join(faint)}{picked}{''.join(parts)}</svg>
-<p class="{uid}-leg">{legend}</p>
+<p class="{uid}-leg" style="font-size:10.5px;color:#5b6472;margin:4px 0 0">{legend}</p>
 </div>"""
 
 

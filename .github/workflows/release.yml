@@ -16,8 +16,26 @@ jobs:
         with: {python-version: "3.12"}
       - run: pip install build
       - run: python -m build
-      # Trusted publishing: no long-lived token stored in the repo.
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      # The build must succeed; publishing is allowed not to.
+      #
+      # Trusted publishing means no long-lived token is stored in this repo — but
+      # it has to be registered on PyPI first, and until it is, every tag would
+      # fail this workflow and make a healthy project look broken. The upload is
+      # therefore best-effort and the outcome is reported explicitly.
+      - id: publish
+        continue-on-error: true
+        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Report publish outcome
+        run: |
+          if [ "${{ steps.publish.outcome }}" = "success" ]; then
+            echo "::notice::published to PyPI"
+          else
+            echo "::warning::PyPI upload skipped — register a trusted publisher at" \
+                 "https://pypi.org/manage/account/publishing/ with owner=${{ github.repository_owner }}," \
+                 "repository=browsergraph, workflow=release.yml, environment=release."
+          fi
+      - uses: actions/upload-artifact@v4
+        with: {name: dist, path: dist/}
 
   image:
     runs-on: ubuntu-latest

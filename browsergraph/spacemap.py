@@ -241,12 +241,22 @@ def to_html(space: Space, *, width: int = 1320, plane_gap: int = 146,
             pos[(name, value)] = (x, y)
             n = counts.get((name, value), 0)
             dead = " " + uid + "-dead" if n == 0 else ""
+            # Fills and colours are *inline attributes*, not CSS classes.
+            # Kaggle's notebook viewer drops the <style> block, and a diagram
+            # styled only by CSS collapses there into unreadable boxes on
+            # whatever background the host theme happens to use. The stylesheet
+            # below now carries interaction only, which is a bonus rather than a
+            # requirement for the picture being legible.
+            fill = "#ffffff" if n == 0 else "#eef1f5"
+            stroke = "#e2e6eb" if n == 0 else "#8a93a0"
+            colour = "#c8ced6" if n == 0 else "#22303f"
             parts.append(
                 f'<g class="{uid}-v{dead}" data-plane="{name}" data-value="{value}" '
                 f'data-id="{_sid(name, value)}">'
-                f'<rect x="{x - 54}" y="{y - 10}" width="108" height="21" rx="5"/>'
-                f'<text x="{x}" y="{y + 5}" text-anchor="middle" font-size="10.5">'
-                f'{value}</text></g>')
+                f'<rect x="{x - 54}" y="{y - 10}" width="108" height="21" rx="5" '
+                f'fill="{fill}" stroke="{stroke}" stroke-width="1"/>'
+                f'<text x="{x}" y="{y + 5}" text-anchor="middle" font-size="10.5" '
+                f'fill="{colour}">{value}</text></g>')
 
     # Two points per plane — the box's left and right edge — so each path runs
     # *through* its value and the diagonals between planes stay visible. Joining
@@ -260,13 +270,15 @@ def to_html(space: Space, *, width: int = 1320, plane_gap: int = 146,
             f"{pos[(n, v)][0] + half},{pos[(n, v)][1]}"
             for (n, _), v in zip(space.planes, path, strict=False))
         ids = " ".join(_sid(n, v) for (n, _), v in zip(space.planes, path, strict=False))
-        lines.append(f'<polyline class="{uid}-p" data-ids="{ids}" points="{pts}"/>')
+        lines.append(f'<polyline class="{uid}-p" data-ids="{ids}" points="{pts}" '
+                     f'fill="none" stroke="#2d6cb5" stroke-width="1" '
+                     f'stroke-opacity="0.09"/>')
 
     note = space.summary()
     if space.truncated:
         note += "  ⚠ truncated"
 
-    return f"""<div class="{uid}-wrap">
+    return f"""<div class="{uid}-wrap" style="background:#ffffff;color:#22303f;border:1px solid #e3e8ee;border-radius:10px;padding:10px 12px 6px;font-family:-apple-system,Segoe UI,Roboto,sans-serif">
 <style>
  .{uid}-wrap{{font-family:-apple-system,Segoe UI,Roboto,sans-serif;border:1px solid #e3e8ee;
    border-radius:10px;padding:10px 12px 6px;background:#fff;position:relative}}
@@ -284,11 +296,11 @@ def to_html(space: Space, *, width: int = 1320, plane_gap: int = 146,
  .{uid}-dead text{{fill:#c8ced6;text-decoration:line-through}}
  .{uid}-legend{{font-size:10.5px;color:#68737f;margin:2px 0 0}}
 </style>
-<h4>{title}</h4>
-<p class="{uid}-note">{note}</p>
+<h4 style="margin:0 0 2px;font-size:13.5px;color:#22303f">{title}</h4>
+<p class="{uid}-note" style="font-size:11px;color:#5b6472;margin:0 0 4px">{note}</p>
 <svg viewBox="0 0 {width} {height}" width="100%" style="display:block">{''.join(lines)}
 {''.join(parts)}</svg>
-<p class="{uid}-legend">hover a value to trace its paths &middot; click to lock a choice
+<p class="{uid}-legend" style="font-size:10.5px;color:#5b6472;margin:2px 0 0">hover a value to trace its paths &middot; click to lock a choice
  &middot; struck-through values are unreachable</p>
 <script>
 (function(){{
