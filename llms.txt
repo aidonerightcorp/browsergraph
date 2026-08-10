@@ -1,0 +1,21 @@
+# Universal Node Graph — Flexible Solutioning
+
+> A domain-neutral graph programming, compilation, search, and experimentation architecture.
+
+## Start here
+
+- [README](README.md): Project overview and runnable examples
+- [Normative specification](UNIVERSAL_NODE_GRAPH_SPEC.md): Required ontology and invariants
+- [Research foundations](RESEARCH_FOUNDATIONS.md): Primary-source design rationale
+- [LLM harness integration](LLM_HARNESS.md): Repository instruction and skill map
+- [Full architecture blueprint](UNIVERSAL_GRAPH_SYSTEM.md): Extended design and viewer model
+- [Workbench guide](WORKBENCH.md): Interactive hierarchical candidate explorer
+
+## Code
+
+- [Universal core](solutiongraph/): Semantic model, compiler, search, evidence
+- [Wire schemas](solutiongraph/schemas/): JSON Schema 2020-12 contracts
+- [Browser adapter](browsergraph/): Concrete runtime proof
+- [Universal conformance tests](tests/test_solutiongraph.py): Executable architecture requirements
+- [Workspace modeling skill](.agents/skills/model-solution-graph/SKILL.md): On-demand agent workflow
+

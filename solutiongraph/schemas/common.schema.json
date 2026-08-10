@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "common.schema.json",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.:/-]*$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "value_type": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "schema_digest", "media_type", "units"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "version": {"type": "string", "minLength": 1},
+        "schema_digest": {
+          "oneOf": [
+            {"const": ""},
+            {"$ref": "#/$defs/digest"}
+          ]
+        },
+        "media_type": {"type": "string", "minLength": 1},
+        "units": {"type": "string"}
+      }
+    },
+    "port": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "cardinality", "description"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "type": {"$ref": "#/$defs/value_type"},
+        "cardinality": {"enum": ["one", "optional", "many", "stream"]},
+        "description": {"type": "string"}
+      }
+    },
+    "parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value_type", "required", "default", "choices", "description"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "value_type": {"type": "string", "minLength": 1},
+        "required": {"type": "boolean"},
+        "default": true,
+        "choices": {"type": "array"},
+        "description": {"type": "string"}
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_slot", "source_port", "target_slot", "target_port"],
+      "properties": {
+        "source_slot": {"$ref": "#/$defs/id"},
+        "source_port": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "target_slot": {"$ref": "#/$defs/id"},
+        "target_port": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+      }
+    }
+  }
+}
+

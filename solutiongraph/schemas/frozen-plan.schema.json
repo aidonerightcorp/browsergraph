@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "frozen-plan.schema.json",
+  "title": "Universal Node Graph Frozen Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "digest", "model_version", "program_id", "program_version", "program_digest",
+    "registry_digest", "topological_order", "bindings", "edges"
+  ],
+  "properties": {
+    "digest": {"$ref": "common.schema.json#/$defs/digest"},
+    "model_version": {"const": "0.1"},
+    "program_id": {"$ref": "common.schema.json#/$defs/id"},
+    "program_version": {"type": "string", "minLength": 1},
+    "program_digest": {"$ref": "common.schema.json#/$defs/digest"},
+    "registry_digest": {"$ref": "common.schema.json#/$defs/digest"},
+    "topological_order": {
+      "type": "array", "items": {"$ref": "common.schema.json#/$defs/id"}, "uniqueItems": true
+    },
+    "bindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "slot_id", "candidate_id", "node_id", "node_version",
+          "implementation_digest", "parameters"
+        ],
+        "properties": {
+          "slot_id": {"$ref": "common.schema.json#/$defs/id"},
+          "candidate_id": {"$ref": "common.schema.json#/$defs/id"},
+          "node_id": {"$ref": "common.schema.json#/$defs/id"},
+          "node_version": {"type": "string", "minLength": 1},
+          "implementation_digest": {"$ref": "common.schema.json#/$defs/digest"},
+          "parameters": {"type": "object"}
+        }
+      }
+    },
+    "edges": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/edge"}}
+  }
+}
+

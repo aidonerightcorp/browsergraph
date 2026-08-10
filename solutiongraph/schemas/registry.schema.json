@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "registry.schema.json",
+  "title": "Universal Node Graph Registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["model_version", "id", "version", "nodes", "candidates"],
+  "properties": {
+    "model_version": {"const": "0.1"},
+    "id": {"$ref": "common.schema.json#/$defs/id"},
+    "version": {"type": "string", "minLength": 1},
+    "nodes": {"type": "array", "items": {"$ref": "node-spec.schema.json"}},
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id", "node_id", "node_version", "implementation_digest", "parameters", "deployment"
+        ],
+        "properties": {
+          "id": {"$ref": "common.schema.json#/$defs/id"},
+          "node_id": {"$ref": "common.schema.json#/$defs/id"},
+          "node_version": {"type": "string", "minLength": 1},
+          "implementation_digest": {"$ref": "common.schema.json#/$defs/digest"},
+          "parameters": {"type": "object"},
+          "deployment": {"type": "string"}
+        }
+      }
+    }
+  }
+}
+

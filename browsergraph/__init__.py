@@ -23,6 +23,8 @@ from browsergraph.dimensions import (
     validate,
 )
 from browsergraph.evidence import Evidence, Observation, Posterior
+from browsergraph.execute import ExecutionError, Run, Runtime, dry_run
+from browsergraph.execute import run as run_plan
 
 # Facets are exported under `facet_*` names. Their module-level names are
 # deliberately plain (`validate`, `fields`, `merge`) because inside `facets.py`
@@ -88,6 +90,8 @@ __all__ = [
     "Evidence", "Observation", "Posterior",
     # the graph, its types, and the compiled plan
     "Lattice", "Plan", "Step", "compile_route",
+    # running one for real
+    "Runtime", "Run", "run_plan", "dry_run", "ExecutionError",
     # open description: types bind, facets rank
     "FacetSpec", "WELL_KNOWN_FACETS", "facet_fields", "facet_keywords",
     "facet_specs_for", "merge_facets", "normalize_facet", "validate_facets",

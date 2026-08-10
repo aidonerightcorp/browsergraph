@@ -61,6 +61,13 @@ KERNELS: dict[str, str] = {
     "09-retrieval-qa": "Graph Solutions 9 Retrieval Is Two Searches",
     "10-timeseries-forecast": "Graph Solutions 10 The Leak You Cannot See",
     "11-web-harvest": "Graph Solutions 11 The Domain This Started In",
+    # The five that solve a real job. Different prefix so they read as a
+    # separate series, because they are: these ones run and produce files.
+    "12-browse-and-scrape": "Graph Jobs 1 Browse and Scrape",
+    "13-ingest-into-schema": "Graph Jobs 2 Ingest into a Schema",
+    "14-check-and-process-image": "Graph Jobs 3 Check and Process an Image",
+    "15-clean-up-data": "Graph Jobs 4 Clean Up Messy Data",
+    "16-fit-a-model": "Graph Jobs 5 Fit a Model",
 }
 
 

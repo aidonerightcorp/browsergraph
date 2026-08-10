@@ -56,12 +56,15 @@ packages = [
     "browsergraph", "browsergraph.nodes", "browsergraph.drivers",
     "browsergraph.dimensions", "browsergraph.extract", "browsergraph.classify",
     "browsergraph.tasks",
+    # The domain-neutral core. browsergraph is one adapter on top of it.
+    "solutiongraph", "solutiongraph.schemas",
 ]
 
 # The studio template and the JSON schemas ship with the package: a viewer that
 # only works from a git checkout is not a viewer people can use.
 [tool.setuptools.package-data]
 browsergraph = ["assets/*.html", "schemas/*.json"]
+solutiongraph = ["schemas/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

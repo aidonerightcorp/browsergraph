@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "node-spec.schema.json",
+  "title": "Universal Node Graph Node ABI",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "model_version", "id", "version", "implementation_digest", "description",
+    "inputs", "outputs", "parameters", "runtime", "entrypoint", "capabilities",
+    "effects", "permissions", "determinism", "idempotency", "preconditions",
+    "postconditions", "invariants", "failure_modes", "resources", "verifier", "source"
+  ],
+  "properties": {
+    "model_version": {"const": "0.1"},
+    "id": {"$ref": "common.schema.json#/$defs/id"},
+    "version": {"type": "string", "minLength": 1},
+    "implementation_digest": {"$ref": "common.schema.json#/$defs/digest"},
+    "description": {"type": "string"},
+    "inputs": {
+      "type": "array",
+      "items": {"$ref": "common.schema.json#/$defs/port"}
+    },
+    "outputs": {
+      "type": "array",
+      "items": {"$ref": "common.schema.json#/$defs/port"}
+    },
+    "parameters": {
+      "type": "array",
+      "items": {"$ref": "common.schema.json#/$defs/parameter"}
+    },
+    "runtime": {"type": "string", "minLength": 1},
+    "entrypoint": {"type": "string", "minLength": 1},
+    "capabilities": {
+      "type": "array",
+      "items": {"$ref": "common.schema.json#/$defs/id"},
+      "uniqueItems": true
+    },
+    "effects": {
+      "type": "array",
+      "items": {"$ref": "common.schema.json#/$defs/id"},
+      "uniqueItems": true
+    },
+    "permissions": {
+      "type": "array",
+      "items": {"$ref": "common.schema.json#/$defs/id"},
+      "uniqueItems": true
+    },
+    "determinism": {
+      "enum": ["deterministic", "seeded", "recorded", "nondeterministic"]
+    },
+    "idempotency": {
+      "enum": ["idempotent", "conditional", "non_idempotent", "unknown"]
+    },
+    "preconditions": {"type": "array", "items": {"type": "string"}},
+    "postconditions": {"type": "array", "items": {"type": "string"}},
+    "invariants": {"type": "array", "items": {"type": "string"}},
+    "failure_modes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "retryable", "description"],
+        "properties": {
+          "code": {"type": "string", "minLength": 1},
+          "retryable": {"type": "boolean"},
+          "description": {"type": "string"}
+        }
+      }
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "amount", "unit", "hard"],
+        "properties": {
+          "kind": {"type": "string", "minLength": 1},
+          "amount": {"type": "number"},
+          "unit": {"type": "string", "minLength": 1},
+          "hard": {"type": "boolean"}
+        }
+      }
+    },
+    "verifier": {"type": "string"},
+    "source": {"type": "string"}
+  }
+}
+

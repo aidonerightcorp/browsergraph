@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "program-graph.schema.json",
+  "title": "Universal Node Graph Semantic Program",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "model_version", "id", "version", "task", "success_contract", "slots",
+    "edges", "inputs", "outputs", "allowed_effects", "granted_permissions", "invariants"
+  ],
+  "properties": {
+    "model_version": {"const": "0.1"},
+    "id": {"$ref": "common.schema.json#/$defs/id"},
+    "version": {"type": "string", "minLength": 1},
+    "task": {"type": "string", "minLength": 1},
+    "success_contract": {"type": "string", "minLength": 1},
+    "slots": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id", "purpose", "inputs", "outputs", "success_contract", "kind",
+          "group", "required_capabilities", "allowed_effects", "optional", "subgraph_ref"
+        ],
+        "properties": {
+          "id": {"$ref": "common.schema.json#/$defs/id"},
+          "purpose": {"type": "string", "minLength": 1},
+          "inputs": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/port"}},
+          "outputs": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/port"}},
+          "success_contract": {"type": "string", "minLength": 1},
+          "kind": {"enum": ["atomic", "composite", "branch", "loop", "map", "reduce", "barrier"]},
+          "group": {"type": "array", "items": {"type": "string"}},
+          "required_capabilities": {
+            "type": "array",
+            "items": {"$ref": "common.schema.json#/$defs/id"},
+            "uniqueItems": true
+          },
+          "allowed_effects": {
+            "type": "array",
+            "items": {"$ref": "common.schema.json#/$defs/id"},
+            "uniqueItems": true
+          },
+          "optional": {"type": "boolean"},
+          "subgraph_ref": {"type": "string"}
+        }
+      }
+    },
+    "edges": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/edge"}},
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type", "target_slot", "target_port"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "type": {"$ref": "common.schema.json#/$defs/value_type"},
+          "target_slot": {"$ref": "common.schema.json#/$defs/id"},
+          "target_port": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+        }
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type", "source_slot", "source_port"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "type": {"$ref": "common.schema.json#/$defs/value_type"},
+          "source_slot": {"$ref": "common.schema.json#/$defs/id"},
+          "source_port": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+        }
+      }
+    },
+    "allowed_effects": {
+      "type": "array", "items": {"$ref": "common.schema.json#/$defs/id"}, "uniqueItems": true
+    },
+    "granted_permissions": {
+      "type": "array", "items": {"$ref": "common.schema.json#/$defs/id"}, "uniqueItems": true
+    },
+    "invariants": {"type": "array", "items": {"type": "string"}}
+  }
+}
+

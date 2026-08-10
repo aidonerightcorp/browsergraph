@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "run-receipt.schema.json",
+  "title": "Universal Node Graph Run Receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id", "plan_digest", "program_digest", "task_case_id", "outcome", "accepted",
+    "verifier", "assignments", "metrics", "node_receipts", "seed", "started_at",
+    "completed_at", "failure_class", "executor", "environment_digest", "input_digest",
+    "belief_revision"
+  ],
+  "properties": {
+    "id": {"$ref": "common.schema.json#/$defs/id"},
+    "plan_digest": {"$ref": "common.schema.json#/$defs/digest"},
+    "program_digest": {"$ref": "common.schema.json#/$defs/digest"},
+    "task_case_id": {"type": "string", "minLength": 1},
+    "outcome": {"type": "string", "minLength": 1},
+    "accepted": {"type": ["boolean", "null"]},
+    "verifier": {"type": "string"},
+    "assignments": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z][a-z0-9_.:/-]*$"},
+      "additionalProperties": {"$ref": "common.schema.json#/$defs/id"}
+    },
+    "metrics": {"type": "object", "additionalProperties": {"type": "number"}},
+    "node_receipts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "slot_id", "candidate_id", "outcome", "started_at", "completed_at",
+          "metrics", "failure_class", "artifact_digests"
+        ],
+        "properties": {
+          "slot_id": {"$ref": "common.schema.json#/$defs/id"},
+          "candidate_id": {"$ref": "common.schema.json#/$defs/id"},
+          "outcome": {"type": "string", "minLength": 1},
+          "started_at": {"type": "string"},
+          "completed_at": {"type": "string"},
+          "metrics": {"type": "object", "additionalProperties": {"type": "number"}},
+          "failure_class": {"type": "string"},
+          "artifact_digests": {
+            "type": "array", "items": {"$ref": "common.schema.json#/$defs/digest"}
+          }
+        }
+      }
+    },
+    "seed": {"type": ["integer", "null"]},
+    "started_at": {"type": "string"},
+    "completed_at": {"type": "string"},
+    "failure_class": {"type": "string"},
+    "executor": {"type": "string"},
+    "environment_digest": {
+      "oneOf": [{"const": ""}, {"$ref": "common.schema.json#/$defs/digest"}]
+    },
+    "input_digest": {
+      "oneOf": [{"const": ""}, {"$ref": "common.schema.json#/$defs/digest"}]
+    },
+    "belief_revision": {"type": "string"}
+  }
+}
+

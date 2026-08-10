@@ -58,7 +58,28 @@ candidates across 14 sub-steps, five synchronized views, one offline file.
 [Kaggle notebook](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 installs a browser, drives it, and shows the screenshots and video it captured.
 
-### Eleven notebooks, eight domains
+### Five notebooks that solve a real job
+
+Start here. Each one takes real input, runs real code, and writes real files you
+can open afterwards. They need nothing but the standard library, numpy and
+Pillow, so they run anywhere.
+
+| | Notebook | The job | Run it |
+|---|---|---|---|
+| 12 | [Browse and scrape](notebooks/12-browse-and-scrape.ipynb) | a web page in, clean product rows out | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-1-browse-and-scrape) |
+| 13 | [Ingest into a schema](notebooks/13-ingest-into-schema.ipynb) | mixed-format records in, typed rows plus rejects with reasons | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-2-ingest-into-a-schema) |
+| 14 | [Check and process an image](notebooks/14-check-and-process-image.ipynb) | images in, a report and resized copies out | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-3-check-and-process-an-image) |
+| 15 | [Clean up messy data](notebooks/15-clean-up-data.ipynb) | a messy table in, a clean one plus every change recorded | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-4-clean-up-messy-data) |
+| 16 | [Fit a model](notebooks/16-fit-a-model.ipynb) | a dataset in, regression and classification scores out | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-5-fit-a-model) |
+
+What they actually produce, not what they claim to: 3 products parsed from three
+different price formats with the priceless one dropped and named; 6 records
+accepted and 3 rejected with a reason each; a blank PNG caught by colour spread
+where the file size and dimensions look fine; a `$1,340.00` row repaired after
+its own comma split it in half; R² 0.991 and 98.2% accuracy from the same graph
+with two steps swapped.
+
+### Eleven notebooks about the model itself
 
 The claim that this is a general model is only worth something if it works
 somewhere else. Each of these runs in seconds, installs nothing but the library,
