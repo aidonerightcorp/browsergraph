@@ -11,4 +11,4 @@ drifted, and the wheel built as 0.1.0 while `browsergraph.__version__` said
 0.2.0.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

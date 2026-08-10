@@ -3,6 +3,60 @@
 Notable changes. Dates are the release date; the format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) loosely.
 
+## [0.3.0] — 2026-08-10
+
+The theme is **being able to say why**. A run that reports success, a picture that
+shows one option where sixty exist, and a scorer whose weights mean nothing all fail
+the same way: they are unfalsifiable.
+
+### Added
+
+- **The universal graph model.** `manifest.py` and `workbench.py`: portable node
+  manifests, atomic candidates, ordered stages, complete routes, typed feedback
+  channels and optimization profiles, with a validator that returns every problem
+  rather than the first. See [UNIVERSAL_GRAPH_SYSTEM.md](UNIVERSAL_GRAPH_SYSTEM.md),
+  and [HOW_IT_WORKS.md](HOW_IT_WORKS.md) for the plain-English version.
+- **Sub-steps.** Stages decompose recursively. "Acquire inputs" is not one decision,
+  it is three — and drawing it flat hid 44,343× of the search space. Pooling each
+  stage into one choice counts 85,747,200 routes; the sub-steps expose
+  3,802,314,700,800.
+- **Policy gating and route search.** `policy.py` gates *before* anything is scored —
+  a candidate lacking a permission is unavailable, not low-scoring — and `search.py`
+  runs greedy, beam or exhaustive, always reporting how much of the space it examined.
+- **Receipts.** `receipt.py` records route, spec, environment, per-step timing,
+  artifacts with content hashes, which steps verified, whether anything mutated
+  unchecked, and a pasteable replay line. Written for failures too.
+- **A capability handshake.** Each engine declares what it can do beyond the twelve
+  core methods; a graph is checked against that *before* a browser launches, and the
+  refusal names the engines that could run it. A test cross-checks every declaration
+  against the method that implements it.
+- **Fourteen nodes.** `press`, `select_option`, `upload`, `download`, `use_frame`,
+  `cookies`, `set_viewport`, `save_pdf`, plus `wait_stable`, `a11y_tree`,
+  `assert_text`, `assert_url`, `attribute` and `count`, which need no capability.
+- **A model router.** Ten roles routed to the right model with a recorded reason,
+  instead of one default for every job.
+- **OCR.** Five interchangeable backends, and `has_text` — which caught a WebKit
+  render that laid out perfectly and drew not one glyph.
+- **Binary fetching.** `fetch.py` gets a driver matched to the browser that will
+  actually launch, from Chrome for Testing, Mozilla and Microsoft.
+- **A studio, a static graphic and a Pages site.** Five synchronized projections in
+  one offline file; `routegraph.py` renders the same data as a plain SVG for READMEs.
+
+### Fixed
+
+- **Every objective profile ranked identically.** The scorer combined raw values, so
+  a latency in the thousands swamped a quality in [0,1] whatever the weights said.
+  "Balanced" was secretly speed-only.
+- **Beam search bought nothing.** It renormalized at every step, so the yardstick
+  moved under the search: beam matched plain greedy at width 1, 8, 32, 128 *and* 512.
+- **Ranking was O(n²)**, making an exhaustive pass over 122,472 routes correct and
+  unreachable.
+- **The driver came from PATH, not from the browser being launched** — on a machine
+  with three Chrome majors installed, which one worked depended on PATH order.
+- **Playwright's frame switch was decorative**, storing a handle nothing consulted.
+- **`Attribute` read only attributes**, so `value` after an upload returned null
+  instead of the filename.
+
 ## [0.2.0] — 2026-08-10
 
 The theme of this release is **things that were declared and did not work**, which is the

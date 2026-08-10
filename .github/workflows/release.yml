@@ -22,18 +22,60 @@ jobs:
       # it has to be registered on PyPI first, and until it is, every tag would
       # fail this workflow and make a healthy project look broken. The upload is
       # therefore best-effort and the outcome is reported explicitly.
-      - id: publish
+      # Install the wheel in a clean environment before offering it to anyone.
+      # A package that builds and does not import is worse than no package: the
+      # failure lands on a stranger's machine instead of in this log.
+      - name: Verify the wheel installs and works
+        run: |
+          python -m venv /tmp/fresh
+          /tmp/fresh/bin/pip install --quiet dist/*.whl
+          /tmp/fresh/bin/python - <<'PY'
+          import browsergraph as bg
+          from browsergraph.demo import workbench
+          from browsergraph.studio import template
+          assert bg.__version__, "no version"
+          assert workbench().validate() == [], "demo does not validate"
+          assert len(template()) > 1000, "studio template not packaged"
+          print(f"browsergraph {bg.__version__} installs clean:", workbench().summary())
+          PY
+          /tmp/fresh/bin/browsergraph capabilities > /dev/null
+
+      # Two auth paths, because only one of them can be set up without a human
+      # visiting PyPI. Trusted publishing is preferred — no long-lived secret
+      # lives in this repository — but until it is registered, a PYPI_API_TOKEN
+      # secret works, and if neither exists the upload is skipped rather than
+      # failing the release. A tag should never make a healthy project look
+      # broken because of a credential nobody has created yet.
+      - id: publish-trusted
+        if: ${{ !secrets.PYPI_API_TOKEN }}
         continue-on-error: true
         uses: pypa/gh-action-pypi-publish@release/v1
+      - id: publish-token
+        if: ${{ secrets.PYPI_API_TOKEN }}
+        continue-on-error: true
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
       - name: Report publish outcome
         run: |
-          if [ "${{ steps.publish.outcome }}" = "success" ]; then
+          if [ "${{ steps.publish-trusted.outcome }}" = "success" ] \
+          || [ "${{ steps.publish-token.outcome }}" = "success" ]; then
             echo "::notice::published to PyPI"
           else
-            echo "::warning::PyPI upload skipped — register a trusted publisher at" \
-                 "https://pypi.org/manage/account/publishing/ with owner=${{ github.repository_owner }}," \
-                 "repository=browsergraph, workflow=release.yml, environment=release."
+            echo "::warning::PyPI upload skipped. Either register a trusted publisher at" \
+                 "https://pypi.org/manage/account/publishing/ (owner=${{ github.repository_owner }}," \
+                 "repository=browsergraph, workflow=release.yml, environment=release), or add a" \
+                 "PYPI_API_TOKEN repository secret. The wheel is attached to the GitHub release" \
+                 "either way, and 'pip install <release-url>' works today."
           fi
+
+      # The equivalent that needs no third-party account: attach the verified
+      # wheel to the GitHub release, so `pip install <url>` works immediately.
+      - name: Attach artifacts to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v4
         with: {name: dist, path: dist/}
 
