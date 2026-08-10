@@ -532,3 +532,42 @@ def test_per_step_bits_names_the_step_worth_changing():
                                  "write": "write.only"}, stages)
     assert bits["clean"] < 0, "the losing candidate has to score negative"
     assert bits["write"] == 0.0, "a step with one candidate decided nothing"
+
+
+def test_a_candidate_in_every_route_cannot_be_exonerated():
+    """A real limit of the pair detector, worth knowing before trusting it.
+
+    "Both together" versus "exactly one" needs routes without each member. A
+    candidate present in every single route has no such routes, so the contrast
+    collapses into a statement about whatever it is paired with — and the pair
+    gets reported when the evidence was never about the pair at all.
+    """
+    store = Evidence()
+    always = "shared.step"
+    for _ in range(10):
+        store.routes.append((("a.good", "b.good", always), "global", 0.8))
+        store.routes.append((("a.bad", "b.good", always), "global", 0.1))
+
+    pairs = {(x, y) for x, y, _gap, _runs in store.interactions()}
+    assert ("a.bad", "b.good") in pairs or ("b.good", "a.bad") in pairs, \
+        "the real pair should be found"
+    assert any(always in pair for pair in pairs), (
+        "the always-present candidate is implicated too, and that is the point: "
+        "vary it, or read its findings as being about the other member")
+
+
+def test_varying_the_shared_step_leaves_only_the_real_pair():
+    """The fix, and what the notebook demonstration does."""
+    store = Evidence()
+    tails = ("t.one", "t.two")
+    for i in range(12):
+        store.routes.append((("a.good", "b.other", tails[i % 2]), "global", 0.80))
+        store.routes.append((("a.other", "b.bad", tails[i % 2]), "global", 0.78))
+    for i in range(8):
+        store.routes.append((("a.other", "b.other", tails[i % 2]), "global", 0.79))
+    for i in range(8):
+        store.routes.append((("a.good", "b.bad", tails[i % 2]), "global", 0.15))
+
+    found = store.interactions()
+    assert len(found) == 1, f"expected only the planted pair, got {found}"
+    assert set(found[0][:2]) == {"a.good", "b.bad"}

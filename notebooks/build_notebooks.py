@@ -295,6 +295,21 @@ one.md("""
 invariant — the invariant is **one candidate per node, and every edge
 type-checks**, which holds in any DAG. Layering is just how you draw it.
 
+Here it is drawn, which is faster than reading the layer list and harder to
+misread. `count` and `total` sit side by side because nothing connects them.
+""")
+
+one.code("""
+from browsergraph import viz
+viz.dag(wb)
+""")
+
+one.md("""
+Two arrows arrive at `report`, each labelled with the port it lands on. That
+labelling is not decoration: the count and the total are both numbers, and a
+join that does not say which is which is a bug waiting for the day they get
+swapped.
+
 ## Four mistakes, and what the validator says about each
 """)
 one.code("""
@@ -458,6 +473,20 @@ Every removal states its reason, and blocked candidates stay **visible**.
 Filtering them out silently would answer "what could perform this step?" with
 "what the policy left", and the screen would look identical either way.
 
+Those two numbers are the top of a funnel, and the funnel is worth drawing. The
+bars are log-scaled, because on a linear axis a drop from trillions to one is
+one bar and three invisible slivers.
+""")
+
+two.code("""
+from browsergraph import viz
+
+viz.funnel([("every route", wb.route_count()),
+            ("policy allows", report.reachable_routes)],
+           title="what the lockdown policy removed")
+""")
+
+two.md("""
 ## Three search strategies
 
 **greedy** takes the best option per stage independently. **beam** keeps the most
@@ -578,21 +607,46 @@ they are what makes learning tractable at all.
 ## Where independence breaks
 
 Cheap search assumes the choices are independent. That assumption should be
-measured, not believed: when a route does much worse than the product of its
-parts predicted, *that specific pair* deserves joint search. Everything else can
-stay greedy.
+measured, not believed: when routes containing a particular *pair* do much worse
+than otherwise-similar routes containing only one of them, that pair deserves
+joint search. Everything else can stay greedy.
+
+The comparison has to be **both against exactly one**, and getting that wrong is
+easy. An earlier version compared a route's outcome against `rate(a) * rate(b)`,
+which is a category error rather than a tuning problem: a route's quality is the
+product over *every* step in it, so on a three-step route the observed value
+sits near 0.8³ while the expectation was 0.8², and every pair looks guilty. On
+data built with no interaction at all it reported eleven.
+
+So the demonstration below needs both kinds of route, and that is the point of
+the middle loops: without routes containing exactly one of the pair, there is
+nothing to compare against and nothing can be found.
 """)
 two.code("""
 store = Evidence()
 a, b = list(stages.values())[0][0], list(stages.values())[1][0]
-for _ in range(12):                     # each is fine alone
-    store.observe(Observation(candidate=a, ok=True))
-    store.observe(Observation(candidate=b, ok=True))
-for _ in range(6):                      # together they are not
-    store.routes.append(((a, b), "global", 0.05))
+other_a, other_b = list(stages.values())[0][1], list(stages.values())[1][1]
+# A third step that *varies*. If it were the same in every route there would be
+# no route without it, so "both" versus "exactly one" would collapse into a
+# statement about the other candidate — and this reports two extra pairs that
+# are really about `a` and `b` wearing a third name.
+tails = [list(stages.values())[2][0], list(stages.values())[2][1]]
 
-for x, y, gap, runs in store.interactions():
-    print(f"{x}\\n  + {y}\\n  {gap:+.2f} worse than independence predicted, over {runs} runs")
+for i in range(12):                     # each is fine on its own
+    store.routes.append(((a, other_b, tails[i % 2]), "global", 0.80))
+    store.routes.append(((other_a, b, tails[i % 2]), "global", 0.78))
+for i in range(8):                      # and this pair is fine too
+    store.routes.append(((other_a, other_b, tails[i % 2]), "global", 0.79))
+for i in range(8):                      # but these two together are not
+    store.routes.append(((a, b, tails[i % 2]), "global", 0.15))
+
+found = store.interactions()
+for x, y, gap, runs in found:
+    print(f"{x}\\n  + {y}\\n  {gap:+.2f} worse together than either alone, "
+          f"over {runs} runs")
+print(f"\\n{len(found)} interacting pair reported, out of "
+      f"{len({p for r, _, _ in store.routes for p in r})} candidates seen — "
+      f"the one that was planted, and nothing else")
 """)
 
 two.md("""
@@ -795,6 +849,20 @@ three.md("""
 The two extractors sit in the **same layer** — they are independent, and the
 layering says so without anyone drawing it. That is also the parallelism budget:
 `parallel_width` tells you how much of this could run at once.
+
+Compare the drawing below with the sketch further up. They agree, and that is
+the point: the sketch was a wish, this is derived from the ports.
+""")
+
+three.code("""
+from browsergraph import viz
+viz.dag(doc)
+""")
+
+three.md("""
+No browser code anywhere in that picture, and none in the code that drew it.
+`viz` takes a workbench and knows nothing about any domain — which is the same
+claim this notebook is making, tested a second way.
 
 ## Every mechanism works unchanged
 """)
