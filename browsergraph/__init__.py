@@ -5,7 +5,7 @@ transport, display, stealth and behaviour setting, driven by graphs of reusable
 nodes. Action nodes talk to a `BrowserPort`, never to an engine directly, so a
 node written once runs on every engine.
 """
-from browsergraph._version import __version__
+from browsergraph._version import __version__ as __version__
 from browsergraph.contracts import Contract, ContractError, contract_of
 from browsergraph.dimensions import (
     Behavior,
