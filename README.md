@@ -5,380 +5,106 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Core deps: none](https://img.shields.io/badge/core%20deps-stdlib--only-brightgreen)](pyproject.toml)
 [![Tests](https://img.shields.io/badge/tests-618%20passing-brightgreen)](tests/)
-[![Kaggle](https://img.shields.io/badge/Kaggle-live%20demo-20BEFF?logo=kaggle)](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
+[![Kaggle](https://img.shields.io/badge/Kaggle-run%20it%20now-20BEFF?logo=kaggle)](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 
-Composable browser automation. Any engine × binary × transport × display ×
-stealth × behaviour, driven by reusable nodes in a graph, with optional
-Ollama-powered steps.
+**Write a browser automation once. Run it on any engine — or on none.**
 
-Write a graph once — it runs on Playwright, Patchright, Selenium,
-undetected-chromedriver, SeleniumBase, nodriver, Camoufox or a mock, without
-changing a line.
+Playwright, Patchright, Selenium, undetected-chromedriver, SeleniumBase, nodriver,
+zendriver, pydoll, Botasaurus, rebrowser, Camoufox — or `engine=http`, which fetches with
+a real browser's TLS fingerprint and no browser at all. Same graph, no code change.
 
-**Core is stdlib-only.** Engines are optional extras, so `pip install
-browsergraph` is small and the test suite runs anywhere — no browser, no network.
+```python
+from browsergraph import Engine, Graph, Spec, run
+from browsergraph.drivers import build
+from browsergraph.nodes.actions import Click, Extract, Navigate, WaitFor
 
-**Try it without installing anything:** the
-[Kaggle notebook](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
-runs the whole tour in a browser-less environment.
+graph = (Graph("quote")
+         .add(Navigate("https://example.com"))
+         .add(WaitFor("#quote"))
+         .add(Click("#quote"))
+         .add(WaitFor("#result", name="confirm"))   # <- proves the click landed
+         .add(Extract("#result", into="quote")))
 
-### What this is arguing
-
-Not a catalogue of browser features. The claim is that **a task decomposes into planes,
-each plane offers interchangeable ways to answer it, and the route through them should be
-chosen from evidence rather than fixed in advance.**
-
-```mermaid
-flowchart LR
-  subgraph R["reach"]
-    R1["http"]; R2["playwright"]; R3["patchright"]; R4["selenium"]; R5["camoufox"]
-  end
-  subgraph S["settle"]
-    S1["dwell"]; S2["wait_for"]; S3["retry_until"]
-  end
-  subgraph L["locate"]
-    L1["css"]; L2["healing"]; L3["llm_selector"]; L4["vision_locate"]
-  end
-  subgraph A["act"]
-    A1["click"]; A2["type"]; A3["scroll"]
-  end
-  subgraph V["verify"]
-    V1["wait_for"]; V2["screenshot"]; V3["llm_verify"]; V4["vision_verify"]
-  end
-  subgraph X["extract"]
-    X1["extract"]; X2["for_each"]; X3["frontier"]
-  end
-  R --> S --> L --> A --> V --> X
-  classDef plane fill:#f4f7fa,stroke:#9fb4cc;
-  class R,S,L,A,V,X plane;
+spec = Spec(engine=Engine.PLAYWRIGHT)               # swap to HTTP, SELENIUM, ...
+print(run(graph, spec, build(spec)).context.data)
 ```
-
-Six planes, 3,024 candidate routes. With no evidence the cheapest wins —
-`http → dwell → css → click → screenshot → extract`: no browser, no model. After a few
-dozen runs against a defended, JavaScript-rendered site the same machinery picks
-`patchright → wait_for → healing → click → screenshot → extract`, and says why:
-*6/6 steps measured*.
-
-```bash
-browsergraph planes --demo                  # the planes and the chosen route
-browsergraph planes --html planes.html      # both routes drawn over all the others
-```
-
-The planes are **derived from the node contracts**, not written down. `click` is on *act*
-because it declares `mutates`; adding a node adds a candidate and the diagram changes
-without anyone editing it. That is what enforcing contracts buys — they are the thing the
-architecture reasons over.
-
-Two decisions keep the scoring honest:
-
-* **An untried candidate is a coin flip, not a free win.** Scoring a route over only its
-  *measured* steps made a route with one good step and five untried ones beat a route
-  measured end to end — so "after learning" recommended the parts nobody had ever run.
-* **A route is a product, not an average.** Every plane has to work, so one weak step
-  drags the route down instead of being averaged away by five strong ones.
-
-### How it fits together
-
-```mermaid
-flowchart LR
-  subgraph Author["you write this once"]
-    G["Graph<br/><i>nodes + typed edges</i>"]
-    S["Spec<br/><i>one point in the dimension space</i>"]
-  end
-  G --> R["run()"]
-  S --> R
-  R --> P{{"BrowserPort<br/><i>12 methods, structural</i>"}}
-  P --> PW["playwright<br/>patchright<br/>camoufox"]
-  P --> SE["selenium<br/>undetected-cd<br/>seleniumbase"]
-  P --> HT["http<br/><i>no browser — TLS impersonation</i>"]
-  P --> MK["mock<br/><i>no I/O</i>"]
-  R -.-> L["lint · contracts · learn<br/><i>read the nodes' declarations</i>"]
-  classDef seam fill:#e8f0fe,stroke:#2d6cb5,stroke-width:2px;
-  class P seam;
-```
-
-Nodes never touch an engine. They talk to `BrowserPort`, and that seam is the whole
-reason one graph runs everywhere — including on the engine that has no browser at all.
-
-### A graph, and the question a diagram should answer
-
-```mermaid
-flowchart TD
-  n1["navigate"] --> n2("wait_for<br/><i>verifies</i>")
-  n2 --> n3[["click<br/><i>mutates</i>"]]
-  n3 --> n4("confirm<br/><i>verifies the click landed</i>")
-  n4 --> n5["extract"]
-  n1 -.->|explicit dependency| n6["screenshot"]
-  classDef mutates fill:#fde2e2,stroke:#c33,stroke-width:2px;
-  classDef verifies fill:#e2f5e6,stroke:#2a2,stroke-width:2px;
-  class n3 mutates; class n2,n4 verifies;
-```
-
-Red changes remote state; green checks an outcome. A graph with red and no green after
-it is what **BG003** flags — and it is the shape that produced 551 "successful" sends and
-zero posts. `graph.to_mermaid()` emits this for any graph; `graph.to_html()` renders it
-interactively, hover-for-contract, in a notebook.
-
-### One graph, or no browser at all
-
-Most pages are server-rendered and need no browser. `Engine.HTTP` fetches them
-with a real browser's TLS fingerprint (`curl-cffi`), which is the layer anti-bot
-vendors check *before any JavaScript runs*:
-
-```
-                        https://www.python.org, best of 3
-HTTP        0.14s   ->  'Welcome to Python.org'
-PLAYWRIGHT  1.08s   ->  'Welcome to Python.org'     # 7.7x slower, same answer
-```
-
-It refuses `eval_js`, `type` and `screenshot` rather than silently no-opping —
-a driver that pretends surfaces later as missing data with no explanation.
-
----
 
 ## Install
 
 ```bash
-pip install browsergraph                 # core: mock engine, graphs, sampling
-pip install browsergraph[playwright]     # + playwright
-pip install browsergraph[selenium]       # + selenium & undetected-chromedriver
-pip install browsergraph[all]            # everything
-
-playwright install chromium              # browser binaries, if using playwright
+pip install "browsergraph[playwright] @ git+https://github.com/aidonerightcorp/browsergraph.git"
+browsergraph bootstrap        # gets a browser actually running, whatever it takes
+browsergraph doctor           # what works here, and the command to fix what doesn't
 ```
 
-Check what your machine can actually run:
+The core is **stdlib-only** — every engine is an optional extra, so a graph can be built,
+linted and mock-run with nothing installed.
 
-```bash
-browsergraph doctor
-```
-
-```
-[ok  ] python>=3.10                3.12.3
-[ok  ] engine:playwright           import playwright
-[MISS] engine:camoufox             import camoufox
-       fix: pip install camoufox[geoip]
-[ok  ] binary:system chrome        /usr/bin/google-chrome
-[MISS] display:xvfb                not installed
-       fix: apt install xvfb  (needed for unattended headed runs)
-[ok  ] ollama:reachable            http://localhost:11434 (3 models)
-[ok  ] ollama:model                glm-5.2
-```
-
-Every missing check carries the command that fixes it.
+**Try it without installing anything:** the
+[Kaggle notebook](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
+installs a browser, drives it, and shows the screenshots and video it captured.
 
 ---
 
-## Quick start
+## Why this exists
+
+The interesting problem in browser automation is not clicking things. It is that **a run
+which reports success can have accomplished nothing** — and you find out weeks later.
+
+This library was written after an incident where 551 emails reported "sent" successfully
+and produced zero posts. Every layer said success. Nothing checked the destination. So the
+linter's flagship rule is BG003 — *changes remote state, never verifies the outcome* — and
+the rest of the design follows from there.
 
 ```python
-from browsergraph import Graph, Spec, Engine, Stealth, Behavior, run
-from browsergraph.nodes.actions import Navigate, Click, Extract
-from browsergraph.drivers import build
-
-spec = Spec(engine=Engine.PATCHRIGHT,
-            stealth=Stealth.UNDETECTED,
-            behavior=Behavior.humanlike())
-
-graph = (Graph("scrape")
-         .add(Navigate("https://example.com"))
-         .add(Click("#accept", optional=True))
-         .add(Extract("h1", into="heading")))
-
-result = run(graph, spec, build(spec))
-print(result.summary(), result.context.data["heading"])
+from browsergraph.lint import lint, report
+print(report(lint(graph)))
+# [WARN] BG003 click: graph changes remote state but never verifies the outcome
+#        — a silent failure will look like success
 ```
 
-Swap `Engine.PATCHRIGHT` for `Engine.SELENIUM_UC` and the same graph runs on
-undetected-chromedriver.
+## The architecture
 
-### As config, not code
+A task decomposes into **planes**. Each plane offers several interchangeable ways to
+answer it. A route through them is one candidate solution — and the route is chosen from
+evidence, not fixed in advance.
 
-```yaml
-# login.yaml
-spec:
-  engine: selenium_uc
-  binary: system_chrome
-  stealth: undetected
-  behavior: humanlike
-  llm: {mode: selector, model: glm-5.2}
-nodes:
-  - {kind: navigate, url: "https://example.com"}
-  - {kind: wait_for, selector: "#login"}
-  - {kind: type, selector: "#user", text: "someone"}
-  - {kind: click, selector: "#login"}
-  - {kind: extract, selector: "h1", into: heading}
-```
+![task planes and candidate routes](docs/architecture.png)
+
+With no evidence the cheapest route wins: `http → dwell → css → click → screenshot →
+extract` — no browser, no model. After a few dozen runs against a defended,
+JavaScript-rendered site the same machinery picks `patchright → wait_for → healing → …`
+and can say why: *6/6 steps measured*.
+
+The planes are **derived from node contracts**, not written down. `click` is on *act*
+because it declares `mutates`; adding a node adds a candidate and the diagram changes
+with nobody editing it.
 
 ```bash
-browsergraph run login.yaml --json
-browsergraph run login.yaml --engine playwright    # same graph, other engine
+browsergraph planes --demo               # the planes and the chosen route
+browsergraph planes --html planes.html   # both routes drawn over all the others
 ```
 
----
+## Failure is a first-class path
 
-## Docker
-
-```bash
-docker compose up --build          # service on :8800 + ollama
-docker compose run --rm browsergraph doctor
-```
-
-One image, two modes — `ENTRYPOINT` is the CLI, `CMD` is `serve`:
-
-```bash
-docker run -p 8800:8800 browsergraph                       # HTTP service
-docker run --rm browsergraph combos --engine selenium_uc   # one-shot CLI
-```
-
-```bash
-curl localhost:8800/health
-curl localhost:8800/doctor
-curl -X POST localhost:8800/run -d '{
-  "spec": {"engine": "playwright"},
-  "nodes": [{"kind": "navigate", "url": "https://example.com"}]
-}'
-```
-
-Build args pick what's baked in:
-
-```bash
-docker build --build-arg EXTRAS=selenium --build-arg INSTALL_BROWSERS= .
-```
-
-Two settings that matter and are easy to miss: `shm_size: 1gb` (Chrome crashes
-on Docker's 64 MB default) and an explicit `mem_limit` (a browser will happily
-consume the host).
-
----
-
-## Ollama setup
-
-LLM nodes are **optional** — graphs run fully scripted with no model. When you
-want one:
-
-```bash
-export OLLAMA_HOST=http://localhost:11434   # or a remote/cloud endpoint
-export OLLAMA_MODEL=glm-5.2
-export OLLAMA_API_KEY=...                   # sent as Bearer, for gateways
-```
-
-| Variable | Default | Notes |
-|---|---|---|
-| `OLLAMA_HOST` | `http://localhost:11434` | In Docker use `http://ollama:11434`, or `host.docker.internal` for a host install |
-| `OLLAMA_MODEL` | `glm-5.2` | `browsergraph doctor` warns if it isn't pulled |
-| `OLLAMA_API_KEY` | *(unset)* | Only needed by gateways requiring auth |
-| `BG_LLM_MODE` | `none` | `none / selector / verify / plan / agent` |
-
-Modes, cheapest first:
-
-- **`none`** — fully scripted, zero tokens
-- **`selector`** — model resolves a selector **only when the scripted one fails**,
-  so a working graph costs nothing
-- **`verify`** — model checks the outcome after acting
-- **`plan`** — model plans steps up front
-- **`agent`** — model drives the loop
-
-If the model is unreachable, LLM nodes **fail loudly** rather than guessing. A
-hallucinated selector that half-works is worse than a clean failure.
-
----
-
-## Engines
-
-Engines that cannot co-install (camoufox pins its own playwright) run in their
-own virtualenv via a worker process — see [ISOLATION.md](ISOLATION.md):
-
-```bash
-browsergraph envs create --name camoufox
-```
-```python
-Spec(engine=Engine.CAMOUFOX, binary=Binary.FIREFOX, isolated=True)
-```
-
-| Engine | Install | Binaries | Notes |
-|---|---|---|---|
-| `playwright` | `playwright` | chromium, chrome, brave, firefox, webkit | Fastest, most detectable |
-| `playwright_stealth` | `playwright-stealth` | chromium family | Patched navigator |
-| `patchright` | `patchright` | chromium family | Drop-in stealth playwright |
-| `camoufox` | `camoufox[geoip]` | firefox | Hardened firefox; local only |
-| `selenium` | `selenium` | chromium family, firefox | Baseline webdriver |
-| `selenium_uc` | `undetected-chromedriver` | chrome family | Not grid-compatible |
-| `seleniumbase` | `seleniumbase` | chrome family | UC mode plus tooling |
-| `nodriver` | `nodriver` | chrome family | UC successor, no webdriver binary |
-| `cdp` | `websockets` | chromium family | Raw DevTools |
-| `mock` | — | any | In-memory, for tests and dry runs |
-
-Verified live on this machine: playwright, patchright, selenium, selenium_uc in-process, camoufox isolated — all passing the same cross-engine conformance suite.
-
-`browsergraph engines` shows which are usable right now.
-
----
-
-## Dimensions and sampling
-
-```bash
-browsergraph dimensions              # every axis and its values
-browsergraph combos --why            # runnable combinations + rejection reasons
-browsergraph sample                  # pairwise covering array
-```
-
-Incompatible combinations are rejected **with reasons**, so a smaller sweep is
-explained rather than mysterious:
+When a configuration fails, the next one is tried — and the *diagnosis* chooses what to
+try next, which is what makes it more than a retry loop.
 
 ```
-selenium + webkit          → selenium has no webkit driver
-playwright + undetected    → needs an evasion engine (patchright, selenium_uc, …)
-selenium_uc + grid         → cannot run on selenium grid
-headed + remote transport  → a remote browser can't use this host's display
+1. http        ok=False  timeout        wait_retry
+2. http        ok=False  timeout        wait_retry
+3. playwright  ok=True                          → extracted: $49.00
 ```
 
-Full enumeration explodes, so `sample` builds a **pairwise covering array** —
-every value-pair exercised in tens of runs instead of thousands. Most failures
-are two-value interactions, so this catches them at a fraction of the cost.
-
-Presets: `fast`, `human`, `undetected`, `camoufox`, `stealth_remote`,
-`llm_agent`, `test`.
-
-See [DIMENSIONS.md](DIMENSIONS.md) for the axes still worth adding — network/TLS
-fingerprinting, session warmth, challenge handling, and verification — and why
-verification matters most.
-
----
-
-## Architecture
-
-```
-core:      Spec (dimensions) + Graph (DAG) + Context (state)
-ports:     BrowserPort — 12 methods every engine implements
-drivers:   playwright / selenium / mock adapters
-nodes:     actions (navigate, click, type, …) + llm (selector, verify)
-```
-
-**Action nodes talk only to `BrowserPort`, never to an engine.** That is what
-makes "any engine × any action" real rather than two implementations that drift.
-Adding an engine means writing one adapter and touching no nodes.
-
-## Prerequisites
-
-| Need | When | Install |
-|---|---|---|
-| Python ≥ 3.10 | always | — |
-| Engine package | non-mock runs | `pip install browsergraph[<engine>]` |
-| Browser binary | non-mock runs | `playwright install chromium`, or system Chrome/Firefox |
-| `DISPLAY` | `display=headed` | a real X session |
-| `xvfb` | unattended headed runs | `apt install xvfb` |
-| `ffmpeg` | video capture | `apt install ffmpeg` |
-| Ollama | LLM nodes only | [ollama.com](https://ollama.com) + `ollama pull <model>` |
-| `shm_size ≥ 1gb` | Chrome in Docker | compose setting |
-
-`browsergraph doctor` checks all of these and prints the fix for each miss.
+A missing element on an engine with **no JavaScript runtime** suggests a different engine,
+not a longer wait. Retries are bounded per spec — an unbounded retry never reaches the
+rest of the ladder. A terminal diagnosis (CAPTCHA, block) stops immediately rather than
+escalating into a ban, and `SiteMemory` puts the winner first next time.
 
 ## Every engine, every browser, headless and headed
 
-Measured, not declared — this is a real launch matrix against a served page, one row per
-combination that the validator accepts. `browsergraph doctor` reports the same for your
-machine.
+Measured, not declared — a real launch matrix against a served page.
+`browsergraph doctor` reports the same for your machine.
 
 | engine | chromium | chrome | firefox | webkit | brave | headless | headed | xvfb |
 |---|---|---|---|---|---|---|---|---|
@@ -391,142 +117,58 @@ machine.
 | seleniumbase | — | ✅ | — | — | ✅ | ✅ | ✅ | ✅ |
 | botasaurus | — | ✅ | — | — | ✅ | ✅ | ✅ | ✅ |
 | camoufox *(isolated)* | — | — | ✅ | — | — | ✅ | ✅ | ✅ |
-| nodriver *(CDP)* | — | ✅ | — | — | ✅ | ✅ | ✅ | ✅ |
-| zendriver *(CDP)* | — | ✅ | — | — | ✅ | ✅ | ✅ | ✅ |
-| pydoll *(CDP)* | — | ✅ | — | — | ✅ | ✅ | ✅ | ✅ |
+| nodriver / zendriver / pydoll *(CDP)* | — | ✅ | — | — | ✅ | ✅ | ✅ | ✅ |
 | http *(no browser)* | n/a | n/a | n/a | n/a | n/a | ✅ | — | ✅ |
 
-**126 verified combinations**, and no unexplained failures. What does not work, and why:
+**126 verified combinations.** What does not work is documented in
+[ENGINES.md](ENGINES.md) with the reason — a bare protocol with no client library, a
+chromedriver/snap version skew, a dependency that ships broken source.
 
-* `engine=cdp` is the bare protocol with no client library — it refuses and names
-  `transport=remote_cdp` or a CDP-native engine instead.
-* `selenium_uc` and `botasaurus` against **snap** Chromium: snap keeps the browser current
-  while the matching chromedriver lags, so a session cannot be created. Not a library
-  problem — both drive system Chrome fine.
-* `camoufox` pins its own Playwright build, so it runs in a per-engine virtualenv
-  (`spec.isolated=True`). Playwright still works in-process afterwards, which is the
-  entire point of that mechanism.
-* `nodriver` 0.48–0.50.3 ship non-UTF-8 source and cannot be imported; the requirement
-  pins `nodriver<0.48`, and the error names `zendriver` if you hit it.
+## What comes in the box
 
-WebKit needs 79 system packages Chromium does not
-(`sudo playwright install-deps webkit`); with them it runs headless, headed and under
-xvfb like anything else.
-
-### Finding a browser a driver will accept
-
-`shutil.which("firefox")` is not an answer. On Ubuntu it returns `/usr/bin/firefox`, a
-**shell script** wrapping the snap, and geckodriver rejects it:
-
-```
-InvalidArgumentException: binary is not a Firefox executable
-```
-
-That message names neither the cause nor the fix, and the fix —
-`/snap/firefox/current/usr/lib/firefox/firefox` — is not guessable. On the machine this
-was developed on, **three of four** installed browsers are wrappers on PATH.
-`browsergraph.binaries` resolves the real program and says what it did:
-
-```
-[ok] binary:firefox   using /snap/firefox/current/usr/lib/firefox/firefox
-                      (PATH had /usr/bin/firefox, a wrapper script a driver cannot use)
-```
-
-### CDP-native engines
-
-`nodriver`, `zendriver` and `pydoll` speak the DevTools protocol directly — no WebDriver,
-no `navigator.webdriver`, no driver binary whose version must track the browser. They are
-all **async**, and `BrowserPort` is deliberately synchronous, so each instance owns a
-private event loop on its own thread. That is the mirror image of the notebook fix below:
-one exists because these engines *need* a loop, the other because Playwright's sync API
-refuses to run inside one.
-
-## Getting a browser to actually run
-
-The commonest first failure is not a bug in your graph — it is a browser that installed
-and will not start. `ensure_browser` never trusts an installer's exit code; it re-launches
-after every step, because launching is the only evidence that counts.
-
-```bash
-browsergraph bootstrap        # probe -> pip -> binary -> system libs -> system Chrome
-```
-
-```
-[ok  ] browser already launches
-browser ready: playwright (playwright-bundled)
-```
-
-On a slim container the same command installs the shared libraries Chromium needs,
-falls back to a Chrome already on `PATH`, and — if all of it fails — says exactly what
-is missing and which command fixes it. Container flags (`--no-sandbox`,
-`--disable-dev-shm-usage`) are added automatically when running as root, because
-Chrome's sandbox cannot initialise there at all.
-
-## When a configuration fails, the next one is tried
-
-```python
-from browsergraph.strategy import escalate
-result = escalate(graph, ladder(Spec()), build, url=url)
-```
-
-```
-  1. http        ok=False  timeout        wait_retry
-  2. http        ok=False  timeout        wait_retry
-  3. playwright  ok=True
-succeeded on attempt 3
-```
-
-Each failure is *diagnosed*, and the diagnosis chooses what to try next: a missing
-element on an engine with no JavaScript runtime suggests a different engine, not a longer
-wait. Retries are bounded per spec — an unbounded retry never reaches the rest of the
-ladder. A terminal diagnosis (challenge, block) stops immediately rather than escalating
-into a ban, and `SiteMemory` puts the winner first next time.
-
-## Contracts
-
-Every check in this library reads a node's own declarations — the linter trusts
-`mutates`, the scheduler trusts `reads`/`writes`. A node that misdeclares itself does not
-fail; it silently switches those checks off. So declarations are enforced at all three
-moments where that is possible: when the class is defined, when nodes are composed into a
-graph, and while the graph runs.
-
-```python
-class Bad(Node):
-    kind = "bad"
-    writes = ("url")     # ContractError at import: a missing comma — this is a str
-```
-
-```bash
-browsergraph nodes                    # every node kind and its contract
-browsergraph graph g.yaml --mermaid   # a diagram; mutating nodes red, verifying green
-```
-
-See [CONTRACTS.md](CONTRACTS.md).
-
-## Notebooks
-
-Jupyter, Kaggle and Colab run every cell inside an asyncio loop, which Playwright's sync
-API refuses to start in. `browsergraph` detects that and drives the adapter from a worker
-thread, so `engine=playwright` works in a notebook with no extra setup — screenshots and
-video included. There is a [runnable tour notebook](notebooks/browsergraph-tour.ipynb).
+| | |
+|---|---|
+| **Contracts** | nodes declare what they read, write and mutate — enforced at import, at composition and at run time ([CONTRACTS.md](CONTRACTS.md)) |
+| **Linter** | BG001–BG009 over a graph, before a browser starts |
+| **Escalation** | diagnose the failure, try the next configuration, remember the winner |
+| **Learning** | outcomes generalise site → org → sector → platform → global |
+| **Token reduction** | 8 preprocessing strategies, then keyword focus with neighbour expansion |
+| **Extraction** | conservative, deterministic contacts / NAICS / articles — no model needed |
+| **Politeness** | per-domain, process-wide rate limiting that honours robots `Crawl-delay` |
+| **Isolation** | conflicting engines in per-engine virtualenvs, over a worker protocol |
+| **Notebooks** | Jupyter/Kaggle/Colab run cells inside an asyncio loop; the sync API is driven from a worker thread so it just works |
+| **LLM (optional)** | Ollama-compatible; the model is resolved from the host by *capability*, never hardcoded |
 
 ## Documentation
 
 | | |
 |---|---|
+| [QUICKSTART.md](QUICKSTART.md) | first graph, first real browser, first task |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | the Protocol-vs-base-class seam |
 | [CONTRACTS.md](CONTRACTS.md) | what a node promises, and the three moments it is checked |
-| [DIMENSIONS.md](DIMENSIONS.md) | axes worth adding, and why verification matters most |
+| [ENGINES.md](ENGINES.md) | every engine, what it is for, and what does not work |
+| [DIMENSIONS.md](DIMENSIONS.md) | the axes, and why verification matters most |
 | [ISOLATION.md](ISOLATION.md) | conflicting engines in separate virtualenvs |
 | [PLUGINS.md](PLUGINS.md) | the open plugin format |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | how to add an engine, a node or an extraction path |
 
-## Development
+## Related
+
+[**extractgraph**](https://github.com/aidonerightcorp/extractgraph) — the other half.
+browsergraph *reaches* the page; extractgraph gets the data out of it, with several
+independent paths, provenance, and the disagreements kept.
+
+## Contributing
+
+Issues and pull requests welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). The most
+useful contributions are a new engine adapter, a new extraction path, or a page that
+breaks something.
 
 ```bash
 pip install -e ".[dev]"
-pytest -q          # 618 tests; no browser required, browser suites skip when absent
+pytest -q                                  # 618 tests; browser suites skip when absent
 mypy browsergraph --ignore-missing-imports
-ruff check browsergraph
+ruff check browsergraph tests
 ```
 
 MIT.
