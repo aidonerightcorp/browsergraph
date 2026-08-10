@@ -55,11 +55,15 @@ class Slot:
     capabilities: tuple[str, ...] = ()
     description: str = ""
     optional: bool = False
+    #: atomic, map or branch. Without this a template could not say "do it to
+    #: every item" or "take one of these paths", so a batch template rendered
+    #: as a chain and lied about its own shape.
+    kind: str = "atomic"
 
     def to_stage(self, candidates: Sequence[str] = ()) -> StageDefinition:
         return StageDefinition(
             id=self.id, name=self.name, description=self.description,
-            optional=self.optional,
+            optional=self.optional, kind=self.kind,
             required_capabilities=self.capabilities,
             inputs=tuple(PortSpec(n, t) for n, t in self.inputs),
             outputs=tuple(PortSpec(n, t) for n, t in self.outputs),
@@ -457,9 +461,109 @@ TIMESERIES_FORECAST = Template(
     ),
 )
 
+BATCH_FILES = Template(
+    id="batch.files",
+    domain="data engineering",
+    title="Process a folder",
+    task="Do the same thing to every file, and say which ones failed.",
+    slots=_slots(
+        Slot("list", "List the inputs", (), (("out", "List[Path]"),),
+             ("io.list",)),
+        Slot("each", "Process each one", (("in", "List[Path]"),),
+             (("out", "List[Record]"),), ("work.one",),
+             "Runs once per item. The node inside handles one file.",
+             kind="map"),
+        Slot("split", "Good from bad", (("in", "List[Record]"),),
+             (("ok", "List[Record]"), ("bad", "List[Record]")),
+             ("split.outcome",)),
+        Slot("summarise", "Summarise", (("in", "List[Record]"),),
+             (("out", "Summary"),), ("summarise",)),
+    ),
+    edges=(Edge("list", "each"), Edge("each", "split"),
+           Edge("split", "summarise", from_port="ok")),
+    anti_patterns=(
+        "Failing the whole batch because one file was bad. Split the outcomes "
+        "and carry the failures forward with a reason each.",
+        "Reporting 'processed 40 files' when eight of them threw. The count "
+        "that matters is how many produced a usable result.",
+        "Loading every file before processing any. A folder is not always "
+        "small, and the first error then arrives after the memory has gone.",
+    ),
+    notes=("The middle slot is a map: it consumes a collection and its node "
+           "handles one item.",),
+)
+
+APPROVAL = Template(
+    id="workflow.approval",
+    domain="business process",
+    title="Request, decide, act",
+    task="Take a request, decide it against policy, and do the right thing.",
+    slots=_slots(
+        Slot("receive", "Receive the request", (), (("out", "Request"),),
+             ("io.receive",)),
+        Slot("enrich", "Look up the context", (("in", "Request"),),
+             (("out", "Context"),), ("data.lookup",)),
+        Slot("decide", "Approve or refuse", (("in", "Context"),),
+             (("approved", "Decision"), ("refused", "Decision")),
+             ("policy.decide",),
+             "A branch: one way out, and the other path never runs.",
+             kind="branch"),
+        Slot("fulfil", "Do the thing", (("in", "Decision"),),
+             (("out", "Receipt"),), ("act.fulfil",)),
+        Slot("explain", "Say why not", (("in", "Decision"),),
+             (("out", "Receipt"),), ("act.explain",)),
+    ),
+    edges=(Edge("receive", "enrich"), Edge("enrich", "decide"),
+           Edge("decide", "fulfil", from_port="approved"),
+           Edge("decide", "explain", from_port="refused")),
+    anti_patterns=(
+        "A refusal with no explanation. The person on the other end has to know "
+        "what would change the answer, or they will simply ask again.",
+        "Deciding inside the step that acts. Then 'why was this approved' has "
+        "no answer that does not involve reading the fulfilment code.",
+        "Treating the refused path as an error. It is a correct outcome and "
+        "logging it as a failure makes the error rate meaningless.",
+    ),
+)
+
+MIGRATE = Template(
+    id="data.migrate",
+    domain="data engineering",
+    title="Move data, and prove it arrived",
+    task="Copy records from one store to another without losing or duplicating any.",
+    slots=_slots(
+        Slot("read", "Read the source", (), (("out", "Records"),), ("data.read",)),
+        Slot("count_before", "Count what left", (("in", "Records"),),
+             (("out", "Tally"),), ("data.count",)),
+        Slot("transform", "Reshape", (("in", "Records"),), (("out", "Records"),),
+             ("data.transform",)),
+        Slot("write", "Write the target", (("in", "Records"),),
+             (("out", "Receipt"),), ("data.write",)),
+        Slot("count_after", "Count what arrived", (("in", "Receipt"),),
+             (("out", "Tally"),), ("data.count",)),
+        Slot("reconcile", "Reconcile",
+             (("before", "Tally"), ("after", "Tally")), (("out", "Verdict"),),
+             ("data.reconcile",),
+             "The join, and the only step that can say the migration worked."),
+    ),
+    edges=(Edge("read", "count_before"), Edge("read", "transform"),
+           Edge("transform", "write"), Edge("write", "count_after"),
+           Edge("count_before", "reconcile", to_port="before"),
+           Edge("count_after", "reconcile", to_port="after")),
+    anti_patterns=(
+        "Declaring success because the write did not raise. A write that "
+        "silently dropped every third row also does not raise.",
+        "Counting the target only. Without the source count there is nothing "
+        "to compare it against, and 'we moved 9,412 rows' is not a claim.",
+        "Reconciling on totals alone. Equal counts with swapped contents look "
+        "identical; check a checksum or a sample of keys as well.",
+    ),
+)
+
 CATALOG: tuple[Template, ...] = (
     TABULAR_SUPERVISED, DOCUMENT_EXTRACTION, SERVICE_NOTIFICATION,
     WEB_HARVEST, DATA_QUALITY, RELEASE, RETRIEVAL_QA, TIMESERIES_FORECAST,
+    BATCH_FILES, APPROVAL, MIGRATE,
 )
 
 BY_ID: dict[str, Template] = {t.id: t for t in CATALOG}

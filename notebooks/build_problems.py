@@ -49,31 +49,20 @@ WORK = pathlib.Path("work")
 shutil.rmtree(WORK, ignore_errors=True)
 WORK.mkdir()
 
-def node(node_id, capability, takes, gives, **kw):
-    """Describe one node. Ports are (name, type) pairs."""
-    return NodeManifest(
-        id=node_id, kind="function", description=f"{{capability}} via {{node_id}}",
-        capabilities=(capability,),
-        inputs=tuple(PortSpec(n, t) for n, t in takes),
-        outputs=tuple(PortSpec(n, t) for n, t in gives), **kw)
+# These come from the library rather than being redefined in every notebook.
+# They used to be thirty lines pasted into each one, which meant anyone copying
+# a notebook to start a project got helpers that did not exist in browsergraph.
+from browsergraph.quick import chain, fanin, fanout, link, node, problems, step
+from browsergraph.quick import graph as _graph
+from browsergraph.quick import subgraph  # noqa: F401  (used by later notebooks)
 
-def stage(sid, name, takes, gives, capability, candidates):
-    """Describe one step of the job, and what could do it."""
-    return StageDefinition(
-        id=sid, name=name, required_capabilities=(capability,),
-        inputs=tuple(PortSpec(n, t) for n, t in takes),
-        outputs=tuple(PortSpec(n, t) for n, t in gives),
-        success=f"{{name}} produced its declared output",
-        candidates=tuple(candidates))
+# The notebooks kept the older names, and `build` also prints what is wrong
+# rather than raising — in a notebook the complaint is the lesson.
+stage = step
 
 def build(title, task, stages, nodes, edges=()):
-    """Put it together and check it before anything runs."""
-    bench = WorkbenchDefinition(
-        title=title, task=task, stages=tuple(stages), nodes=tuple(nodes),
-        edges=tuple(edges),
-        candidates=tuple(NodeCandidate(id=n.id, node_id=n.id) for n in nodes))
-    problems = bench.validate()
-    print("problems:", problems if problems else "none")
+    bench = _graph(title, task, stages, nodes, edges)
+    print("problems:", problems(bench) or "none")
     return bench
 
 print("ready")

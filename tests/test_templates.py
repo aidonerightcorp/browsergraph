@@ -42,16 +42,21 @@ def test_every_template_compiles_when_its_slots_are_filled(template):
     """
     from browsergraph.compile import compile_route
     from browsergraph.manifest import NodeManifest, PortSpec
+    from browsergraph.types import element_of
 
     nodes, filling = [], {}
     for slot in template.slots:
         node_id = f"probe.{slot.id}"
+        # A map slot's *stage* talks about the collection; the node inside it
+        # handles one item. Building the probe with the collection types would
+        # fail for exactly the difference that makes it a map.
+        unwrap = element_of if slot.kind == "map" else (lambda t: t)
         nodes.append(NodeManifest(
             id=node_id, kind="probe",
             description=f"Probe implementation of {slot.id}.",
             capabilities=slot.capabilities or ("probe",),
-            inputs=tuple(PortSpec(n, t) for n, t in slot.inputs),
-            outputs=tuple(PortSpec(n, t) for n, t in slot.outputs),
+            inputs=tuple(PortSpec(n, unwrap(t)) for n, t in slot.inputs),
+            outputs=tuple(PortSpec(n, unwrap(t)) for n, t in slot.outputs),
         ).assert_valid())
         filling[slot.id] = [node_id]
 
