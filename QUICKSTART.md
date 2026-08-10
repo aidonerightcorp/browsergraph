@@ -82,14 +82,27 @@ print(result.summary())      # succeeded on attempt 3 (patchright/...)
 
 ## Install
 
-```bash
-pip install browsergraph                 # core: mock engine, graphs, sampling
-pip install browsergraph[playwright]     # + playwright
-pip install browsergraph[selenium]       # + selenium & undetected-chromedriver
-pip install browsergraph[all]            # everything
+This is not on PyPI, on purpose — installing from git puts no third-party
+account in the path and leaves no credential to keep alive. `pip` handles it
+natively, extras and all:
 
-playwright install chromium              # browser binaries, if using playwright
+```bash
+REPO=git+https://github.com/aidonerightcorp/browsergraph.git
+
+pip install "browsergraph @ $REPO"               # core: graphs, search, run, pictures
+pip install "browsergraph[playwright] @ $REPO"   # + playwright
+pip install "browsergraph[selenium] @ $REPO"     # + selenium & undetected-chromedriver
+pip install "browsergraph[all] @ $REPO"          # everything
+
+playwright install chromium                      # browser binaries, if using playwright
 ```
+
+Append `@v0.4.0` to the URL to pin a release, or take the wheel and its
+checksums from the
+[releases page](https://github.com/aidonerightcorp/browsergraph/releases). The
+core has **no dependencies at all** — every engine is an optional extra, so
+graphs can be built, drawn, linted, compiled and mock-run with nothing else
+installed.
 
 Check what your machine can actually run:
 
@@ -264,7 +277,7 @@ verification matters most.
 | Need | When | Install |
 |---|---|---|
 | Python ≥ 3.10 | always | — |
-| Engine package | non-mock runs | `pip install browsergraph[<engine>]` |
+| Engine package | non-mock runs | `pip install "browsergraph[<engine>] @ $REPO"` |
 | Browser binary | non-mock runs | `playwright install chromium`, or system Chrome/Firefox |
 | `DISPLAY` | `display=headed` | a real X session |
 | `xvfb` | unattended headed runs | `apt install xvfb` |

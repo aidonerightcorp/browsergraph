@@ -149,3 +149,35 @@ def test_the_dockerfile_copies_every_package_the_build_declares():
     missing = sorted(tops - copied)
     assert not missing, (
         f"pyproject declares {missing} but the Dockerfile never copies them")
+
+
+def test_no_document_promises_an_index_this_is_not_on():
+    """`pip install browsergraph` fails: the name is on no index, by choice.
+
+    Distribution is this repository and ghcr.io — no third-party account in the
+    path, no credential to keep alive. An install line that omits the git URL
+    sends a reader to a package that does not exist, and they conclude the
+    project is broken rather than the docs.
+    """
+    import re as _re
+
+    offenders = []
+    for path in sorted(ROOT.glob("*.md")) + sorted((ROOT / "docs").glob("*.md")):
+        # Fenced blocks only. Prose is allowed to discuss the command — one
+        # document argues the package *name* is a poor fit and quotes it to make
+        # the point — and nobody copies an install line out of mid-sentence.
+        for block in _re.findall(r"```(?:bash|sh|console)?\n(.*?)```",
+                                 path.read_text(), _re.DOTALL):
+            for line in block.splitlines():
+                if not _re.search(r"pip install\s+[\"']?browsergraph", line):
+                    continue
+                # A git URL, a variable holding one, or a release artifact are
+                # all fine. Anything else sends the reader to an index.
+                if any(token in line for token in ("git+", "$REPO", "${REPO}",
+                                                   "releases/download", ".whl")):
+                    continue
+                offenders.append(f"{path.name}: {line.strip()}")
+
+    assert not offenders, (
+        "these lines send readers to an index that does not have it:\n  "
+        + "\n  ".join(offenders))

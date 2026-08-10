@@ -4,31 +4,22 @@ on:
   push: {tags: ["v*"]}
   workflow_dispatch:
 
-permissions: {contents: write, packages: write, id-token: write}
+permissions: {contents: write, packages: write}
 
 jobs:
-  pypi:
+  # Build it, prove it installs, attach it to the release. Distribution is this
+  # repository and the container registry — deliberately not PyPI, so there is
+  # no third-party account in the path and no credential to keep alive. An
+  # earlier version attempted a best-effort upload and warned on every tag that
+  # it had been skipped, which made a working release look half-finished.
+  package:
     runs-on: ubuntu-latest
-    environment: release
-    # `secrets` cannot be used in a step-level `if` — referencing it there makes
-    # GitHub reject the entire workflow file, and the run fails in zero seconds
-    # with "workflow file issue" rather than at the step that mentions it. The
-    # documented way is to surface it as an env var at job level and branch on
-    # whether that is empty.
-    env:
-      HAS_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - run: pip install build
       - run: python -m build
-      # The build must succeed; publishing is allowed not to.
-      #
-      # Trusted publishing means no long-lived token is stored in this repo — but
-      # it has to be registered on PyPI first, and until it is, every tag would
-      # fail this workflow and make a healthy project look broken. The upload is
-      # therefore best-effort and the outcome is reported explicitly.
       # Install the wheel in a clean environment before offering it to anyone.
       # A package that builds and does not import is worse than no package: the
       # failure lands on a stranger's machine instead of in this log.
@@ -47,37 +38,13 @@ jobs:
           PY
           /tmp/fresh/bin/browsergraph capabilities > /dev/null
 
-      # Two auth paths, because only one of them can be set up without a human
-      # visiting PyPI. Trusted publishing is preferred — no long-lived secret
-      # lives in this repository — but until it is registered, a PYPI_API_TOKEN
-      # secret works, and if neither exists the upload is skipped rather than
-      # failing the release. A tag should never make a healthy project look
-      # broken because of a credential nobody has created yet.
-      - id: publish-trusted
-        if: env.HAS_PYPI_TOKEN != 'true'
-        continue-on-error: true
-        uses: pypa/gh-action-pypi-publish@release/v1
-      - id: publish-token
-        if: env.HAS_PYPI_TOKEN == 'true'
-        continue-on-error: true
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
-      - name: Report publish outcome
-        run: |
-          if [ "${{ steps.publish-trusted.outcome }}" = "success" ] \
-          || [ "${{ steps.publish-token.outcome }}" = "success" ]; then
-            echo "::notice::published to PyPI"
-          else
-            echo "::warning::PyPI upload skipped. Either register a trusted publisher at" \
-                 "https://pypi.org/manage/account/publishing/ (owner=${{ github.repository_owner }}," \
-                 "repository=browsergraph, workflow=release.yml, environment=release), or add a" \
-                 "PYPI_API_TOKEN repository secret. The wheel is attached to the GitHub release" \
-                 "either way, and 'pip install <release-url>' works today."
-          fi
+      # Checksums alongside the artifacts, so anyone downloading a wheel from a
+      # release page can confirm they got the one this run built.
+      - name: Checksum the artifacts
+        run: cd dist && sha256sum * | tee SHA256SUMS
 
-      # The equivalent that needs no third-party account: attach the verified
-      # wheel to the GitHub release, so `pip install <url>` works immediately.
+      # Attach the verified wheel to the GitHub release, so `pip install <url>`
+      # works the moment the tag lands.
       - name: Attach artifacts to the release
         if: startsWith(github.ref, 'refs/tags/')
         run: gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
