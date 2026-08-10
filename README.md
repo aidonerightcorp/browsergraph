@@ -4,7 +4,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Core deps: none](https://img.shields.io/badge/core%20deps-stdlib--only-brightgreen)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-859%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-865%20passing-brightgreen)](tests/)
+[![Studio](https://img.shields.io/badge/studio-explore%20live-2f6fed)](https://aidonerightcorp.github.io/browsergraph/)
 [![Kaggle](https://img.shields.io/badge/Kaggle-run%20it%20now-20BEFF?logo=kaggle)](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 
 **Write a browser automation once. Run it on any engine — or on none.**
@@ -32,13 +33,26 @@ print(run(graph, spec, build(spec)).context.data)
 ## Install
 
 ```bash
-pip install "browsergraph[playwright] @ git+https://github.com/aidonerightcorp/browsergraph.git"
+pip install https://github.com/aidonerightcorp/browsergraph/releases/download/v0.3.0/browsergraph-0.3.0-py3-none-any.whl
 browsergraph bootstrap        # gets a browser actually running, whatever it takes
 browsergraph doctor           # what works here, and the command to fix what doesn't
 ```
 
+The wheel on each release is installed into a clean virtualenv and exercised by
+CI *before* it is offered — a package that builds and does not import is worse
+than no package, because the failure lands on a stranger's machine instead of
+in a log. Latest from git works too:
+
+```bash
+pip install "browsergraph[playwright] @ git+https://github.com/aidonerightcorp/browsergraph.git"
+```
+
 The core is **stdlib-only** — every engine is an optional extra, so a graph can be built,
 linted and mock-run with nothing installed.
+
+**Explore it in your browser, installing nothing:**
+[the live studio](https://aidonerightcorp.github.io/browsergraph/) — all 166
+candidates across 14 sub-steps, five synchronized views, one offline file.
 
 **Try it without installing anything:** the
 [Kaggle notebook](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
@@ -258,7 +272,7 @@ breaks something.
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                  # 859 tests; browser suites skip when absent
+pytest -q                                  # 865 tests; browser suites skip when absent
 mypy browsergraph --ignore-missing-imports
 ruff check browsergraph tests
 ```

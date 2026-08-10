@@ -396,3 +396,65 @@ def test_the_route_command_can_show_the_gates(capsys):
     assert main(["route", "--gates", "--deterministic", "--no-effects",
                  "--allow", "filesystem:read"]) == 0
     assert "eligible" in capsys.readouterr().out
+
+
+# --- decision traces --------------------------------------------------------
+
+def test_a_decision_explains_every_sub_step(bench):
+    """A route without this is an assertion. The question is never "what did it
+    pick" — that is in the route — it is *why*."""
+    proposal = search.propose(bench, BALANCED, policy=Policy.permissive(),
+                              strategy="greedy")
+    assert len(proposal.decisions) == len(bench.leaf_stages)
+    for decision in proposal.decisions:
+        assert decision.chosen == proposal.route[decision.stage]
+        assert decision.eligible > 0
+
+
+def test_contributions_sum_to_the_score_they_explain(bench):
+    """Parts that do not add up to the whole are decoration, not an
+    explanation. Two bugs made this false: normalizing a candidate against
+    route-level spans, and counting an objective the scorer had skipped."""
+    proposal = search.propose(bench, BALANCED, policy=Policy.permissive(),
+                              strategy="greedy")
+    for decision in proposal.decisions:
+        assert sum(decision.contributions.values()) == pytest.approx(
+            decision.score), decision.stage
+
+
+def test_a_metric_every_candidate_shares_carries_no_weight():
+    """It says nothing about the choice. Counting it made two identical
+    situations score differently depending on which direction someone wrote."""
+    flat = OptimizationProfile(id="p.flat", objectives=(
+        OptimizationObjective("quality", "maximize", 0.5),
+        OptimizationObjective("cost_usd", "minimize", 0.5)))
+    items = {"a": {"quality": 0.9, "cost_usd": 1.0},
+             "b": {"quality": 0.1, "cost_usd": 1.0}}
+    ranked = flat.rank(items)
+    assert ranked[0] == ("a", pytest.approx(1.0))
+    assert ranked[1] == ("b", pytest.approx(0.0))
+
+
+def test_the_direction_of_a_flat_metric_does_not_change_the_score():
+    up = OptimizationProfile(id="p.up", objectives=(
+        OptimizationObjective("flat", "maximize", 1.0),
+        OptimizationObjective("quality", "maximize", 1.0)))
+    down = OptimizationProfile(id="p.down", objectives=(
+        OptimizationObjective("flat", "minimize", 1.0),
+        OptimizationObjective("quality", "maximize", 1.0)))
+    items = {"a": {"flat": 5, "quality": 0.9}, "b": {"flat": 5, "quality": 0.1}}
+    assert [s for _, s in up.rank(items)] == [s for _, s in down.rank(items)]
+
+
+def test_a_decision_names_its_runner_up(bench):
+    proposal = search.propose(bench, BALANCED, policy=Policy.permissive(),
+                              strategy="greedy")
+    session = next(d for d in proposal.decisions if d.stage == "session")
+    assert session.alternatives, "70 candidates should leave a runner-up"
+    assert all(a != session.chosen for a, _ in session.alternatives)
+
+
+def test_decisions_serialise_with_the_proposal(bench):
+    data = search.propose(bench, BALANCED, policy=Policy.permissive(),
+                          strategy="greedy").to_dict()
+    assert data["decisions"] and "contributions" in data["decisions"][0]

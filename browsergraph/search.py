@@ -32,6 +32,36 @@ STRATEGIES = ("auto", "exhaustive", "beam", "greedy")
 
 
 @dataclass
+class Decision:
+    """Why one sub-step chose what it chose.
+
+    A route without this is an assertion. When a pipeline starts behaving
+    differently, the question is never "what did it pick" — that is in the
+    route — it is *why*, and specifically which objective moved the answer.
+    Recording the per-objective contributions makes that a lookup instead of an
+    argument, and it distinguishes "the optimizer changed its mind" from "the
+    evidence changed underneath it".
+    """
+    stage: str = ""
+    chosen: str = ""
+    score: float = 0.0
+    eligible: int = 0
+    blocked: int = 0
+    contributions: dict[str, float] = field(default_factory=dict)
+    alternatives: tuple[tuple[str, float], ...] = ()
+    reason: str = ""
+
+    def to_dict(self) -> dict:
+        return {"stage": self.stage, "chosen": self.chosen,
+                "score": round(self.score, 6), "eligible": self.eligible,
+                "blocked": self.blocked,
+                "contributions": {k: round(v, 6)
+                                  for k, v in self.contributions.items()},
+                "alternatives": [[a, round(s, 6)] for a, s in self.alternatives],
+                "reason": self.reason}
+
+
+@dataclass
 class Proposal:
     """A complete route, and an honest account of how it was found."""
     route: dict[str, str] = field(default_factory=dict)
@@ -48,6 +78,7 @@ class Proposal:
     effects: tuple[str, ...] = ()
     problems: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
+    decisions: tuple[Decision, ...] = ()
 
     @property
     def ok(self) -> bool:
@@ -67,7 +98,8 @@ class Proposal:
                 "blocked": dict(self.blocked),
                 "permissions": list(self.permissions),
                 "effects": list(self.effects),
-                "problems": list(self.problems), "notes": list(self.notes)}
+                "problems": list(self.problems), "notes": list(self.notes),
+                "decisions": [d.to_dict() for d in self.decisions]}
 
     def text(self, workbench: WorkbenchDefinition) -> str:
         names = workbench.candidates_by_id
@@ -89,6 +121,13 @@ class Proposal:
                      f"{self.total:,} exist before policy")
         if self.permissions:
             lines.append("  needs: " + ", ".join(self.permissions))
+        for decision in self.decisions:
+            if decision.contributions:
+                terms = "  ".join(f"{m}={v:+.3f}"
+                                  for m, v in sorted(decision.contributions.items()))
+                lines.append(f"    why {decision.stage}: {terms}"
+                             f"   ({decision.eligible} eligible, "
+                             f"{decision.blocked} blocked)")
         for note in self.notes:
             lines.append("  note: " + note)
         for problem in self.problems:
@@ -220,11 +259,74 @@ def propose(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
     # Re-gate the proposal itself. A route assembled from individually eligible
     # candidates can still break a whole-route budget, and the specification is
     # explicit that a proposal is revalidated before it runs.
+    proposal.decisions = _explain(workbench, profile, proposal, eligible,
+                                  blocked)
     proposal.problems += tuple(_route_problems(workbench, proposal, policy))
     permissions, effects = route_permissions(workbench, route)
     proposal.permissions = tuple(permissions)
     proposal.effects = tuple(effects)
     return proposal
+
+
+def _explain(workbench: WorkbenchDefinition, profile: OptimizationProfile,
+             proposal: Proposal, eligible, blocked
+             ) -> tuple[Decision, ...]:
+    """Per-sub-step: what was available, what won, and what each objective
+    contributed to that.
+
+    Contributions are the weighted, normalized terms that actually summed to
+    the score — not the profile's declared weights. A weight of 0.7 on a metric
+    every candidate shares contributes nothing to the decision, and only the
+    realised term shows that.
+    """
+    nodes = workbench.nodes_by_id
+    candidates = workbench.candidates_by_id
+    out = []
+    for stage in workbench.leaf_stages:
+        chosen = proposal.route.get(stage.id, "")
+        pool = {}
+        for cid in eligible.get(stage.id, ()):
+            manifest = nodes.get(candidates[cid].node_id)
+            pool[cid] = dict(manifest.metrics or {}) if manifest else {}
+        ranked = profile.rank(pool) if pool else []
+        score = next((s for c, s in ranked if c == chosen), 0.0)
+
+        # Normalized against **this sub-step's own candidates**, not against the
+        # route-level reference spans. Route spans describe sums of latency and
+        # products of quality across fourteen stages; measuring one candidate
+        # against them produced contributions above 1.0 that summed past the
+        # score they were supposed to explain.
+        local = profile.ranges(list(pool.values())) if pool else {}
+        metrics = pool.get(chosen, {})
+
+        # Mirror `score_within` exactly, including which objectives it drops:
+        # a metric every candidate shares carries no information about the
+        # choice and is skipped by the scorer, so counting it here would make
+        # the parts fail to sum to the whole they claim to explain.
+        discriminating = [
+            o for o in profile.objectives
+            if o.metric in metrics and o.metric in local
+            and local[o.metric][1] != local[o.metric][0]]
+        total_weight = sum(o.weight for o in discriminating) or 1.0
+        contributions = {}
+        for objective in discriminating:
+            low, high = local[objective.metric]
+            unit = (float(metrics[objective.metric]) - low) / (high - low)
+            if objective.direction == "minimize":
+                unit = 1.0 - unit
+            contributions[objective.metric] = objective.weight * unit / total_weight
+
+        best = ranked[0][0] if ranked else ""
+        reason = ("highest-scoring eligible candidate" if chosen == best
+                  else "chosen by the route search over the whole chain, not by "
+                       "this sub-step alone")
+        out.append(Decision(
+            stage=stage.id, chosen=chosen, score=score,
+            eligible=len(pool), blocked=blocked.get(stage.id, 0),
+            contributions=contributions,
+            alternatives=tuple((c, s) for c, s in ranked[:3] if c != chosen),
+            reason=reason))
+    return tuple(out)
 
 
 def _route_problems(workbench: WorkbenchDefinition, proposal: Proposal,

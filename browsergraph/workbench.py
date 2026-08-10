@@ -426,7 +426,17 @@ class OptimizationProfile:
                 continue
             low, high = ranges[objective.metric]
             span = high - low
-            unit = 1.0 if span == 0 else (float(metrics[objective.metric]) - low) / span
+            if span == 0:
+                # Every candidate is identical on this metric, so it carries no
+                # information about the choice. Skipping it keeps the score
+                # meaning "how good, among the things that actually differed" —
+                # and removes an asymmetry that made the number lie about
+                # itself: a flat metric used to contribute its full weight when
+                # maximized and nothing when minimized, which changed no
+                # ranking but made two identical situations report different
+                # scores depending on the direction someone wrote down.
+                continue
+            unit = (float(metrics[objective.metric]) - low) / span
             if objective.direction == "minimize":
                 unit = 1.0 - unit
             total += objective.weight * unit
