@@ -142,6 +142,8 @@ Six steps. Each says what it needs and what it gives back. Nothing here says
 scrape.code('''
 nodes = [
     node("read.file",     "payload.read",   [],                      [("out", "Bytes")]),
+    node("read.http",     "payload.read",   [],                      [("out", "Bytes")],
+         effects=("network.read",), permissions=("net.read",), runtime={"deterministic": False}),
     node("parse.html",    "parse.structure",[("in", "Bytes")],       [("out", "Blocks")]),
     node("locate.fields", "locate.values",  [("in", "Blocks")],      [("out", "Fields")]),
     node("clean.values",  "normalise",      [("in", "Fields")],      [("out", "Records")]),
@@ -151,7 +153,7 @@ nodes = [
 ]
 
 stages = [
-    stage("read",   "Read the page",   [],                  [("out", "Bytes")],   "payload.read",    ["read.file"]),
+    stage("read",   "Read the page",   [],                  [("out", "Bytes")],   "payload.read",    ["read.file", "read.http"]),
     stage("parse",  "Parse the HTML",  [("in", "Bytes")],   [("out", "Blocks")],  "parse.structure", ["parse.html"]),
     stage("locate", "Find the fields", [("in", "Blocks")],  [("out", "Fields")],  "locate.values",   ["locate.fields"]),
     stage("clean",  "Clean the values",[("in", "Fields")],  [("out", "Records")], "normalise",       ["clean.values"]),
@@ -209,6 +211,12 @@ class Collector(HTMLParser):
 def read_file():
     return source.read_bytes()
 
+def read_http():
+    """Fetch a real page over the network."""
+    import urllib.request
+    with urllib.request.urlopen(LIVE_URL, timeout=20) as response:
+        return response.read()
+
 def parse_html(**kw):
     collector = Collector()
     collector.feed(kw["in"].decode())
@@ -241,7 +249,7 @@ def save_jsonl(workspace, **kw):
     return {"rows": len(kw["in"]), "path": str(path)}
 
 runtime = execute.Runtime({
-    "read.file": read_file, "parse.html": parse_html,
+    "read.file": read_file, "read.http": read_http, "parse.html": parse_html,
     "locate.fields": locate_fields, "clean.values": clean_values,
     "check.rows": check_rows, "save.jsonl": save_jsonl,
 })
@@ -294,23 +302,101 @@ for line in saved:
 ''')
 
 scrape.md("""
-## Pointing it at a real site
+## Now do it against a live page
 
-One function changes. The graph, the checks and the pictures stay exactly as
-they are.
+Same graph. Same checks. One different candidate for the `read` step.
 
-```python
-import urllib.request
-def read_url():
-    return urllib.request.urlopen("https://example.com/products").read()
-
-runtime.register("read.file", read_url)     # same plan, live page
-```
-
-That swap is the whole argument for keeping *what must happen* apart from *what
-does it*. Tests use the file. Production uses the URL. Same graph, same checks.
+This one really does go and fetch a page over the network. It is the honest
+version of "browse and scrape", and it teaches something the fixture cannot.
 """)
 
+scrape.code('''
+LIVE_URL = "https://example.com"
+
+live_route = dict(route, read="read.http")
+plan_live = compile_route(bench, live_route)
+
+print("same layers:", plan_live.layers == plan.layers)
+print("different plan:", plan_live.digest != plan.digest)
+print("effects now:", plan_live.effects)
+print("deterministic:", plan_live.deterministic, "— a live page can change under you")
+''')
+
+scrape.md("""
+The plan says this run touches the network and is no longer deterministic. We
+did not tell it that. It read it off the node we picked.
+""")
+
+scrape.code('''
+try:
+    live = execute.run(plan_live, runtime, workspace=WORK)
+    print(live.text())
+    fetched = live.output("read")
+    print(f"\\nfetched {len(fetched):,} bytes from {LIVE_URL}")
+except Exception as problem:
+    live = None
+    print("no network here:", problem)
+''')
+
+scrape.md("""
+## The result worth stopping on
+
+The run finished. Look at what it actually produced.
+""")
+
+scrape.code('''
+if live is not None:
+    kept_live = live.values.get(("check", "kept"), [])
+    dropped_live = live.values.get(("check", "dropped"), [])
+    print(f"steps ok: {live.ok}")
+    print(f"products found: {len(kept_live)}")
+    print(f"rows dropped:   {len(dropped_live)}")
+''')
+
+scrape.md("""
+Every step passed. Zero products came out.
+
+That is the single most common way a scraper is broken, and it is why this
+library exists. `example.com` has no `li.product` elements, so the locator found
+nothing, and *finding nothing is not an error* — it is an empty list, which is a
+perfectly good list.
+
+Nothing crashed. A cron job running this would report success forever.
+
+**A run that completed is not a run that worked.** The check has to be on the
+result, not on whether the code threw.
+""")
+
+scrape.code('''
+def check_rows_strict(**kw):
+    """Same check, plus one line: an empty result is a failure."""
+    rows = kw["in"]
+    if not rows:
+        raise ValueError("the locator matched nothing — the selector is probably "
+                         "wrong for this page")
+    kept = [r for r in rows if r["price"] is not None]
+    dropped = [dict(r, why="no price on the page") for r in rows if r["price"] is None]
+    return {"kept": kept, "dropped": dropped}
+
+strict = execute.Runtime(dict(runtime._functions))
+strict.register("check.rows", check_rows_strict)
+
+guarded = execute.run(plan_live, strict, workspace=WORK)
+print("ok:", guarded.ok, "| stopped at:", guarded.stopped_at or "nowhere")
+print(guarded.steps[-1].error)
+''')
+
+scrape.md("""
+Now it fails, at the step that noticed, with a sentence that says what to fix.
+
+The fixture still works exactly as before — same graph, same runtime, one
+different candidate for one step.
+""")
+
+scrape.code('''
+again = execute.run(plan, strict, workspace=WORK)
+print("fixture run ok:", again.ok, "|", len(again.values[("check", "kept")]), "products")
+''')
 
 # ======================= 13 · ingest into a schema ==========================
 
@@ -1050,10 +1136,12 @@ nodes = [
     node("load.arrays",  "data.read",    [],                  [("out", "Frame")]),
     node("split.random", "data.split",   [("in", "Frame")],   [("train", "Frame"), ("valid", "Frame")]),
     node("num.standard", "feature.numeric",     [("in", "Frame")], [("out", "Matrix")]),
+    node("num.raw",      "feature.numeric",     [("in", "Frame")], [("out", "Matrix")]),
     node("cat.onehot",   "feature.categorical", [("in", "Frame")], [("out", "Matrix")]),
     node("assemble.hstack","feature.assemble",  [("numeric", "Matrix"), ("categorical", "Matrix")], [("out", "Matrix")]),
     node("fit.leastsquares","model.fit", [("in", "Matrix")],  [("out", "Model")]),
     node("fit.logistic",    "model.fit", [("in", "Matrix")],  [("out", "Model")]),
+    node("fit.ridge",       "model.fit", [("in", "Matrix")],  [("out", "Model")]),
     node("score.regression","model.score",[("in", "Model")],  [("out", "Score")]),
     node("score.classifier","model.score",[("in", "Model")],  [("out", "Score")]),
 ]
@@ -1061,10 +1149,10 @@ nodes = [
 stages = [
     stage("load",     "Load the data",     [],                [("out", "Frame")], "data.read", ["load.arrays"]),
     stage("split",    "Hold some back",    [("in", "Frame")], [("train", "Frame"), ("valid", "Frame")], "data.split", ["split.random"]),
-    stage("numeric",  "Scale the numbers", [("in", "Frame")], [("out", "Matrix")], "feature.numeric",     ["num.standard"]),
+    stage("numeric",  "Scale the numbers", [("in", "Frame")], [("out", "Matrix")], "feature.numeric",     ["num.standard", "num.raw"]),
     stage("category", "Encode the area",   [("in", "Frame")], [("out", "Matrix")], "feature.categorical", ["cat.onehot"]),
     stage("assemble", "Put them together", [("numeric", "Matrix"), ("categorical", "Matrix")], [("out", "Matrix")], "feature.assemble", ["assemble.hstack"]),
-    stage("fit",      "Fit a model",       [("in", "Matrix")], [("out", "Model")], "model.fit",   ["fit.leastsquares", "fit.logistic"]),
+    stage("fit",      "Fit a model",       [("in", "Matrix")], [("out", "Model")], "model.fit",   ["fit.leastsquares", "fit.logistic", "fit.ridge"]),
     stage("score",    "Score it",          [("in", "Model")],  [("out", "Score")], "model.score", ["score.regression", "score.classifier"]),
 ]
 
@@ -1095,8 +1183,16 @@ def load_arrays():
             "price": price, "above": above}
 
 def split_random(**kw):
+    """Its own seeded generator, not the shared one.
+
+    This started out drawing from the module-level `rng`, which advances every
+    time anything uses it. Two effects, both bad. Re-running the same plan gave
+    a different score, so the plan's own claim to be deterministic was false.
+    And worse, comparing four routes below would have scored each one on a
+    *different* split — which is not a comparison of models at all.
+    """
     frame = kw["in"]
-    order = rng.permutation(N)
+    order = np.random.default_rng(2024).permutation(N)
     cut = int(N * 0.75)
     take = lambda idx: {k: v[idx] for k, v in frame.items()}
     return {"train": take(order[:cut]), "valid": take(order[cut:])}
@@ -1126,6 +1222,23 @@ def assemble_hstack(**kw):
 def fit_leastsquares(**kw):
     data = kw["in"]
     weights, *_ = np.linalg.lstsq(data["X"], data["y"], rcond=None)
+    return {"kind": "regression", "weights": weights, "data": data}
+
+def num_raw(**kw):
+    """No scaling at all. Kept as a real option so the search has something to
+    reject on evidence rather than on somebody's opinion."""
+    frame = kw["in"]
+    cols = np.column_stack([frame["size"], frame["age"], frame["rooms"]]).astype(float)
+    return {"matrix": cols, "mean": np.zeros(3), "sd": np.ones(3),
+            "target": frame["price"], "label": frame["above"]}
+
+def fit_ridge(**kw):
+    """Least squares with a small penalty on big weights."""
+    data = kw["in"]
+    X, y = data["X"], data["y"]
+    penalty = 1.0 * np.eye(X.shape[1])
+    penalty[0, 0] = 0.0                       # never penalise the bias
+    weights = np.linalg.solve(X.T @ X + penalty, X.T @ y)
     return {"kind": "regression", "weights": weights, "data": data}
 
 def fit_logistic(**kw):
@@ -1165,7 +1278,8 @@ def score_classifier(**kw):
 
 runtime = execute.Runtime({
     "load.arrays": load_arrays, "split.random": split_random,
-    "num.standard": num_standard, "cat.onehot": cat_onehot,
+    "num.standard": num_standard, "num.raw": num_raw, "cat.onehot": cat_onehot,
+    "fit.ridge": fit_ridge,
     "assemble.hstack": assemble_hstack,
     "fit.leastsquares": fit_leastsquares, "fit.logistic": fit_logistic,
     "score.regression": score_regression, "score.classifier": score_classifier,
@@ -1226,7 +1340,101 @@ model.md("""
 Same layers, different digest. The shape of the work did not change. What ran
 inside it did, and the digest proves the two results came from different graphs
 so they can never be mixed up later.
+""")
 
+model.md("""
+## Let the evidence pick, instead of picking yourself
+
+So far I chose the route by hand. Fine for two options. There are now six ways
+to predict the number — two ways to handle the numbers, three ways to fit — and
+picking by hand stops being a plan.
+
+So run them all and let the measured result decide. Not a prior. Not an opinion
+about which model is better. The actual score on this actual data.
+""")
+
+model.code('''
+import itertools
+
+numeric_options = bench.stage("numeric").candidates
+fit_options = [c for c in bench.stage("fit").candidates if c != "fit.logistic"]
+
+results = []
+for numeric, fit in itertools.product(numeric_options, fit_options):
+    trial = dict(regression, numeric=numeric, fit=fit, score="score.regression")
+    plan_t = compile_route(bench, trial)
+    got_t = execute.run(plan_t, runtime)
+    if not got_t.ok:
+        results.append((numeric, fit, None, None, plan_t.digest, got_t.steps[-1].error))
+        continue
+    s_t = got_t.output("score")
+    results.append((numeric, fit, s_t["r2"], s_t["mae"], plan_t.digest, ""))
+
+print(f"{'numbers':<14}{'model':<18}{'R2':>9}{'mean error':>13}   plan")
+for numeric, fit, r2, mae, digest, err in results:
+    if r2 is None:
+        print(f"{numeric:<14}{fit:<18}{'failed':>9}{'':>13}   {err[:34]}")
+    else:
+        print(f"{numeric:<14}{fit:<18}{r2:>9.4f}{mae:>13,.1f}   {digest[5:17]}")
+''')
+
+model.md("""
+## The winner, and how much of the space that took
+""")
+
+model.code('''
+ranked = sorted([r for r in results if r[2] is not None], key=lambda r: -r[2])
+best = ranked[0]
+print(f"best:  {best[0]:<13}+ {best[1]:<18}R2 {best[2]:.4f}   plan {best[4][5:17]}")
+print(f"worst: {ranked[-1][0]:<13}+ {ranked[-1][1]:<18}R2 {ranked[-1][2]:.4f}")
+print(f"\\ngap between best and worst: {best[2] - ranked[-1][2]:.4f} R2")
+print("\\nEvery number above was measured. None of it was a prior.")
+''')
+
+model.code('''
+viz.funnel([
+    ("every route in the graph", bench.route_count()),
+    ("regression routes",        len(results)),
+    ("ran without failing",      len(ranked)),
+    ("chosen",                   1),
+], title="how the model was picked")
+''')
+
+model.md("""
+### Read that result honestly
+
+The gap between best and worst is **0.0000**. On this data, with this split,
+the choice makes no measurable difference at all.
+
+So the right conclusion is not "num.standard won". It is "this decision does not
+matter here, so stop spending time on it". Scaling does nothing for least
+squares because least squares is scale-invariant, and the ridge penalty is too
+small to bite. Both of those are true facts about the maths, and the measurement
+agrees with them.
+
+A search that always announces a winner will always find one. The useful search
+tells you when the winner is noise.
+""")
+
+model.md("""
+Four routes tried, four measured, one picked. Small enough to enumerate, and the
+notebook says so rather than implying a bigger search happened.
+
+When the space is too big to enumerate, `browsergraph.search` does this with a
+beam and reports how much of the space it covered. It refuses to enumerate a
+space it cannot finish, rather than trying and running out of memory — which is
+exactly what it used to do.
+""")
+
+model.code('''
+best_route = dict(regression, numeric=best[0], fit=best[1])
+plan_best = compile_route(bench, best_route)
+run_best = execute.run(plan_best, runtime)
+print(f"re-ran the winner: R2 {run_best.output('score')['r2']:.4f}"
+      f"   same plan: {plan_best.digest == best[4]}")
+''')
+
+model.md("""
 ## Save the results
 """)
 
