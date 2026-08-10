@@ -21,7 +21,7 @@ from browsergraph.ports import Context
 
 #: Catalogues, per host. Resolving a model costs a round trip, and every LLM
 #: node in a graph would otherwise pay it again.
-_CATALOGS: dict[tuple[str, str], "Catalog"] = {}
+_CATALOGS: dict[tuple[str, str], Catalog] = {}
 
 
 def resolve_model(cfg: LLMConfig, capability: str = "completion") -> str:
