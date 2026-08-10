@@ -33,15 +33,19 @@ print(run(graph, spec, build(spec)).context.data)
 ## Install
 
 ```bash
-pip install https://github.com/aidonerightcorp/browsergraph/releases/download/v0.3.0/browsergraph-0.3.0-py3-none-any.whl
-browsergraph bootstrap        # gets a browser actually running, whatever it takes
+pip install "browsergraph @ git+https://github.com/aidonerightcorp/browsergraph.git"
 browsergraph doctor           # what works here, and the command to fix what doesn't
+browsergraph bootstrap        # only if you want a browser; the core needs none
 ```
 
-The wheel on each release is installed into a clean virtualenv and exercised by
-CI *before* it is offered — a package that builds and does not import is worse
-than no package, because the failure lands on a stranger's machine instead of
-in a log. Latest from git works too:
+**Install from git, not from the v0.3.0 release.** That wheel predates
+`templates`, `viz`, `execute`, `explore`, `journal`, `bounded` and `quick` —
+most of what the rest of this page describes. Following the old instruction gave
+you a build that could not run the examples on it, which is worse than no
+instruction. A tagged 0.4.0 release is not cut yet; git `main` is the honest
+place to point until it is.
+
+With an engine, if you want one:
 
 ```bash
 pip install "browsergraph[playwright] @ git+https://github.com/aidonerightcorp/browsergraph.git"

@@ -16,3 +16,6 @@ dist/
 
 # Notebook run artifacts
 notebooks/work/
+
+# Example output
+examples/out/
