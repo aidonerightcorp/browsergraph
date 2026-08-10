@@ -1,4 +1,20 @@
-"""The architecture the library is actually arguing for.
+"""Browser-specific, and superseded for anything else by `viz`.
+
+This module draws task planes and candidate routes using planes named in code — engines, binaries,
+transports. That was right while browsing was the only domain and is the wrong
+shape now there are eleven templates: it can draw one of them.
+
+`viz` takes a `WorkbenchDefinition` and nothing else, so it draws all of them,
+including the before/after route comparison this module is usually wanted for
+(`viz.route_space(bench, route=..., alternative=...)`) and now a matplotlib
+figure as well (`viz.to_figure`). The little belief model here — `belief`,
+`observe`, `score_routes` — is superseded by `evidence`, which measures the same
+thing properly and survives a restart.
+
+Kept because it produces the published studio pages and its output is linked
+from the README. New work should use `viz`.
+
+The architecture the library is actually arguing for.
 
 `spacemap` draws the *configuration* space — engine × binary × display and so
 on. That is a catalogue of fixed capabilities, and a catalogue is not the point.

@@ -238,3 +238,53 @@ def test_the_json_form_carries_the_kind(diamond):
     data = json.loads(viz.to_json(_kinded(diamond, price="map")))
     kinds = {s["id"]: s["kind"] for s in data["stages"]}
     assert kinds["price"] == "map" and kinds["parse"] == "atomic"
+
+
+# --- matplotlib, the one thing planmap had that viz did not ------------------
+
+def test_a_matplotlib_figure_can_be_drawn_for_any_workbench(diamond):
+    """`spacemap` and `planmap` had this and `viz` did not, which was the only
+    thing standing between them and being fully superseded. You cannot paste an
+    SVG into a LaTeX document without a conversion step."""
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+
+    ax = viz.to_figure(diamond, route={"parse": "dom.lxml", "price": "price.css",
+                                       "title": "title.og", "join": "join.strict"})
+    assert ax.get_title().startswith("Listing extractor")
+    assert len(ax.lines) >= 1
+
+
+def test_the_route_line_runs_through_the_labels_not_over_them(diamond):
+    """Joining box centres strikes every label out. Two points per column — the
+    label's left and right edge — is what the SVG version learned the same way."""
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+
+    route = {"parse": "dom.lxml", "price": "price.css",
+             "title": "title.og", "join": "join.strict"}
+    ax = viz.to_figure(diamond, route=route)
+    xs = ax.lines[0].get_xdata()
+    assert len(xs) == 2 * len(route), "one point per column strikes the text out"
+
+
+def test_both_routes_are_drawn_and_labelled(diamond):
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+
+    ax = viz.to_figure(
+        diamond,
+        route={"parse": "dom.lxml", "price": "price.css",
+               "title": "title.og", "join": "join.strict"},
+        alternative={"parse": "dom.regex", "price": "price.llm",
+                     "title": "title.llm", "join": "join.lenient"})
+    labels = {line.get_label() for line in ax.lines}
+    assert {"before", "after"} <= labels
+
+
+def test_a_workbench_with_no_candidates_says_so_rather_than_drawing_nothing():
+    from browsergraph.workbench import WorkbenchDefinition
+
+    pytest.importorskip("matplotlib")
+    with pytest.raises(ValueError, match="nothing to draw"):
+        viz.to_figure(WorkbenchDefinition(title="Empty"))

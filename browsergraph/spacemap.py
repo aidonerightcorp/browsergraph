@@ -1,4 +1,20 @@
-"""The dimension space, drawn as parallel planes.
+"""Browser-specific, and superseded for anything else by `viz`.
+
+This module draws the browser dimension space using planes named in code — engines, binaries,
+transports. That was right while browsing was the only domain and is the wrong
+shape now there are eleven templates: it can draw one of them.
+
+`viz` takes a `WorkbenchDefinition` and nothing else, so it draws all of them,
+including the before/after route comparison this module is usually wanted for
+(`viz.route_space(bench, route=..., alternative=...)`) and now a matplotlib
+figure as well (`viz.to_figure`). The little belief model here — `belief`,
+`observe`, `score_routes` — is superseded by `evidence`, which measures the same
+thing properly and survives a restart.
+
+Kept because it produces the published studio pages and its output is linked
+from the README. New work should use `viz`.
+
+The dimension space, drawn as parallel planes.
 
 `Spec` is a point in a nine-dimensional space, and prose is a bad way to convey
 what that space looks like. A table of counts tells you 980 of 9000 combinations

@@ -512,6 +512,72 @@ def write_report(bench: WorkbenchDefinition, path, **kwargs) -> str:
     return str(target)
 
 
+def to_figure(bench: WorkbenchDefinition, *,
+              route: Mapping[str, str] | None = None,
+              alternative: Mapping[str, str] | None = None,
+              ax=None, max_rows: int = 14):
+    """The route space as a matplotlib figure, for papers and slide decks.
+
+    `spacemap` and `planmap` had this and `viz` did not, which was the only
+    thing standing between them and being fully superseded — their SVG output
+    and their little belief model are both covered here and in `evidence`
+    respectively, but you cannot paste an SVG into a LaTeX document without a
+    conversion step.
+
+    Imported lazily. matplotlib is not a dependency of this library and a chart
+    nobody asked for should not make `import browsergraph` fail.
+    """
+    import matplotlib.pyplot as plt
+
+    leaves = [s for s in bench.leaf_stages if s.candidates]
+    if not leaves:
+        raise ValueError("nothing to draw: no stage has candidates")
+
+    shown = [(s, list(s.candidates[:max_rows])) for s in leaves]
+    rows = max(len(c) for _, c in shown)
+    if ax is None:
+        _figure, ax = plt.subplots(figsize=(min(18, 2.2 * len(shown)), 1 + rows * 0.34))
+
+    names = {c.id: c.name for c in bench.candidates}
+    positions: dict[tuple[str, str], tuple[float, float]] = {}
+    for column, (stage, candidates) in enumerate(shown):
+        for row, cid in enumerate(candidates):
+            positions[(stage.id, cid)] = (column, -row)
+            ax.text(column, -row, names.get(cid, cid)[:18], ha="center",
+                    va="center", fontsize=7, zorder=3,
+                    bbox={"boxstyle": "round,pad=0.25", "facecolor": FILL,
+                          "edgecolor": EDGE, "linewidth": 0.5})
+        ax.text(column, 0.9, stage.name[:18], ha="center", fontsize=9,
+                fontweight="bold", color=INK)
+
+    for chosen, colour, style, label in ((alternative, ALT, "--", "before"),
+                                         (route, CHOSEN, "-", "after")):
+        if not chosen:
+            continue
+        # Two points per column — the label's left and right edge — so the line
+        # runs *through* each box rather than across its text. Joining centres
+        # strikes every label out, which the SVG version learned the same way.
+        points: list[tuple[float, float]] = []
+        for stage, _candidates in shown:
+            cid = chosen.get(stage.id)
+            if not cid or (stage.id, cid) not in positions:
+                continue
+            x, y = positions[(stage.id, cid)]
+            points += [(x - 0.19, y), (x + 0.19, y)]
+        if len(points) > 2:
+            ax.plot([p[0] for p in points], [p[1] for p in points],
+                    style, color=colour, linewidth=2, label=label, zorder=1)
+
+    ax.set_xlim(-0.6, len(shown) - 0.4)
+    ax.set_ylim(-rows + 0.4, 1.4)
+    ax.axis("off")
+    ax.set_title(f"{bench.title} — {_fmt(bench.route_count())} routes",
+                 fontsize=10, color=INK)
+    if route or alternative:
+        ax.legend(loc="lower right", fontsize=7, frameon=False)
+    return ax
+
+
 def to_mermaid(bench: WorkbenchDefinition,
                route: Mapping[str, str] | None = None) -> str:
     """The same graph as Mermaid, for places that render it and not SVG.
