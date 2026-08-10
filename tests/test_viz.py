@@ -288,3 +288,108 @@ def test_a_workbench_with_no_candidates_says_so_rather_than_drawing_nothing():
     pytest.importorskip("matplotlib")
     with pytest.raises(ValueError, match="nothing to draw"):
         viz.to_figure(WorkbenchDefinition(title="Empty"))
+
+
+# --- the two pictures of a run, rather than of a graph -----------------------
+
+def _ran(stage, candidate, started, seconds, **flags):
+    from browsergraph.execute import StepRun
+    return StepRun(stage=stage, candidate=candidate, started=started,
+                   seconds=seconds, **flags)
+
+
+def _run_of(*steps):
+    from browsergraph.execute import Run
+    return Run(plan_digest="x", steps=list(steps),
+               seconds=max(s.started + s.seconds for s in steps))
+
+
+def test_a_timeline_places_overlapping_steps_at_the_same_offset():
+    """The whole reason `started` exists. Stacking durations end to end draws a
+    parallel run as a sequential one and hides the only thing worth seeing."""
+    run = _run_of(_ran("read", "r", 0.0, 0.10),
+                  _ran("topic", "t", 0.10, 0.20),
+                  _ran("urgency", "u", 0.10, 0.18))
+    svg = viz.timeline(run).svg
+    starts = [float(x.split('"')[0])
+              for x in svg.split('<rect x="')[1:]]
+    assert starts[1] == pytest.approx(starts[2]), \
+        "two steps that began together must be drawn together"
+    assert starts[0] < starts[1]
+
+
+def test_a_timeline_says_when_more_work_happened_than_clock_elapsed():
+    run = _run_of(_ran("a", "a1", 0.0, 0.5), _ran("b", "b1", 0.0, 0.5))
+    assert "of work in" in viz.timeline(run).note
+
+
+def test_a_timeline_tells_skipped_cached_and_failed_apart():
+    """All three finish without raising and mean entirely different things."""
+    run = _run_of(_ran("a", "a1", 0.0, 0.1),
+                  _ran("b", "b1", 0.1, 0.0, skipped=True),
+                  _ran("c", "c1", 0.1, 0.0, cached=True),
+                  _ran("d", "d1", 0.1, 0.1, ok=False, error="boom"))
+    svg = viz.timeline(run).svg
+    for word in ("ran", "skipped", "cached", "failed"):
+        assert f"· {word}" in svg
+    assert "boom" in svg, "the reason belongs on the bar, not only in the log"
+
+
+def test_a_run_with_no_steps_draws_nothing_rather_than_dividing_by_zero():
+    from browsergraph.execute import Run
+    assert viz.timeline(Run()).svg.startswith("<svg")
+
+
+def test_instant_steps_do_not_divide_by_a_zero_span():
+    run = _run_of(_ran("a", "a1", 0.0, 0.0), _ran("b", "b1", 0.0, 0.0))
+    assert viz.timeline(run).svg.count("<rect") == 2 + len(viz._OUTCOMES)
+
+
+def _solution():
+    from browsergraph.solve import Attempt, Solution
+    champion = {"read": "r1", "clean": "c1"}
+    return Solution(
+        champion=champion, fallbacks=[{"read": "r1", "clean": "c2"}],
+        score=3.0, total_routes=8, seconds=1.0,
+        attempts=[Attempt(route=champion, ok=True, score=3.0, seconds=0.2),
+                  Attempt(route={"read": "r1", "clean": "c2"}, ok=True,
+                          score=1.0, seconds=0.2),
+                  Attempt(route={"read": "r2", "clean": "c1"}, ok=False,
+                          reason="produced nothing", seconds=0.1)])
+
+
+def test_a_scoreboard_keeps_the_attempts_that_did_not_work():
+    """An attempt that failed is evidence about the space, not a gap to tidy
+    away — a champion shown alone is a number with no denominator."""
+    svg = viz.scoreboard(_solution()).svg
+    assert "did not work" in svg
+    assert "produced nothing" in svg
+
+
+def test_a_scoreboard_marks_the_champion_and_its_fallback():
+    svg = viz.scoreboard(_solution()).svg
+    assert "★ champion" in svg
+    assert "↳ " in svg, "the fallback has to be distinguishable from a loser"
+
+
+def test_a_scoreboard_labels_only_what_differs_from_the_champion():
+    """Naming all seven steps in every row is a wall of identical text."""
+    svg = viz.scoreboard(_solution()).svg
+    assert ">c2<" in svg or "c2" in svg
+    assert svg.count("read=r1") >= 1, "the full route stays available on hover"
+
+
+def test_an_unsolved_solution_still_draws():
+    from browsergraph.solve import Attempt, Solution
+    empty = Solution(attempts=[Attempt(route={"a": "a1"}, ok=False,
+                                       reason="no")], total_routes=2)
+    assert "did not work" in viz.scoreboard(empty).svg
+
+
+def test_a_report_omits_the_charts_it_was_given_no_data_for(diamond):
+    """An empty chart implies a measurement somebody made and did not like."""
+    bare = viz.report(diamond)
+    assert "scoreboard" not in bare.lower()
+    full = viz.report(diamond, run=_run_of(_ran("a", "a1", 0.0, 0.1)),
+                      solution=_solution())
+    assert full.count("<svg") == bare.count("<svg") + 2

@@ -222,17 +222,35 @@ class Evidence:
     def from_receipt(self, receipt: Any, context: str = "global") -> None:
         """Fold a `TaskReceipt` in, so evidence comes from real runs.
 
-        Steps that verified are the ones whose outcome is worth believing: a
-        node reporting its own success is not evidence, which is the whole
-        reason verification is a separate stage.
+        A step counts as a success only if it ran **and** the run was accepted.
+        Both halves are needed and the second one was missing, which quietly
+        broke the loop `solve` is built on.
+
+        A node reporting its own success is not evidence — that is the whole
+        reason verification is a separate stage. `solve` verifies the *output*
+        and stamps the answer onto `receipt.ok`, then hands the receipt here. If
+        only `step.ok` is read, that verdict never lands: a reader returning an
+        empty list raises nothing, so every step of the route reports success
+        and the store learns that a route which *completed* is a route that
+        *worked*. Measured on the ticket example, the reader that produced two
+        tickets and the reader that produced none came out with byte-identical
+        posteriors after six runs, and every per-step chart drawn from them read
+        zero.
+
+        Blame for a rejected run is spread across its whole route, which is
+        exactly what `observe_route` already does — one entry point teaching
+        something different from the other was the inconsistency underneath the
+        bug. A step that failed *by itself* stays a definite negative either
+        way. Separating "bad on its own" from "bad in this company" is what
+        `interactions()` is for, and it needs both kinds of record to do it.
         """
         route = tuple(step.key or step.kind for step in getattr(receipt, "steps", ()))
         ok = bool(getattr(receipt, "ok", False))
         for step in getattr(receipt, "steps", ()):
             self.observe(Observation(
                 candidate=step.key or step.kind, context=context,
-                ok=step.ok, latency_ms=step.seconds * 1000.0, route=route,
-                run=getattr(receipt, "task", "")))
+                ok=bool(step.ok) and ok, latency_ms=step.seconds * 1000.0,
+                route=route, run=getattr(receipt, "task", "")))
         if route:
             self.routes.append((route, context, 1.0 if ok else 0.0))
 
@@ -514,6 +532,43 @@ def measured_metrics(evidence: Evidence, candidates: Sequence[str],
         if posterior.measured and posterior.latency_ms:
             metrics["latency_ms"] = posterior.latency_ms
         out[candidate] = metrics
+    return out
+
+
+def per_step_bits(evidence: Evidence, route: Mapping[str, str],
+                  stages: Mapping[str, Sequence[str]],
+                  context: Sequence[str] = ("global",)) -> dict[str, float]:
+    """For each step of a route: is this the right choice, and by how much?
+
+    In bits, and **signed**, because "this step is fine" and "this step is what
+    is holding the route back" are different findings and a magnitude tells them
+    apart from neither.
+
+        bits = log2(rate of the chosen candidate / rate of its best rival)
+
+    Positive means the chosen candidate beats every alternative the evidence has
+    seen. Negative means an alternative is doing better and this step is the one
+    to change — which is the actual question somebody has when a route is
+    disappointing and there are seven steps to blame.
+
+    A step with one candidate returns 0.0: there is nothing to choose, so there
+    is nothing to learn, and giving it a number invites reading meaning into a
+    decision that was never made.
+
+    This is what `viz.evidence` is for. Handing that chart numbers typed in by
+    hand makes a picture of an opinion.
+    """
+    floor = 1e-3          # keeps a candidate that never worked off log2(0)
+    out: dict[str, float] = {}
+    for stage, candidates in stages.items():
+        chosen = route.get(stage)
+        if not chosen or len(candidates) < 2:
+            out[stage] = 0.0
+            continue
+        mine = max(evidence.posterior(chosen, context).rate, floor)
+        rivals = [max(evidence.posterior(c, context).rate, floor)
+                  for c in candidates if c != chosen]
+        out[stage] = math.log2(mine / max(rivals)) if rivals else 0.0
     return out
 
 

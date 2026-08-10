@@ -116,11 +116,28 @@ All eleven are published public on Kaggle and ran there to completion — the
 library is installed from this repository in cell one, so what you see rendered
 is what the code in `main` actually does.
 
+### Two picture books
+
+Mostly diagrams. Useful if you would rather see the thing than read about it.
+
+| | Notebook | What it shows |
+|---|---|---|
+| 24 | [Every picture and why](notebooks/24-the-picture-book.ipynb) | all seven figures on one job, and what the flat version of each would hide |
+| 25 | [The shapes a job comes in](notebooks/25-the-shapes-a-job-comes-in.ipynb) | nine shapes — chain, fan-out, diamond, map, branch, gate, fallback, reuse, tournament — each drawn, each with the lines that build it |
+
+Both found real bugs while being written, which is the argument for drawing
+things: `24` caught `solve` reporting a champion "out of 48 possible" on a space
+it could only ever draw 24 routes from, and a per-step evidence chart reading
+flat zero because a run's verdict was never reaching the per-candidate
+posteriors — so a reader that returned nothing and a reader that returned two
+records came out believed equally.
+
 Regenerate and verify them with:
 
 ```bash
 python notebooks/build_notebooks.py && python notebooks/build_domains.py
 python notebooks/build_workflows.py
+python notebooks/build_gallery.py && python notebooks/build_shapes.py
 python notebooks/execute.py          # runs every cell, under a memory cap
 ```
 

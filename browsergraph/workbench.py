@@ -813,18 +813,48 @@ class WorkbenchDefinition:
     def route_count(self) -> int:
         """Complete primary routes, over **leaves**. The product, not the sum.
 
-        Counting over coarse stages understates this badly, and the size of the
+        A route is one candidate per stage, so the count is the product of the
+        stage widths — including the stages behind a branch, because a plan has
+        to name a candidate for a path it *might* take. This is exactly what the
+        searcher ranges over, which is the property that matters: the number
+        printed beside a search has to be the number the search could reach.
+
+        Counting over coarse stages understates it badly, and the size of the
         understatement is the argument for decomposing at all: the demonstration
         reads as 32,864,832 routes across six stages and 4.2 trillion across the
         fifteen sub-steps those stages are actually made of. Same task, same
         registry — the coarse view was hiding almost all of the choices.
 
-        Branches are counted as a **sum over paths**, not a product. Only one
-        path can run, so two routes that differ solely in the candidates behind
-        an untaken port are the same computation and counting both is a lie —
-        the kind this repository spends its time objecting to elsewhere. With no
-        branch present this is the plain product it always was, so every number
-        published before is unchanged.
+        For "how many different things can this graph do", see
+        `computation_count`. Conflating the two produced `solve` reporting a
+        champion "out of 48 possible" on a space it could only ever draw 24
+        routes from, and that is the sort of number this repository exists to
+        object to.
+        """
+        total = 1
+        for stage in self.leaf_stages:
+            total *= max(len(stage.candidates), 0)
+        return total if self.leaf_stages else 0
+
+    def computation_count(self) -> int:
+        """Distinct executions this graph can produce. Branches sum, not multiply.
+
+        A different question from `route_count`, and neither answers the other.
+        A *route* is a plan you could compile. A *computation* is something the
+        graph can actually be observed doing, counting each way a branch can go
+        as its own outcome. So each branch contributes the **sum** over its
+        paths where `route_count` takes the product.
+
+        The two come apart in both directions, which is exactly why both exist:
+
+        * one candidate behind each of two ports — one plan, but two things it
+          can do, so computations (2) exceed routes (1);
+        * three and four candidates behind those ports — twelve plans, but only
+          seven distinguishable behaviours, because plans differing solely
+          behind the untaken side do the same thing.
+
+        With no branch present the two are equal, so nothing published from a
+        branchless graph changes.
         """
         leaves = self.leaf_stages
         if not leaves:

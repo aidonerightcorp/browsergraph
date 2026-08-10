@@ -17,6 +17,7 @@ python examples/01_smallest_useful_graph.py
 | 05 | [Get better at it](05_learn_from_receipts.py) | run, keep the receipt, choose better next time |
 | 06 | [Ask a model](06_model_suggests_you_check.py) | a model proposes, the compiler disposes |
 | 07 | [Solve it for me](07_solve_it_for_me.py) | one call: try, judge, champion plus fallback |
+| 08 | [Draw what happened](08_draw_what_happened.py) | a timeline and a scoreboard of a real run, in one page |
 
 They are meant to be read in order and copied out of. Every one is short enough
 to hold in your head, which is the point — a 300-line example teaches the

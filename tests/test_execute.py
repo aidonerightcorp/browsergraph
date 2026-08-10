@@ -529,3 +529,45 @@ def test_a_run_can_produce_a_receipt(diamond):
     assert len(receipt.steps) == len(got.steps)
     assert "quality gate" == receipt.task
     assert receipt.to_json().startswith("{")
+
+
+def test_a_step_records_when_it_began_not_only_how_long_it_took():
+    """Duration alone cannot show two steps overlapping.
+
+    Without an offset the only picture you can draw stacks steps end to end,
+    which renders a parallel run as a sequential one — the one thing anybody
+    looks at a timeline to find out.
+    """
+    import time
+
+    from browsergraph.quick import fanout, graph, node, step
+
+    def slow(**kwargs):
+        time.sleep(0.05)
+        return 1
+
+    nodes = [node("read.one", "read", gives=[("out", "N")]),
+             node("left.one", "left", [("in", "N")], [("out", "N")]),
+             node("right.one", "right", [("in", "N")], [("out", "N")])]
+    stages = [step("read", "Read", [], [("out", "N")], "read", ["read.one"]),
+              step("left", "Left", [("in", "N")], [("out", "N")], "left",
+                   ["left.one"]),
+              step("right", "Right", [("in", "N")], [("out", "N")], "right",
+                   ["right.one"])]
+    bench = graph("split", "one then two", stages, nodes,
+                  fanout("read", ["left", "right"]))
+    plan = compile_route(bench, {"read": "read.one", "left": "left.one",
+                                 "right": "right.one"})
+    runtime = execute.Runtime({"read.one": slow, "left.one": slow,
+                               "right.one": slow})
+
+    serial = execute.run(plan, runtime, workers=1)
+    at = {s.stage: s.started for s in serial.steps}
+    assert at["read"] < at["left"] < at["right"] or at["right"] < at["left"], \
+        "on one worker the two branches cannot begin at the same moment"
+
+    parallel = execute.run(plan, runtime, workers=2)
+    at = {s.stage: s.started for s in parallel.steps}
+    assert abs(at["left"] - at["right"]) < 0.03, \
+        "on two workers the independent steps have to start together"
+    assert at["left"] > at["read"], "and both still start after what feeds them"

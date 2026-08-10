@@ -588,6 +588,7 @@ def cmd_check(args) -> int:
                    "definitions": len(bench.nodes),
                    "candidates": len(bench.candidates),
                    "routes": bench.route_count(),
+                   "computations": bench.computation_count(),
                    "solutions": len(bench.solutions)}
         # Advice, not errors: a sub-step with one candidate is a hard-coded
         # choice wearing a graph's clothes, and a stage nobody can route

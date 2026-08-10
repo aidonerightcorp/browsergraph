@@ -228,13 +228,29 @@ from browsergraph import viz
 viz.dag(bench, route=chosen)      # layers, fan-out, joins, typed edges
 viz.route_space(bench, route=chosen, alternative=before)
 viz.funnel([("all routes", n), ("legal", m), ("evaluated", k), ("chosen", 1)])
-viz.evidence({"parse": 1.9, "locate": -1.1})     # signed bits per step
-viz.write_report(bench, "report.html", route=chosen)
+viz.evidence(per_step_bits(store, chosen, stages_of(bench)))   # signed bits
+viz.timeline(run)                 # where each step sat on the clock
+viz.scoreboard(solution)          # every route solve tried, ranked
+viz.write_report(bench, "report.html", route=chosen, run=run, solution=solution)
 ```
 
 Draw the graph before you believe it is a graph. A diamond rendered as one box
 per layer is a chain, whatever the stage list implies — and that is far easier
 to see than to reason about.
+
+`dag` says which steps *may* run together; `timeline` is the only thing that
+says whether they *did*. Steps carry `started` as well as `seconds` for exactly
+this reason — durations alone can only be stacked end to end, which draws a
+parallel run as a sequential one.
+
+Two counts, and they answer different questions. `route_count()` is how many
+plans exist — the product over every step, including the ones behind a branch,
+and what the searcher ranges over, so it is the number to print beside a search.
+`computation_count()` is how many distinguishable things the graph can do,
+counting each way a branch can go. Neither is always the larger.
+
+Feed `viz.evidence` from `evidence.per_step_bits`, not from numbers you typed.
+A chart of an opinion looks exactly like a chart of a measurement.
 
 ---
 

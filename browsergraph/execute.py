@@ -65,6 +65,11 @@ class StepRun:
     candidate: str
     ok: bool = True
     seconds: float = 0.0
+    #: Seconds from the start of the run to the moment this step began.
+    #: Duration alone cannot show two steps overlapping, so a picture drawn
+    #: from it has to stack them end to end — which draws a parallel run as a
+    #: sequential one and hides the only thing worth looking at.
+    started: float = 0.0
     inputs: tuple[str, ...] = ()
     outputs: tuple[str, ...] = ()
     error: str = ""
@@ -79,6 +84,7 @@ class StepRun:
     def to_dict(self) -> dict:
         out = {"stage": self.stage, "candidate": self.candidate,
                "ok": self.ok, "seconds": round(self.seconds, 4),
+               "started": round(self.started, 4),
                "inputs": list(self.inputs), "outputs": list(self.outputs)}
         for flag in ("cached", "skipped", "fell_back"):
             if getattr(self, flag):
@@ -403,16 +409,17 @@ def run(plan: Plan, runtime: Runtime, inputs: Mapping[str, Any] | None = None,
     def attempt(stage: str, step: Step) -> tuple[StepRun, dict]:
         """Run one step, trying its fallbacks, and return its row and ports."""
         values = gather(stage, step)
+        entered = time.monotonic() - started
 
         # A branch upstream decided this path is not taken. Skipping is the
         # correct outcome, not a failure — so it is recorded as a skip.
         if any(value is NOT_TAKEN for value in values.values()):
             return StepRun(stage, step.candidate, ok=True, skipped=True,
-                           inputs=tuple(values),
+                           started=entered, inputs=tuple(values),
                            error="not taken — an upstream branch went the other way"), {}
 
         if step.effects and not allow_effects:
-            return StepRun(stage, step.candidate, ok=False,
+            return StepRun(stage, step.candidate, ok=False, started=entered,
                            effects=tuple(step.effects),
                            error=f"refused: this step declares "
                                  f"{', '.join(step.effects)} and effects are off"), {}
@@ -421,7 +428,8 @@ def run(plan: Plan, runtime: Runtime, inputs: Mapping[str, Any] | None = None,
         if key is not None and key in cache:
             produced = cache[key]
             return StepRun(stage, step.candidate, ok=True, cached=True,
-                           inputs=tuple(values), outputs=tuple(produced),
+                           started=entered, inputs=tuple(values),
+                           outputs=tuple(produced),
                            effects=tuple(step.effects)), produced
 
         tried: list[str] = []
@@ -457,6 +465,7 @@ def run(plan: Plan, runtime: Runtime, inputs: Mapping[str, Any] | None = None,
                 cache[key] = produced
             return StepRun(stage, candidate, ok=True,
                            seconds=time.monotonic() - began,
+                           started=began - started,
                            inputs=tuple(values), outputs=tuple(produced),
                            effects=tuple(step.effects),
                            fell_back=candidate != step.candidate), produced
@@ -469,6 +478,7 @@ def run(plan: Plan, runtime: Runtime, inputs: Mapping[str, Any] | None = None,
         else:
             detail = "; ".join(tried)
         return StepRun(stage, step.candidate, ok=False, inputs=tuple(values),
+                       started=entered, seconds=time.monotonic() - started - entered,
                        effects=tuple(step.effects), error=detail), {}
 
     for layer in plan.layers:

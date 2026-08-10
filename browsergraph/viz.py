@@ -11,7 +11,7 @@ So everything here takes a `WorkbenchDefinition` and nothing else. If a domain
 can be expressed as stages, typed ports, edges and candidates — the only things
 the compiler knows about — it can be drawn, and no drawing code changes.
 
-Four pictures, each answering a question the others cannot:
+Six pictures, each answering a question the others cannot:
 
 * `dag` — *what shape is this?* Layers, fan-out, joins. The picture that would
   have caught "this is a pipeline, not a graph" on sight, because a diamond
@@ -23,6 +23,10 @@ Four pictures, each answering a question the others cannot:
   total, legal, eligible, evaluated, chosen — with the ratio spelled out rather
   than implied.
 * `evidence` — *why did it pick that?* Per-step outcomes in bits.
+* `timeline` — *what actually happened?* Where each step sat on the clock. The
+  `dag` says which steps *may* overlap; only this says whether they did.
+* `scoreboard` — *what did the champion beat?* Every route `solve` tried,
+  ranked, with the failures left in.
 
 Implementation notes, both learned the hard way and both non-obvious:
 
@@ -363,6 +367,13 @@ def route_space(bench: WorkbenchDefinition, *,
 
     caption = (f"{_fmt(bench.route_count())} complete routes over "
                f"{len(bench.leaf_stages)} sub-steps.")
+    # Only worth saying when a branch makes the two numbers differ. On a graph
+    # without one they are equal and printing both invites the reader to look
+    # for a distinction that is not there.
+    computations = bench.computation_count()
+    if computations != bench.route_count():
+        caption += (f" {_fmt(computations)} distinguishable behaviours, counting "
+                    f"each way a branch can go.")
     if hidden:
         caption += f" {hidden} candidates not drawn (row cap {max_rows})."
     if route and alternative:
@@ -472,6 +483,166 @@ def evidence(steps: Mapping[str, float], *, width: int = 940,
                           "argued against it.", width, height)
 
 
+# --- 5. what actually happened, in order ------------------------------------
+
+#: How each step outcome is drawn. The colours are the palette's, so a timeline
+#: sits beside the other four figures without introducing a sixth hue.
+_OUTCOMES = (("failed", CHOSEN), ("skipped", MUTED), ("cached", COLD),
+             ("fell back", ALT), ("ran", GOOD))
+
+
+def _outcome(step) -> tuple[str, str]:
+    if not step.ok:
+        return _OUTCOMES[0]
+    if getattr(step, "skipped", False):
+        return _OUTCOMES[1]
+    if getattr(step, "cached", False):
+        return _OUTCOMES[2]
+    if getattr(step, "fell_back", False):
+        return _OUTCOMES[3]
+    return _OUTCOMES[4]
+
+
+def timeline(run, *, width: int = 1000, title: str = "",
+             note: str = "") -> Figure:
+    """A finished run as bars on a clock: when each step started, how long it took.
+
+    The `dag` says which steps *may* run together. This says which ones *did* —
+    and those are different claims. A graph drawn with two independent branches
+    executed on one worker is a sequential run of a parallel plan, and the only
+    honest way to tell is to look at where the bars sit.
+
+    Takes anything with `.steps` and `.seconds`, so an `execute.Run` and a
+    replayed receipt both draw. Colour carries the outcome, because "cached",
+    "skipped by a branch" and "fell back to another candidate" all finish
+    successfully and mean entirely different things about the run.
+    """
+    steps = list(getattr(run, "steps", []) or [])
+    if not steps:
+        return Figure('<svg width="10" height="10"></svg>', title or "timeline")
+
+    row_h, top, left, pad = 30, 74, 190, 130
+    height = top + len(steps) * row_h + 52
+    span = max((getattr(s, "started", 0.0) + s.seconds for s in steps),
+               default=0.0)
+    # A run of instant steps has a zero span and would divide by it. Drawing
+    # them as full-width bars would also be a lie, so they get a hairline each
+    # and the caption still carries the real total.
+    scale = (width - left - pad) / span if span > 0 else 0.0
+
+    parts = [f'<text x="{left}" y="{top - 40}" font-size="10.5" fill="{MUTED}">'
+             f'0s</text>',
+             f'<text x="{width - pad}" y="{top - 40}" text-anchor="end" '
+             f'font-size="10.5" fill="{MUTED}">{span:.3f}s</text>',
+             f'<line x1="{left}" y1="{top - 32}" x2="{width - pad}" '
+             f'y2="{top - 32}" stroke="{LINE}" stroke-width="1"/>']
+
+    for index, step in enumerate(steps):
+        y = top + index * row_h
+        label, colour = _outcome(step)
+        x = left + getattr(step, "started", 0.0) * scale
+        bar = max(2.5, step.seconds * scale)
+        parts.append(
+            f'<text x="{left - 14}" y="{y + 16}" text-anchor="end" '
+            f'font-size="11" font-weight="600" fill="{INK}">'
+            f'{_esc(step.stage)}</text>'
+            f'<rect x="{x:.1f}" y="{y + 3}" width="{bar:.1f}" height="19" rx="4" '
+            f'fill="{colour}" opacity=".78" stroke="{colour}" stroke-width="1">'
+            f'<title>{_esc(step.candidate)} — {label}, {step.seconds * 1000:.1f}ms'
+            f'{" — " + _esc(step.error) if getattr(step, "error", "") else ""}</title>'
+            f'</rect>'
+            f'<text x="{x + bar + 9:.1f}" y="{y + 17}" font-size="10" '
+            f'fill="{MUTED}">{step.seconds * 1000:.0f}ms · {label}</text>')
+
+    legend = " ".join(f'<rect x="{left + i * 96}" y="{height - 32}" width="10" '
+                      f'height="10" rx="2" fill="{c}" opacity=".78"/>'
+                      f'<text x="{left + i * 96 + 15}" y="{height - 23}" '
+                      f'font-size="10" fill="{MUTED}">{name}</text>'
+                      for i, (name, c) in enumerate(_OUTCOMES))
+    parts.append(legend)
+
+    together = sum(s.seconds for s in steps)
+    saved = (f"; {together:.3f}s of work in {span:.3f}s of clock"
+             if span and together > span * 1.05 else "")
+    return Figure(Figure._svg("".join(parts), width, height),
+                  title or f"{len(steps)} steps in {span:.3f}s",
+                  note or f"Bars are placed at the time each step began{saved}.",
+                  width, height)
+
+
+# --- 6. what the solver tried -----------------------------------------------
+
+def scoreboard(solution, *, width: int = 1000, title: str = "",
+               note: str = "") -> Figure:
+    """Every route `solve` tried, ranked, with the champion and its fallback marked.
+
+    A champion on its own is a number with no denominator. This shows what it
+    beat, by how much, and which attempts did not work at all — which is the
+    difference between "the best route" and "the best of the four we ran".
+
+    Takes a `solve.Solution`. Attempts that failed are drawn too, at zero, with
+    their reason on hover: an attempt that never ran is evidence about the
+    space, not a gap to tidy out of the picture.
+    """
+    attempts = list(getattr(solution, "attempts", []) or [])
+    if not attempts:
+        return Figure('<svg width="10" height="10"></svg>', title or "scoreboard")
+
+    champion = dict(getattr(solution, "champion", {}) or {})
+    fallbacks = [dict(f) for f in getattr(solution, "fallbacks", []) or []]
+    ranked = sorted(attempts, key=lambda a: (-a.ok, -a.score))
+
+    row_h, top, left, pad = 32, 76, 250, 150
+    height = top + len(ranked) * row_h + 44
+    best = max((a.score for a in ranked), default=0.0) or 1.0
+    scale = width - left - pad
+
+    total = getattr(solution, "total_routes", 0)
+    parts = [f'<text x="{left - 14}" y="{top - 34}" text-anchor="end" '
+             f'font-size="10.5" fill="{MUTED}">route</text>',
+             f'<text x="{left}" y="{top - 34}" font-size="10.5" '
+             f'fill="{MUTED}">score</text>',
+             f'<line x1="{left}" y1="{top - 26}" x2="{width - pad}" '
+             f'y2="{top - 26}" stroke="{LINE}" stroke-width="1"/>']
+
+    for index, attempt in enumerate(ranked):
+        y = top + index * row_h
+        route = dict(attempt.route)
+        is_champion = bool(champion) and route == champion
+        is_fallback = route in fallbacks
+        colour = (GOOD if is_champion else ALT if is_fallback
+                  else COLD if attempt.ok else CHOSEN)
+        bar = max(2.5, (attempt.score / best) * scale) if attempt.ok else 2.5
+
+        # The label is what makes this readable: naming the whole route in every
+        # row is a wall of identical text, so only what differs from the
+        # champion is shown. With no champion, the first attempt is the datum.
+        datum = champion or dict(ranked[0].route)
+        differs = [c for s, c in route.items() if datum.get(s) != c]
+        label = ("champion" if is_champion else
+                 ", ".join(differs)[:34] or "same as champion")
+        mark = "★ " if is_champion else "↳ " if is_fallback else ""
+
+        parts.append(
+            f'<text x="{left - 14}" y="{y + 17}" text-anchor="end" font-size="11" '
+            f'fill="{INK}">{_esc(mark + label)}</text>'
+            f'<rect x="{left}" y="{y + 3}" width="{bar:.1f}" height="20" rx="4" '
+            f'fill="{colour}" opacity=".74" stroke="{colour}" stroke-width="1">'
+            f'<title>{_esc(", ".join(f"{s}={c}" for s, c in route.items()))}'
+            f'{" — " + _esc(attempt.reason) if attempt.reason else ""}</title></rect>'
+            f'<text x="{left + bar + 10:.1f}" y="{y + 18}" font-size="10.5" '
+            f'fill="{MUTED}">'
+            f'{f"{attempt.score:.4g}" if attempt.ok else "did not work"}'
+            f' · {attempt.seconds * 1000:.0f}ms</text>')
+
+    worked = sum(1 for a in attempts if a.ok)
+    return Figure(Figure._svg("".join(parts), width, height),
+                  title or f"{worked} of {len(attempts)} routes worked",
+                  note or (f"Out of {_fmt(total)} possible. Labels name only what "
+                           f"differs from the champion."),
+                  width, height)
+
+
 # --- putting them together --------------------------------------------------
 
 def report(bench: WorkbenchDefinition, *,
@@ -479,8 +650,12 @@ def report(bench: WorkbenchDefinition, *,
            alternative: Mapping[str, str] | None = None,
            search: Sequence[tuple[str, float]] | None = None,
            bits: Mapping[str, float] | None = None,
+           run=None, solution=None,
            title: str = "") -> str:
-    """One self-contained page: shape, space, funnel, evidence.
+    """One self-contained page: shape, space, funnel, evidence, run, scoreboard.
+
+    Everything past the first two is optional and omitted when not passed, so a
+    page never carries an empty chart implying a measurement nobody made.
 
     Self-contained means no CDN, no fonts, no fetch — it opens from a file:// URL
     on a machine with no network, which is the only kind of artefact worth
@@ -492,6 +667,10 @@ def report(bench: WorkbenchDefinition, *,
         figures.append(funnel(search))
     if bits:
         figures.append(evidence(bits))
+    if solution is not None:
+        figures.append(scoreboard(solution))
+    if run is not None:
+        figures.append(timeline(run))
 
     head = (f'<h2 style="font:700 19px -apple-system,Segoe UI,Roboto,sans-serif;'
             f'color:{INK};margin:0 0 4px">{_esc(title or bench.title)}</h2>'
@@ -600,7 +779,11 @@ def to_mermaid(bench: WorkbenchDefinition,
                         else ("{{", "}}") if kind == "branch" else ("[", "]"))
         lines.append(f'  {stage_id}{open_}"{label}"{close}')
     for edge in bench.wiring():
-        port = f'|{edge.to_port}|' if edge.to_port else ""
+        # Both ends, when both are named. On a branch the interesting label is
+        # the *source* port — which way it went — and labelling only the target
+        # drew two identical arrows out of the rhombus.
+        names = [p for p in (edge.from_port, edge.to_port) if p]
+        port = f'|{" → ".join(dict.fromkeys(names))}|' if names else ""
         lines.append(f"  {edge.source} -->{port} {edge.target}")
     for stage_id in (route or {}):
         if stage_id in leaves:

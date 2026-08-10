@@ -75,6 +75,9 @@ KERNELS: dict[str, str] = {
     "21-watch-for-changes": "Graph Jobs 10 Watch for Changes",
     "22-sort-text": "Graph Jobs 11 Sort Text into Categories",
     "23-get-better-by-doing-it": "Graph Jobs 12 Get Better by Doing It",
+    # The picture books. Same library, and the point is what you can see.
+    "24-the-picture-book": "Graph Pictures 1 Every Picture and Why",
+    "25-the-shapes-a-job-comes-in": "Graph Pictures 2 The Shapes a Job Comes In",
 }
 
 

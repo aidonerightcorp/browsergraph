@@ -955,16 +955,24 @@ def _branchy():
         candidates=tuple(NodeCandidate(id=c, node_id=c) for c in ids))
 
 
-def test_a_branch_is_counted_as_a_sum_of_paths_not_a_product():
-    """Only one path can run, so two routes differing solely in the candidates
-    behind an untaken port are the same computation. Counting both is the kind
-    of overstatement this repository objects to everywhere else."""
+def test_computations_count_a_branch_as_a_sum_of_paths_not_a_product():
+    """Only one path can run, so two plans differing solely in the candidates
+    behind an untaken port do the same thing to a given input."""
     bench = _branchy()
-    assert bench.route_count() == 2 * (3 + 4) == 14
-    naive = 1
-    for stage in bench.leaf_stages:
-        naive *= len(stage.candidates)
-    assert naive == 24, "the naive product should differ, or this proves nothing"
+    assert bench.computation_count() == 2 * (3 + 4) == 14
+
+
+def test_routes_stay_the_plain_product_because_that_is_what_search_ranges_over():
+    """The two numbers answer different questions and must not be conflated.
+
+    A plan names a candidate for every stage, including a path it might not
+    take, so the searcher enumerates the product. Reporting the smaller
+    computation count beside a search produced the visible absurdity of `solve`
+    announcing a champion "out of 14 possible" after examining 24 of them.
+    """
+    bench = _branchy()
+    assert bench.route_count() == 2 * 3 * 4 == 24
+    assert bench.computation_count() < bench.route_count()
 
 
 def test_the_exclusive_stages_behind_each_port_are_identified():
@@ -973,9 +981,11 @@ def test_the_exclusive_stages_behind_each_port_are_identified():
 
 
 def test_a_graph_with_no_branch_counts_exactly_as_it_always_did():
-    """Every number published before this change must be unchanged."""
+    """Every number published before this change must be unchanged, and with no
+    branch present the two counts have to agree."""
     from browsergraph.demo import workbench
     assert workbench().route_count() == 3_802_314_700_800
+    assert workbench().computation_count() == workbench().route_count()
 
 
 def test_a_stage_reachable_from_both_ports_belongs_to_neither_path():
@@ -995,4 +1005,4 @@ def test_a_stage_reachable_from_both_ports_belongs_to_neither_path():
         candidates=bench.candidates + (NodeCandidate(id="r1", node_id="r1"),
                                        NodeCandidate(id="r2", node_id="r2")))
     assert "report" not in joined.exclusive_paths()["check"]["small"]
-    assert joined.route_count() == 2 * (3 + 4) * 2
+    assert joined.computation_count() == 2 * (3 + 4) * 2

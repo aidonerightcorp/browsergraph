@@ -168,6 +168,27 @@ def solve(bench: WorkbenchDefinition, runtime: Runtime, *,
     offset = 0
     repeats = 0
 
+    def untried() -> dict[str, str]:
+        """A route nobody has run yet, when the whole space is small enough.
+
+        Searching is for spaces too big to look at. A four-route graph is not
+        one, and on it `within` enumerates and returns the same winner however
+        the seed moves — so asking again is asking the same question. Measured
+        on a four-route example: `attempts=6` produced two attempts and stopped,
+        with two routes never run and nothing saying so.
+
+        Only reached once the search has repeated itself, so it costs nothing on
+        the large spaces this is not for.
+        """
+        try:
+            for candidate in search.eligible_routes(bench, policy=policy,
+                                                    limit=10_000):
+                if tuple(sorted(candidate.items())) not in tried:
+                    return candidate
+        except search.SpaceTooLarge:
+            pass          # too big to enumerate: that is what the search is for
+        return {}
+
     while len(solution.attempts) < attempts:
         found = search.within(bench, picked, evaluations=budget, policy=policy,
                               evidence=store, context=context,
@@ -185,9 +206,10 @@ def solve(bench: WorkbenchDefinition, runtime: Runtime, *,
             # a good route quickly and then proposing it twice is *expected*,
             # not a signal that exploration is over.
             repeats += 1
-            if repeats >= max(3, attempts):
+            route = untried()
+            key = tuple(sorted(route.items()))
+            if not route or repeats >= max(3, attempts):
                 break
-            continue
         repeats = 0
         tried.add(key)
 

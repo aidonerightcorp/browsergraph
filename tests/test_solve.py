@@ -146,3 +146,56 @@ def test_a_passthrough_keeps_an_optional_step_in_the_graph():
     assert [p.type for p in doing_nothing.inputs] == ["Rows"]
     assert [p.type for p in doing_nothing.outputs] == ["Rows"]
     assert doing_nothing.runtime["deterministic"] is True
+
+
+def test_a_small_space_gets_covered_instead_of_asked_the_same_question():
+    """The search settles fast, and on a tiny space that means it stops.
+
+    `within` enumerates when the space fits its budget, so it returns the same
+    winner however the seed moves. Asking again is asking the same question.
+    Measured before this: `attempts=6` on a four-route graph produced two
+    attempts and stopped, with two routes never run and nothing saying so.
+    """
+    from browsergraph.quick import chain, graph, node, step
+    from browsergraph.workbench import OptimizationObjective, OptimizationProfile
+
+    nodes = [node(f"a.{i}", "a", gives=[("out", "N")]) for i in range(2)]
+    nodes += [node(f"b.{i}", "b", [("in", "N")], [("out", "N")]) for i in range(2)]
+    steps = [step("a", "A", [], [("out", "N")], "a", ["a.0", "a.1"]),
+             step("b", "B", [("in", "N")], [("out", "N")], "b", ["b.0", "b.1"])]
+    bench = graph("small", "four routes", steps, nodes, chain("a", "b"),
+                  profiles=[OptimizationProfile(id="p", objectives=(
+                      OptimizationObjective("quality", "maximize", 1.0),))])
+    runtime = execute.Runtime({n.id: (lambda **kw: 1) for n in nodes})
+
+    answer = solve.solve(bench, runtime, attempts=6)
+    assert len(answer.attempts) == 4, "every route in a four-route space"
+    seen = {tuple(sorted(a.route.items())) for a in answer.attempts}
+    assert len(seen) == 4, "and each of them exactly once"
+
+
+def test_eligible_routes_streams_every_allowed_route():
+    from browsergraph import search
+    from browsergraph.quick import chain, graph, node, step
+
+    nodes = [node("a.0", "a", gives=[("out", "N")]),
+             node("a.1", "a", gives=[("out", "N")]),
+             node("b.0", "b", [("in", "N")], [("out", "N")])]
+    steps = [step("a", "A", [], [("out", "N")], "a", ["a.0", "a.1"]),
+             step("b", "B", [("in", "N")], [("out", "N")], "b", ["b.0"])]
+    bench = graph("small", "two routes", steps, nodes, chain("a", "b"))
+
+    routes = list(search.eligible_routes(bench))
+    assert len(routes) == bench.route_count() == 2
+    assert {r["a"] for r in routes} == {"a.0", "a.1"}
+
+
+def test_eligible_routes_refuses_a_space_too_big_to_enumerate():
+    """Quietly returning a prefix would report coverage nobody achieved."""
+    import pytest
+
+    from browsergraph import search
+    from browsergraph.demo import workbench
+
+    with pytest.raises(search.SpaceTooLarge):
+        list(search.eligible_routes(workbench(), limit=1000))

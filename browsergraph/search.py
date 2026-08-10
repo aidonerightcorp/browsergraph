@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import itertools
 import random
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from browsergraph.policy import Policy, aggregate, gate_all, route_permissions
@@ -744,3 +744,39 @@ def compare_strategies(workbench: WorkbenchDefinition,
             for proposal in out.values():
                 proposal.notes += (f"exhaustive not run: {exc}",)
     return out
+
+
+def eligible_routes(workbench: WorkbenchDefinition, *,
+                    policy: Policy | None = None,
+                    limit: int = EXHAUSTIVE_LIMIT) -> Iterator[dict[str, str]]:
+    """Every route policy allows, streamed in a stable order.
+
+    Searching is for spaces too big to look at. Some spaces are not: a graph
+    with four routes does not need Thompson sampling, it needs somebody to try
+    all four. Without a way to ask for them, a caller wanting complete coverage
+    of a small space has to re-derive per-stage eligibility, which means
+    re-deriving the policy — and a second implementation of "what is allowed"
+    is a second thing to get wrong.
+
+    Streamed rather than returned as a list, because the same call on a large
+    graph would otherwise be an out-of-memory bug waiting for someone to make
+    it. It refuses past `limit` for the same reason `_exhaustive` does: quietly
+    returning a prefix would report coverage that was never achieved.
+    """
+    stages = [s for s in workbench.leaf_stages if s.candidates]
+    eligible, _blocked = _eligible_by_stage(workbench, policy or Policy())
+    keys = [s.id for s in stages if eligible.get(s.id)]
+    if not keys:
+        return
+
+    space = 1
+    for key in keys:
+        space *= len(eligible[key])
+    if space > limit:
+        raise SpaceTooLarge(
+            f"{space:,} eligible routes exceeds the enumeration limit of "
+            f"{limit:,}. This is the case search exists for — use `within` "
+            f"with a budget instead of asking for all of them.")
+
+    for combination in itertools.product(*(eligible[key] for key in keys)):
+        yield dict(zip(keys, combination, strict=True))

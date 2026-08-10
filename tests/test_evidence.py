@@ -487,3 +487,48 @@ def test_a_pair_measured_as_better_together_is_kept_too():
         store.routes.append((("a", "c", "z"), "global", 0.20))
     effects = pair_effects(store, minimum=10)
     assert effects.get(frozenset(("a", "b")), 0) > 1.0
+
+
+def test_a_step_that_ran_inside_a_rejected_run_is_not_counted_as_a_success():
+    """The bug that made `solve` unable to learn anything.
+
+    A reader returning an empty list raises nothing, so every step of the route
+    reports success. Reading only `step.ok` credited that route exactly as it
+    credited the one that produced real records, and the two candidates came out
+    with identical posteriors — which is the failure the whole verify/run split
+    exists to prevent.
+    """
+    from browsergraph import receipt as rc
+
+    def receipt_for(candidate: str, accepted: bool):
+        return rc.TaskReceipt(
+            task="t", ok=accepted,
+            steps=(rc.StepRecord(key=candidate, kind="read", ok=True,
+                                 seconds=0.01),))
+
+    store = Evidence()
+    for _ in range(3):
+        store.from_receipt(receipt_for("read.jsonl", accepted=True))
+        store.from_receipt(receipt_for("read.csv", accepted=False))
+
+    good = store.posterior("read.jsonl").rate
+    bad = store.posterior("read.csv").rate
+    assert good > bad, "the verdict has to reach the per-candidate posterior"
+    assert good > 0.7 and bad < 0.3
+
+
+def test_per_step_bits_names_the_step_worth_changing():
+    from browsergraph.evidence import per_step_bits
+
+    store = Evidence()
+    for _ in range(6):
+        store.observe_route(["read.good", "clean.bad"], ok=False)
+        store.observe_route(["read.good", "clean.good"], ok=True)
+
+    stages = {"read": ["read.good", "read.other"],
+              "clean": ["clean.bad", "clean.good"],
+              "write": ["write.only"]}
+    bits = per_step_bits(store, {"read": "read.good", "clean": "clean.bad",
+                                 "write": "write.only"}, stages)
+    assert bits["clean"] < 0, "the losing candidate has to score negative"
+    assert bits["write"] == 0.0, "a step with one candidate decided nothing"
