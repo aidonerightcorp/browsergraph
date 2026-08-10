@@ -1459,17 +1459,20 @@ print(f'{report.reachable_routes:,} routes after  '
 """)
 
 md("""
-### Three search strategies, and where the cheap one loses
+### Three search strategies, and the one that refuses to run
 
 **greedy** picks the best candidate per stage independently. **beam** keeps the
-best partial routes. **exhaustive** enumerates, so "best" means best rather than
-best-found.
+best partial routes. **exhaustive** enumerates — so "best" means best rather
+than best-found, when it can run at all.
 
-Greedy is optimal in three of the four profiles and loses in the fourth —
-exactly what you would predict, because route metrics do not decompose. Quality
-*compounds* along a route (it is the product, not the mean: a route is only as
-good as the joint probability that every step did its job), so a stage's real
-contribution depends on what the rest of the route already spent.
+Here it cannot. Even under the locked-down policy there are about 1.9 billion
+eligible routes, and enumerating them is not slow, it is impossible. So it is
+refused, by name, with the count — and the two that *can* run still report.
+
+This cell is where that guard came from. It used to ask for enumeration anyway,
+build the whole product as a list, and take the machine down at 53GB. Refusing
+is not a limitation of the search; it is the search being honest about a
+question with no answer in this lifetime.
 """)
 
 code("""
@@ -1478,21 +1481,29 @@ from browsergraph import search
 rows = []
 for profile in wb.optimization_profiles:
     got = search.compare_strategies(wb, profile, policy=locked)
-    best = got['exhaustive'].score
-    rows.append((profile.name, got['greedy'].score, got['beam'].score, best,
-                 abs(got['greedy'].score - best) < 1e-9))
+    # `exhaustive` is absent when it could not run. Missing rather than present
+    # and empty, so a caller cannot quietly report a best-of-three that was a
+    # best-of-two.
+    best = got['exhaustive'].score if 'exhaustive' in got else None
+    rows.append((profile.name, got['greedy'].score, got['beam'].score, best))
 
-print(f"{'profile':<16}{'greedy':>9}{'beam(8)':>10}{'exhaustive':>12}   greedy optimal?")
-for name, g, b, e, same in rows:
-    print(f'{name:<16}{g:>9.4f}{b:>10.4f}{e:>12.4f}   '
-          + ('yes' if same else f'NO - loses {e - g:.4f}'))
+print(f"{'profile':<16}{'greedy':>9}{'beam(8)':>10}{'exhaustive':>14}")
+for name, g, b, e in rows:
+    shown = f'{e:>14.4f}' if e is not None else f'{"refused":>14}'
+    print(f'{name:<16}{g:>9.4f}{b:>10.4f}{shown}')
 
 one = search.compare_strategies(wb, wb.optimization_profiles[0], policy=locked)
 print()
 for name in ('greedy', 'beam', 'exhaustive'):
+    if name not in one:
+        print(f'{name:<11} did not run')
+        continue
     p = one[name]
     print(f'{name:<11} examined {p.examined:>8,} of {p.eligible_total:,} '
           f'({p.coverage:.2%})')
+
+print()
+print([n for p in one.values() for n in p.notes if 'exhaustive not run' in n][:1])
 """)
 
 md("""

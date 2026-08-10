@@ -936,7 +936,7 @@
       "name": "Verify",
       "description": "",
       "input_type": "",
-      "output_type": "",
+      "output_type": "VerifiedFields",
       "success": "an independent check accepted the fields",
       "required_capabilities": [
         "verify"

@@ -514,3 +514,96 @@ def test_exhaustive_still_runs_when_the_space_genuinely_fits(small_bench):
                          strategy="exhaustive")
     assert got.strategy == "exhaustive"
     assert got.examined == small_bench.route_count() == 625
+
+
+# --- choosing a route without looking at all of them -------------------------
+
+def _locked_policy():
+    from browsergraph.policy import Policy
+    return Policy(permissions=frozenset({"filesystem", "filesystem:read",
+                                         "filesystem:write", "database",
+                                         "database:read"}),
+                  allow_external_effects=False, deterministic_only=True,
+                  name="locked-down")
+
+
+def test_a_budget_is_the_question_a_caller_actually_has(bench):
+    """Every other entry point asks *how* to search. This one asks how much."""
+    from browsergraph import search
+
+    got = search.within(bench, bench.optimization_profiles[0],
+                        policy=_locked_policy(), evaluations=300)
+    assert got.ok
+    assert got.examined <= 300
+    assert got.strategy == "greedy+sprouts"
+
+
+def test_a_budgeted_search_never_does_worse_than_the_cheap_baseline(bench):
+    """Anchoring to the greedy route is what guarantees this. Sampling from
+    scratch under the same budget scored 0.911 where greedy scored 1.0875 —
+    it spent the whole allowance rediscovering what greedy knew for free."""
+    from browsergraph import search
+
+    policy = _locked_policy()
+    for profile in bench.optimization_profiles:
+        greedy = search.propose(bench, profile, policy=policy, strategy="greedy")
+        budgeted = search.within(bench, profile, policy=policy, evaluations=600)
+        assert budgeted.score >= greedy.score - 1e-9, profile.name
+
+
+def test_refining_finds_what_greedy_misses_on_the_profile_it_loses(bench):
+    """"Never worse" is trivially true if refinement never helps. It does:
+    greedy is suboptimal on the speed profile, and the budget recovers it."""
+    from browsergraph import search
+
+    policy = _locked_policy()
+    speed = next(p for p in bench.optimization_profiles
+                 if "peed" in p.name)
+    greedy = search.propose(bench, speed, policy=policy, strategy="greedy")
+    budgeted = search.within(bench, speed, policy=policy, evaluations=800)
+    assert budgeted.score > greedy.score
+
+
+def test_a_sampled_search_says_it_only_found_a_best(bench):
+    """A good score from 800 looks at 1.9 billion routes is not a proven
+    optimum, and the proposal has to say so or someone will quote it as one."""
+    from browsergraph import search
+
+    got = search.within(bench, bench.optimization_profiles[0],
+                        policy=_locked_policy(), evaluations=500)
+    assert any("never a proven best" in note for note in got.notes)
+
+
+def test_the_same_budget_and_seed_give_the_same_route(bench):
+    """A search that answers differently each run cannot be compared with
+    itself, and "we changed the graph and the score moved" stops meaning
+    anything."""
+    from browsergraph import search
+
+    policy = _locked_policy()
+    first = search.within(bench, bench.optimization_profiles[0],
+                          policy=policy, evaluations=400, seed=7)
+    second = search.within(bench, bench.optimization_profiles[0],
+                           policy=policy, evaluations=400, seed=7)
+    assert first.route == second.route
+
+
+def test_a_space_that_fits_the_budget_is_enumerated_rather_than_sampled(small_bench):
+    """Sampling a space you could have enumerated throws away certainty for
+    nothing."""
+    from browsergraph import search
+
+    got = search.within(small_bench, BALANCED, evaluations=5000)
+    assert got.strategy == "exhaustive"
+    assert got.examined == small_bench.route_count()
+
+
+def test_sprouts_and_halving_stay_inside_their_budget(bench):
+    from browsergraph import search
+
+    policy = _locked_policy()
+    for strategy in ("sprouts", "halving"):
+        got = search.propose(bench, bench.optimization_profiles[0],
+                             policy=policy, strategy=strategy, budget=250)
+        assert got.examined <= 250, strategy
+        assert got.ok, strategy
