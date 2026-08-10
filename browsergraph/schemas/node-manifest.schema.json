@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/aidonerightcorp/browsergraph/schemas/node-manifest.schema.json",
+  "title": "NodeManifest",
+  "description": "A portable description of one reusable node implementation. Readable without importing the runtime, so a registry, validator, viewer or planner can reason about a node that is not installed, not written in Python, or not written yet.",
+  "type": "object",
+  "required": ["id", "kind", "description", "capabilities", "outputs"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_]*(\\.[a-z0-9][a-z0-9_]*)+$",
+           "description": "Stable, lowercase, namespaced. Evidence is attributed to this."},
+    "kind": {"type": "string"},
+    "name": {"type": "string"},
+    "version": {"type": "string", "default": "1.0"},
+    "schema_version": {"type": "string", "const": "2.0"},
+    "description": {"type": "string", "minLength": 1},
+    "source": {"type": "string"},
+    "docs": {"type": "string"},
+    "roles": {"type": "array", "uniqueItems": true,
+      "items": {"enum": ["source","adapter","transform","action","model","verifier","sink","composite","control"]}},
+    "capabilities": {"type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {"type": "string"},
+      "description": "What a stage discovers this node by. A node with none can never be found."},
+    "tags": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "inputs": {"type": "array", "items": {"$ref": "#/$defs/port"}},
+    "outputs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/port"}},
+    "parameters": {"type": "array", "items": {"$ref": "#/$defs/parameter"}},
+    "permissions": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "effects": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "dependencies": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "resources": {"type": "object"},
+    "runtime": {"type": "object"},
+    "metrics": {"type": "object",
+      "description": "Always carries its source. A number without one is an opinion."}
+  },
+  "$defs": {
+    "port": {
+      "type": "object", "required": ["name", "type"], "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "type": {"type": "string", "description": "The technical type two candidates must agree on."},
+        "semantic": {"type": "string", "description": "What it means, which two nodes can share while disagreeing on the carrier."},
+        "schema": {"type": "object"},
+        "units": {"type": "string"},
+        "required": {"type": "boolean", "default": true},
+        "description": {"type": "string"}
+      }
+    },
+    "parameter": {
+      "type": "object", "required": ["name"], "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "type": {"enum": ["string","integer","number","boolean","enum","json"]},
+        "description": {"type": "string"},
+        "required": {"type": "boolean"},
+        "default": {},
+        "choices": {"type": "array", "uniqueItems": true,
+          "description": "What makes a parameter searchable. A dimension must be enumerable before it can expand into concrete candidates."}
+      }
+    }
+  }
+}

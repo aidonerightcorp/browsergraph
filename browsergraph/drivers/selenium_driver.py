@@ -21,17 +21,25 @@ from browsergraph.dimensions import (
 from browsergraph.ports import Element, PageState
 
 
-def _chrome_major() -> int | None:
-    """Installed Chrome's major version, for undetected-chromedriver."""
+def _chrome_major(path: str = "") -> int | None:
+    """The major version of the Chrome that is *about to be launched*.
+
+    Taking this from PATH was a real bug with a confusing signature. This host
+    has Chrome 148 at /opt/google/chrome and Chromium 150 from a snap; PATH
+    finds 148 first, so a spec asking for Chromium got a driver built for the
+    other browser, and undetected-chromedriver failed to attach with a message
+    naming neither. Ask the binary that `binary_location` points at.
+    """
     import re as _re
     import shutil as _shutil
     import subprocess as _sp
-    for exe in ("google-chrome", "chromium", "chromium-browser"):
-        path = _shutil.which(exe)
-        if not path:
-            continue
+
+    candidates = [path] if path else []
+    candidates += [p for p in (_shutil.which(e) for e in
+                               ("google-chrome", "chromium", "chromium-browser")) if p]
+    for exe in candidates:
         try:
-            out = _sp.run([path, "--version"], capture_output=True, text=True,
+            out = _sp.run([exe, "--version"], capture_output=True, text=True,
                           timeout=15).stdout
         except (OSError, _sp.SubprocessError):
             continue
@@ -135,9 +143,16 @@ class SeleniumBrowser:
             # mismatched patched driver and the session never attaches.
             kwargs = {"options": opts,
                       "headless": self.spec.display is Display.HEADLESS}
-            major = _chrome_major()
+            major = _chrome_major(getattr(opts, "binary_location", "") or "")
             if major:
                 kwargs["version_main"] = major
+            # Hand it a driver built for that exact browser, on a copy: uc
+            # rewrites the binary it is given to strip the cdc_ markers, and a
+            # patched driver in the shared cache would then be handed to plain
+            # selenium too.
+            matched = self._matched_driver(opts, patchable=True)
+            if matched:
+                kwargs["driver_executable_path"] = matched
             self._driver = uc.Chrome(**kwargs)
         elif self.spec.binary is Binary.FIREFOX:
             # Point at a geckodriver we are permitted to terminate. Ubuntu ships
@@ -153,9 +168,38 @@ class SeleniumBrowser:
             else:
                 self._driver = webdriver.Firefox(options=opts)
         else:
-            self._driver = webdriver.Chrome(options=opts)
+            # Selenium Manager resolves a driver for whichever Chrome it finds
+            # first, which is not necessarily the one we just pointed it at.
+            matched = self._matched_driver(opts)
+            if matched:
+                from selenium.webdriver.chrome.service import Service as ChromeService
+                self._driver = webdriver.Chrome(
+                    options=opts, service=ChromeService(executable_path=matched))
+            else:
+                self._driver = webdriver.Chrome(options=opts)
 
         self._driver.set_page_load_timeout(60)
+        return None
+
+    def _matched_driver(self, opts, *, patchable: bool = False) -> str:
+        """A chromedriver built for the browser this session will launch.
+
+        Best-effort by design: if it cannot be fetched we return "" and let the
+        normal resolution happen, because a driver that might mismatch still
+        beats refusing to start.
+        """
+        if self.spec.binary is Binary.FIREFOX:
+            return ""
+        try:
+            from browsergraph import fetch as _fetch
+            got = _fetch.matching_chromedriver(
+                browser_path=getattr(opts, "binary_location", "") or "",
+                binary=self.spec.binary)
+            if not got.ok:
+                return ""
+            return _fetch.patchable_copy(got.path) if patchable else got.path
+        except Exception:
+            return ""
 
     def stop(self) -> None:
         """Quit the session, then make sure the driver process is really gone.

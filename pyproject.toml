@@ -58,6 +58,11 @@ packages = [
     "browsergraph.tasks",
 ]
 
+# The studio template and the JSON schemas ship with the package: a viewer that
+# only works from a git checkout is not a viewer people can use.
+[tool.setuptools.package-data]
+browsergraph = ["assets/*.html", "schemas/*.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Heavy engines (camoufox is a hardened Firefox in a subprocess) take minutes
@@ -66,4 +71,5 @@ testpaths = ["tests"]
 addopts = "-q -m 'not slow'"
 markers = [
     "slow: heavy browser engines; run explicitly with -m slow",
+    "network: reaches a real download service; deselect with -m 'not network'",
 ]

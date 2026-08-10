@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Core deps: none](https://img.shields.io/badge/core%20deps-stdlib--only-brightgreen)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-643%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-728%20passing-brightgreen)](tests/)
 [![Kaggle](https://img.shields.io/badge/Kaggle-run%20it%20now-20BEFF?logo=kaggle)](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 
 **Write a browser automation once. Run it on any engine — or on none.**
@@ -64,6 +64,22 @@ print(report(lint(graph)))
 ```
 
 ## The architecture
+
+A task decomposes into ordered **stages**. Each stage offers every candidate that
+could perform it; a route picks one per stage. That model is written down in full
+— generalized past browsers, with portable manifests, contract validation, typed
+feedback and optimization profiles — in
+[**UNIVERSAL_GRAPH_SYSTEM.md**](UNIVERSAL_GRAPH_SYSTEM.md).
+
+```bash
+browsergraph workbench -o studio.html    # 6 stages, 149 candidates, 32,864,832 routes
+```
+
+The demonstration registry is domain-neutral on purpose: the same primitives
+describe document ingestion, image processing, data cleaning and machine
+learning. `Browser adapter` alone expands to **60 atomic candidates**
+(5 controllers × 6 binaries × 2 display modes) — because drawing that as one box
+hides fifty-nine decisions.
 
 A task decomposes into **planes**. Each plane offers several interchangeable ways to
 answer it. A route through them is one candidate solution — and the route is chosen from
@@ -137,6 +153,8 @@ chromedriver/snap version skew, a dependency that ships broken source.
 | **Politeness** | per-domain, process-wide rate limiting that honours robots `Crawl-delay` |
 | **Isolation** | conflicting engines in per-engine virtualenvs, over a worker protocol |
 | **Notebooks** | Jupyter/Kaggle/Colab run cells inside an asyncio loop; the sync API is driven from a worker thread so it just works |
+| **Universal graph** | portable node manifests, atomic candidates, stage/route validation and a five-view studio — [UNIVERSAL_GRAPH_SYSTEM.md](UNIVERSAL_GRAPH_SYSTEM.md) |
+| **Binaries** | fetches a browser or a driver *matched to the browser it will drive* — the fix for "cannot connect to chrome" |
 | **OCR (optional)** | read a page from its pixels when the DOM cannot answer — canvas text, baked-in images, and "does this screenshot contain any text at all" |
 | **LLM (optional)** | Ollama-compatible; the model is resolved from the host by *capability*, never hardcoded |
 
@@ -145,6 +163,7 @@ chromedriver/snap version skew, a dependency that ships broken source.
 | | |
 |---|---|
 | [QUICKSTART.md](QUICKSTART.md) | first graph, first real browser, first task |
+| [UNIVERSAL_GRAPH_SYSTEM.md](UNIVERSAL_GRAPH_SYSTEM.md) | stages, candidates, routes, contracts, feedback, optimization |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | the Protocol-vs-base-class seam |
 | [CONTRACTS.md](CONTRACTS.md) | what a node promises, and the three moments it is checked |
 | [ENGINES.md](ENGINES.md) | every engine, what it is for, and what does not work |
@@ -167,7 +186,7 @@ breaks something.
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                  # 643 tests; browser suites skip when absent
+pytest -q                                  # 728 tests; browser suites skip when absent
 mypy browsergraph --ignore-missing-imports
 ruff check browsergraph tests
 ```

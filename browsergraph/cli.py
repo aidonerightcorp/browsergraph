@@ -10,8 +10,10 @@
     browsergraph bootstrap                    get a working browser, whatever it takes
     browsergraph space --html space.html      every dimension and every path
     browsergraph planes --html planes.html    task planes, candidates, routes
-    browsergraph nodes                        every node kind and its contract
+    browsergraph nodes [--json]               every node kind, its contract or manifest
     browsergraph graph graph.yaml --mermaid   draw a graph, audit its contracts
+    browsergraph workbench -o studio.html     stages, candidates, routes, feedback
+    browsergraph fetch chromedriver           download a browser or driver
 """
 from __future__ import annotations
 
@@ -272,6 +274,79 @@ def cmd_bootstrap(args) -> int:
     return 0 if rep.ok else 1
 
 
+def cmd_workbench(args) -> int:
+    """Render the stage/candidate/route studio as self-contained HTML."""
+    from browsergraph.workbench import WorkbenchDefinition
+
+    if args.config:
+        bench = WorkbenchDefinition.load(args.config)
+    else:
+        from browsergraph.demo import workbench as demo_workbench
+        bench = demo_workbench()
+
+    problems = bench.validate()
+    if problems:
+        print("workbench does not validate:")
+        for problem in problems[:20]:
+            print("  " + problem)
+        if len(problems) > 20:
+            print(f"  ... and {len(problems) - 20} more")
+        return 1
+
+    if args.export_data:
+        bench.write_json(args.export_data)
+        print(f"wrote {args.export_data}")
+    if args.suite:
+        written = bench.write_suite(args.suite)
+        print(f"wrote {len(written)} files to {args.suite}")
+        for path in written:
+            print("  " + path)
+        return 0
+
+    bench.write_html(args.out, view=args.view)
+    print(f"wrote {args.out}  ({bench.summary()})")
+    return 0
+
+
+def cmd_fetch(args) -> int:
+    """Download a browser or driver into the user cache."""
+    from browsergraph import fetch as f
+
+    # `--match` before the listing branch: `fetch --match system_chrome` names no
+    # positional, so checking `what` first silently printed the catalogue and
+    # exited 0 — a command that looked like it worked and fetched nothing.
+    if args.match:
+        got = f.matching_chromedriver(args.match)
+        print(f"chromedriver for {args.match}: "
+              + (f"{got.version}\n  {got.path}" if got.ok else f"unavailable — {got.error}"))
+        return 0 if got.ok else 1
+
+    if args.what in (None, "", "list"):
+        print("fetchable:")
+        print(f.report(offline=not args.remote))
+        return 0
+
+    kw = {}
+    if args.milestone:
+        kw["milestone"] = args.milestone
+    if args.version:
+        kw["version"] = args.version
+
+    if args.dry_run:
+        plan = f.plan(args.what, **kw)
+        print(f"{plan.what}: {plan.version or '?'} from {plan.source}\n  "
+              + (plan.url if plan.ok else f"unavailable — {plan.error}"))
+        return 0 if plan.ok else 1
+
+    got = f.fetch(args.what, force=args.force, **kw)
+    if not got.ok:
+        print(f"could not fetch {args.what}: {got.error}")
+        return 1
+    print(f"{got.what} {got.version} "
+          + ("(already cached)" if got.cached else f"from {got.source}") + f"\n  {got.path}")
+    return 0
+
+
 def cmd_space(args) -> int:
     """Draw the dimension space: one plane per axis, one line per runnable spec."""
     from browsergraph.spacemap import explore, to_html, to_text
@@ -323,8 +398,18 @@ def cmd_planes(args) -> int:
 
 def cmd_nodes(args) -> int:
     """The contract table — what every node kind promises."""
-    from browsergraph.contracts import describe_all
     from browsergraph.nodes import REGISTRY
+
+    if args.json:
+        # The same nodes as portable manifests, so a registry, a planner or
+        # another language can read them without importing this package.
+        import json as _json
+
+        from browsergraph.manifest import registry_manifests
+        print(_json.dumps([m.to_dict() for m in registry_manifests()], indent=2))
+        return 0
+
+    from browsergraph.contracts import describe_all
     print(f"{len(REGISTRY)} node kinds\n")
     print(describe_all(REGISTRY.values()))
     return 0
@@ -416,6 +501,19 @@ def main(argv: list[str] | None = None) -> int:
     bs.add_argument("--no-apt", action="store_true", help="do not install system libraries")
     bs.set_defaults(fn=cmd_bootstrap)
 
+    ft = sub.add_parser("fetch", help="download a browser or driver into the cache")
+    ft.add_argument("what", nargs="?", help="chrome, chromedriver, geckodriver, ... "
+                                            "(omit to list)")
+    ft.add_argument("--milestone", help="Chrome major version to match, e.g. 150")
+    ft.add_argument("--match", help="fetch a chromedriver matching this binary, "
+                                    "e.g. system_chrome")
+    ft.add_argument("--version", help="an exact version instead of the newest")
+    ft.add_argument("--dry-run", action="store_true", help="print the URL, download nothing")
+    ft.add_argument("--force", action="store_true", help="re-download even if cached")
+    ft.add_argument("--remote", action="store_true",
+                    help="when listing, look up current versions online")
+    ft.set_defaults(fn=cmd_fetch)
+
     sp = sub.add_parser("space", help="every dimension and every runnable path")
     sp.add_argument("--html", help="write an interactive diagram to this file")
     sp.add_argument("--limit", type=int, default=1500, help="paths to draw")
@@ -427,7 +525,20 @@ def main(argv: list[str] | None = None) -> int:
                     help="overlay an illustrative learned route")
     pl.set_defaults(fn=cmd_planes)
 
-    sub.add_parser("nodes", help="node kinds and their contracts").set_defaults(fn=cmd_nodes)
+    nd = sub.add_parser("nodes", help="node kinds and their contracts")
+    nd.add_argument("--json", action="store_true", help="emit portable manifests")
+    nd.set_defaults(fn=cmd_nodes)
+
+    wbp = sub.add_parser("workbench",
+                         help="stages, candidates and routes as a standalone studio")
+    wbp.add_argument("config", nargs="?", help="a workbench JSON file (default: the demo)")
+    wbp.add_argument("-o", "--out", default="browsergraph-workbench.html")
+    wbp.add_argument("--view", default="candidates",
+                     choices=("candidates", "network", "compare", "builder", "feedback"),
+                     help="which projection opens first")
+    wbp.add_argument("--export-data", help="also write the normalized JSON here")
+    wbp.add_argument("--suite", help="write one file per projection into this directory")
+    wbp.set_defaults(fn=cmd_workbench)
 
     gr = sub.add_parser("graph", help="draw a graph and audit its contracts")
     gr.add_argument("config")

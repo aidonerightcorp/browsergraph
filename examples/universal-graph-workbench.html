@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Universal graph solution studio</title>
+<style>
+:root{
+  --bg:#f7f8fa; --panel:#fff; --ink:#12161d; --muted:#5b6673; --line:#dfe3e9;
+  --accent:#2f6fed; --accent-soft:#e8f0fe; --warn:#b4530a; --bad:#c0392b;
+  --ok:#1e7a46; --learned:#7b3fe4; --baseline:#0d7d84; --chip:#eef1f5;
+  --stage:#0f1a2b; --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 14px rgba(16,24,40,.05);
+}
+@media (prefers-color-scheme:dark){
+ :root:not([data-theme="light"]){
+  --bg:#0e1116; --panel:#161b23; --ink:#e7ecf3; --muted:#96a1b0; --line:#262d38;
+  --accent:#6fa0ff; --accent-soft:#1b2740; --warn:#e0913c; --bad:#ef6f60;
+  --ok:#57c98a; --learned:#b18cff; --baseline:#4fc3c9; --chip:#1e2632;
+  --stage:#dbe4f0; --shadow:0 1px 2px rgba(0,0,0,.4);
+ }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em}
+a{color:var(--accent)}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
+header{padding:20px 22px 0;max-width:1600px;margin:0 auto}
+.sub{color:var(--muted);margin-top:6px;max-width:80ch}
+.counts{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+.count{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  padding:7px 11px;box-shadow:var(--shadow)}
+.count b{font-variant-numeric:tabular-nums;font-size:15px}
+.count span{color:var(--muted);display:block;font-size:11px;text-transform:uppercase;
+  letter-spacing:.06em}
+nav{display:flex;gap:4px;margin:16px 0 0;border-bottom:1px solid var(--line);
+  overflow-x:auto}
+nav button{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);
+  padding:9px 13px;font:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
+nav button[aria-selected=true]{color:var(--accent);border-bottom-color:var(--accent)}
+main{max-width:1600px;margin:0 auto;padding:16px 22px 60px}
+.view{display:none}.view.on{display:block}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+.bar label{color:var(--muted);font-size:12px;display:flex;gap:5px;align-items:center}
+input[type=search],select{background:var(--panel);color:var(--ink);
+  border:1px solid var(--line);border-radius:7px;padding:6px 9px;font:inherit;font-size:13px}
+input[type=search]{min-width:210px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:12px;
+  align-items:center}
+.swatch{width:22px;height:3px;border-radius:2px;display:inline-block;vertical-align:middle}
+.scroll{overflow-x:auto;padding-bottom:8px}
+
+/* ---- stage columns, the invariant: left to right, always ---- */
+.stages{display:flex;gap:14px;min-width:min-content;align-items:flex-start}
+.stage{background:var(--panel);border:1px solid var(--line);border-radius:11px;
+  box-shadow:var(--shadow);min-width:236px;max-width:262px;flex:0 0 auto;
+  display:flex;flex-direction:column;max-height:74vh}
+.stage-head{padding:11px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;
+  background:var(--panel);border-radius:11px 11px 0 0;z-index:2}
+.stage-order{color:var(--muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+.stage-name{font-weight:650;color:var(--stage);margin:2px 0 5px}
+.types{font-size:11px;color:var(--muted)}
+.types b{color:var(--ink);font-weight:600}
+.opt{display:inline-block;font-size:10px;background:var(--chip);border-radius:4px;
+  padding:1px 5px;color:var(--muted);margin-left:5px;vertical-align:middle}
+.stage-body{overflow-y:auto;padding:8px}
+.group{margin-bottom:9px}
+.group-name{font-size:11px;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.05em;padding:2px 3px;cursor:pointer;display:flex;
+  justify-content:space-between;gap:6px}
+.cand{border:1px solid var(--line);border-radius:7px;padding:6px 8px;margin:4px 0;
+  cursor:pointer;background:var(--panel);font-size:12.5px}
+.cand:hover{border-color:var(--accent)}
+.cand.picked{border-color:var(--accent);background:var(--accent-soft)}
+.cand.dim{opacity:.38}
+.cand.blocked{opacity:.55;border-style:dashed;cursor:not-allowed}
+.cand .why{color:var(--bad);font-size:11px;margin-top:3px}
+.binding{color:var(--muted);font-size:11px;margin-top:2px}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:5px}
+.tag{font-size:10px;background:var(--chip);border-radius:4px;padding:1px 5px;
+  color:var(--muted);margin-right:4px}
+
+/* ---- routes ---- */
+.routes{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}
+.route-chip{border:1px solid var(--line);border-radius:20px;padding:5px 11px;
+  background:var(--panel);cursor:pointer;font-size:12.5px;display:flex;gap:7px;
+  align-items:center}
+.route-chip[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}
+table{border-collapse:collapse;width:100%;background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:12.5px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);
+  vertical-align:top}
+th{background:var(--chip);font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--muted);white-space:nowrap}
+td.diff{background:var(--accent-soft)}
+tr:last-child td{border-bottom:0}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* ---- inspector ---- */
+.split{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;align-items:start}
+@media(max-width:1080px){.split{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:11px;
+  box-shadow:var(--shadow);padding:13px}
+.panel h3{font-size:13px;margin-bottom:8px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:12px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;word-break:break-word}
+.note{color:var(--muted);font-size:12px;margin-top:10px;padding:9px 11px;
+  background:var(--chip);border-radius:8px}
+.err{color:var(--bad)}
+.ok{color:var(--ok)}
+ul.tight{margin:6px 0 0;padding-left:17px}
+ul.tight li{margin:2px 0}
+svg{display:block}
+.pill{font-size:10px;border-radius:9px;padding:2px 7px;background:var(--chip);
+  color:var(--muted)}
+.status-baseline{color:var(--baseline)}
+.status-learned{color:var(--learned)}
+.flow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.flow .step{background:var(--chip);border-radius:7px;padding:6px 9px;font-size:12px}
+.flow .arrow{color:var(--muted)}
+</style>
+</head>
+<body>
+<script type="application/json" id="workbench-data">{"schema_version": "2.0", "title": "Universal graph solution studio", "task": "Turn an authorized reference into a verified, receipted result.", "success": "an independent verifier accepted the outcome and a replayable receipt exists", "nodes": [{"id": "demo.acquire.browser_adapter", "kind": "browser_adapter", "name": "browser adapter", "version": "1.0", "schema_version": "2.0", "description": "Drives a real browser to reach an authorized target.", "roles": ["source", "adapter"], "capabilities": ["acquire"], "permissions": ["browser", "network"], "inputs": [{"name": "input", "type": "TaskReference"}], "outputs": [{"name": "output", "type": "InputHandle"}], "parameters": [{"name": "controller", "type": "string", "default": "BrowserPort", "choices": ["BrowserPort", "Playwright", "Selenium", "Puppeteer", "CDP"]}, {"name": "binary", "type": "string", "default": "Chrome", "choices": ["Chrome", "Chromium", "Edge", "Firefox", "WebKit", "Brave"]}, {"name": "display", "type": "string", "default": "headless", "choices": ["headless", "headed"]}], "runtime": {"deterministic": false, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.88, "latency_ms": 2400, "cost_usd": 0.0}}, {"id": "demo.acquire.file_loader", "kind": "file_loader", "name": "file loader", "version": "1.0", "schema_version": "2.0", "description": "Loads and hashes an authorized local file.", "roles": ["source"], "capabilities": ["acquire"], "permissions": ["filesystem:read"], "inputs": [{"name": "input", "type": "TaskReference"}], "outputs": [{"name": "output", "type": "InputHandle"}], "parameters": [{"name": "mode", "type": "string", "default": "file", "choices": ["file", "directory", "glob"]}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.97, "latency_ms": 8, "cost_usd": 0.0}}, {"id": "demo.acquire.api_loader", "kind": "api_loader", "name": "api loader", "version": "1.0", "schema_version": "2.0", "description": "Loads a typed API response, with provenance.", "roles": ["source", "adapter"], "capabilities": ["acquire"], "permissions": ["network"], "inputs": [{"name": "input", "type": "TaskReference"}], "outputs": [{"name": "output", "type": "InputHandle"}], "parameters": [{"name": "method", "type": "string", "default": "GET", "choices": ["GET", "POST", "PUT"]}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.9, "latency_ms": 320, "cost_usd": 0.0}}, {"id": "demo.acquire.database_loader", "kind": "database_loader", "name": "database loader", "version": "1.0", "schema_version": "2.0", "description": "Reads rows from an authorized database.", "roles": ["source"], "capabilities": ["acquire"], "permissions": ["database:read"], "inputs": [{"name": "input", "type": "TaskReference"}], "outputs": [{"name": "output", "type": "InputHandle"}], "parameters": [{"name": "dialect", "type": "string", "default": "postgres", "choices": ["postgres", "mysql", "sqlite", "bigquery"]}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.95, "latency_ms": 140, "cost_usd": 0.0}}, {"id": "demo.acquire.queue_kafka", "kind": "queue_consumer", "name": "queue kafka", "version": "1.0", "schema_version": "2.0", "description": "Consumes an authorized Kafka topic.", "roles": ["source"], "capabilities": ["acquire"], "permissions": ["network"], "inputs": [{"name": "input", "type": "TaskReference"}], "outputs": [{"name": "output", "type": "InputHandle"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.86, "latency_ms": 60, "cost_usd": 0.0}}, {"id": "demo.acquire.queue_sqs", "kind": "queue_consumer", "name": "queue sqs", "version": "1.0", "schema_version": "2.0", "description": "Consumes an authorized SQS queue.", "roles": ["source"], "capabilities": ["acquire"], "permissions": ["network"], "inputs": [{"name": "input", "type": "TaskReference"}], "outputs": [{"name": "output", "type": "InputHandle"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.85, "latency_ms": 90, "cost_usd": 0.0}}, {"id": "demo.acquire.stream_http", "kind": "stream_reader", "name": "stream http", "version": "1.0", "schema_version": "2.0", "description": "Reads a chunked HTTP stream.", "roles": ["source"], "capabilities": ["acquire"], "permissions": ["network"], "inputs": [{"name": "input", "type": "TaskReference"}], "outputs": [{"name": "output", "type": "InputHandle"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.82, "latency_ms": 180, "cost_usd": 0.0}}, {"id": "demo.acquire.stream_websocket", "kind": "stream_reader", "name": "stream websocket", "version": "1.0", "schema_version": "2.0", "description": "Reads a websocket stream.", "roles": ["source"], "capabilities": ["acquire"], "permissions": ["network"], "inputs": [{"name": "input", "type": "TaskReference"}], "outputs": [{"name": "output", "type": "InputHandle"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.8, "latency_ms": 200, "cost_usd": 0.0}}, {"id": "demo.acquire.archive_zip", "kind": "archive_loader", "name": "archive zip", "version": "1.0", "schema_version": "2.0", "description": "Expands an authorized zip archive.", "roles": ["source"], "capabilities": ["acquire"], "permissions": ["filesystem:read"], "inputs": [{"name": "input", "type": "TaskReference"}], "outputs": [{"name": "output", "type": "InputHandle"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.93, "latency_ms": 45, "cost_usd": 0.0}}, {"id": "demo.acquire.archive_tar", "kind": "archive_loader", "name": "archive tar", "version": "1.0", "schema_version": "2.0", "description": "Expands an authorized tar archive.", "roles": ["source"], "capabilities": ["acquire"], "permissions": ["filesystem:read"], "inputs": [{"name": "input", "type": "TaskReference"}], "outputs": [{"name": "output", "type": "InputHandle"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.93, "latency_ms": 40, "cost_usd": 0.0}}, {"id": "demo.canonicalize.text_normalizer", "kind": "text_normalizer", "name": "text normalizer", "version": "1.0", "schema_version": "2.0", "description": "Normalises unicode form and case.", "roles": ["transform"], "capabilities": ["canonicalize"], "inputs": [{"name": "input", "type": "InputHandle"}], "outputs": [{"name": "output", "type": "CanonicalState"}], "parameters": [{"name": "form", "type": "string", "default": "NFC", "choices": ["NFC", "NFKC", "NFD"]}, {"name": "case", "type": "string", "default": "preserve", "choices": ["preserve", "fold"]}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.9, "latency_ms": 6, "cost_usd": 0.0}}, {"id": "demo.canonicalize.schema_mapper", "kind": "schema_mapper", "name": "schema mapper", "version": "1.0", "schema_version": "2.0", "description": "Maps incoming fields onto a declared schema.", "roles": ["transform"], "capabilities": ["canonicalize"], "inputs": [{"name": "input", "type": "InputHandle"}], "outputs": [{"name": "output", "type": "CanonicalState"}], "parameters": [{"name": "strategy", "type": "string", "default": "strict", "choices": ["strict", "lenient", "inferred"]}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.92, "latency_ms": 25, "cost_usd": 0.0}}, {"id": "demo.canonicalize.unit_metric", "kind": "unit_converter", "name": "unit metric", "version": "1.0", "schema_version": "2.0", "description": "Converts measurements to metric units.", "roles": ["transform"], "capabilities": ["canonicalize"], "inputs": [{"name": "input", "type": "InputHandle"}], "outputs": [{"name": "output", "type": "CanonicalState"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.96, "latency_ms": 4, "cost_usd": 0.0}}, {"id": "demo.canonicalize.unit_imperial", "kind": "unit_converter", "name": "unit imperial", "version": "1.0", "schema_version": "2.0", "description": "Converts measurements to imperial units.", "roles": ["transform"], "capabilities": ["canonicalize"], "inputs": [{"name": "input", "type": "InputHandle"}], "outputs": [{"name": "output", "type": "CanonicalState"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.96, "latency_ms": 4, "cost_usd": 0.0}}, {"id": "demo.canonicalize.encoding_chardet", "kind": "encoding_detector", "name": "encoding chardet", "version": "1.0", "schema_version": "2.0", "description": "Detects encoding statistically.", "roles": ["transform"], "capabilities": ["canonicalize"], "inputs": [{"name": "input", "type": "InputHandle"}], "outputs": [{"name": "output", "type": "CanonicalState"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.88, "latency_ms": 12, "cost_usd": 0.0}}, {"id": "demo.canonicalize.encoding_bom", "kind": "encoding_detector", "name": "encoding bom", "version": "1.0", "schema_version": "2.0", "description": "Detects encoding from a byte-order mark.", "roles": ["transform"], "capabilities": ["canonicalize"], "inputs": [{"name": "input", "type": "InputHandle"}], "outputs": [{"name": "output", "type": "CanonicalState"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.99, "latency_ms": 1, "cost_usd": 0.0}}, {"id": "demo.canonicalize.format_parser", "kind": "format_parser", "name": "format parser", "version": "1.0", "schema_version": "2.0", "description": "Parses a known container format.", "roles": ["transform"], "capabilities": ["canonicalize"], "inputs": [{"name": "input", "type": "InputHandle"}], "outputs": [{"name": "output", "type": "CanonicalState"}], "parameters": [{"name": "format", "type": "string", "default": "json", "choices": ["json", "csv", "xml", "yaml"]}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.94, "latency_ms": 18, "cost_usd": 0.0}}, {"id": "demo.canonicalize.identity_resolver", "kind": "identity_resolver", "name": "identity resolver", "version": "1.0", "schema_version": "2.0", "description": "Makes record identity explicit and stable.", "roles": ["transform"], "capabilities": ["canonicalize"], "inputs": [{"name": "input", "type": "InputHandle"}], "outputs": [{"name": "output", "type": "CanonicalState"}], "parameters": [{"name": "key", "type": "string", "default": "natural", "choices": ["natural", "surrogate", "composite"]}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.87, "latency_ms": 30, "cost_usd": 0.0}}, {"id": "demo.canonicalize.table_canonicalizer", "kind": "table_canonicalizer", "name": "table canonicalizer", "version": "1.0", "schema_version": "2.0", "description": "Normalises tabular shape, headers and types.", "roles": ["transform"], "capabilities": ["canonicalize"], "inputs": [{"name": "input", "type": "InputHandle"}], "outputs": [{"name": "output", "type": "CanonicalState"}], "parameters": [{"name": "headers", "type": "string", "default": "first-row", "choices": ["first-row", "declared", "inferred"]}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.91, "latency_ms": 22, "cost_usd": 0.0}}, {"id": "demo.canonicalize.locale_normalizer", "kind": "locale_normalizer", "name": "locale normalizer", "version": "1.0", "schema_version": "2.0", "description": "Normalises dates, numbers and separators for a locale.", "roles": ["transform"], "capabilities": ["canonicalize"], "inputs": [{"name": "input", "type": "InputHandle"}], "outputs": [{"name": "output", "type": "CanonicalState"}], "parameters": [{"name": "locale", "type": "string", "default": "en-US", "choices": ["en-US", "en-GB", "de-DE"]}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.9, "latency_ms": 9, "cost_usd": 0.0}}, {"id": "demo.canonicalize.passthrough", "kind": "passthrough", "name": "passthrough", "version": "1.0", "schema_version": "2.0", "description": "Certifies the input already satisfies the canonical contract.", "roles": ["control"], "capabilities": ["canonicalize"], "tags": ["pass-through"], "inputs": [{"name": "input", "type": "InputHandle"}], "outputs": [{"name": "output", "type": "CanonicalState"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.75, "latency_ms": 1, "cost_usd": 0.0}}, {"id": "demo.enrich.context_joiner", "kind": "context_joiner", "name": "context joiner", "version": "1.0", "schema_version": "2.0", "description": "Joins authorized context onto the canonical state.", "roles": ["transform"], "capabilities": ["enrich"], "permissions": ["database:read"], "inputs": [{"name": "input", "type": "CanonicalState"}], "outputs": [{"name": "output", "type": "EnrichedState"}], "parameters": [{"name": "join", "type": "string", "default": "inner", "choices": ["inner", "left", "fuzzy"]}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.89, "latency_ms": 70, "cost_usd": 0.0}}, {"id": "demo.enrich.reference_lookup", "kind": "reference_lookup", "name": "reference lookup", "version": "1.0", "schema_version": "2.0", "description": "Looks values up in an authoritative reference set.", "roles": ["transform"], "capabilities": ["enrich"], "permissions": ["network"], "inputs": [{"name": "input", "type": "CanonicalState"}], "outputs": [{"name": "output", "type": "EnrichedState"}], "parameters": [{"name": "source", "type": "string", "default": "internal", "choices": ["internal", "external"]}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.91, "latency_ms": 210, "cost_usd": 0.0}}, {"id": "demo.enrich.embedding_enricher", "kind": "embedding_enricher", "name": "embedding enricher", "version": "1.0", "schema_version": "2.0", "description": "Attaches vector representations for retrieval.", "roles": ["model", "transform"], "capabilities": ["enrich"], "inputs": [{"name": "input", "type": "CanonicalState"}], "outputs": [{"name": "output", "type": "EnrichedState"}], "parameters": [{"name": "model", "type": "string", "default": "small", "choices": ["small", "base", "large"]}], "runtime": {"deterministic": false, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.85, "latency_ms": 340, "cost_usd": 0.0004}}, {"id": "demo.enrich.provenance_stamper", "kind": "provenance_stamper", "name": "provenance stamper", "version": "1.0", "schema_version": "2.0", "description": "Stamps origin, version and freshness onto every field.", "roles": ["transform"], "capabilities": ["enrich"], "inputs": [{"name": "input", "type": "CanonicalState"}], "outputs": [{"name": "output", "type": "EnrichedState"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.99, "latency_ms": 3, "cost_usd": 0.0}}, {"id": "demo.enrich.freshness_ttl", "kind": "freshness_checker", "name": "freshness ttl", "version": "1.0", "schema_version": "2.0", "description": "Rejects context older than a declared time to live.", "roles": ["control"], "capabilities": ["enrich"], "inputs": [{"name": "input", "type": "CanonicalState"}], "outputs": [{"name": "output", "type": "EnrichedState"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.95, "latency_ms": 5, "cost_usd": 0.0}}, {"id": "demo.enrich.freshness_etag", "kind": "freshness_checker", "name": "freshness etag", "version": "1.0", "schema_version": "2.0", "description": "Revalidates context against an upstream entity tag.", "roles": ["control"], "capabilities": ["enrich"], "permissions": ["network"], "inputs": [{"name": "input", "type": "CanonicalState"}], "outputs": [{"name": "output", "type": "EnrichedState"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.97, "latency_ms": 120, "cost_usd": 0.0}}, {"id": "demo.enrich.geocoder", "kind": "geocoder", "name": "geocoder", "version": "1.0", "schema_version": "2.0", "description": "Resolves addresses to coordinates and reference regions.", "roles": ["transform"], "capabilities": ["enrich"], "permissions": ["network"], "inputs": [{"name": "input", "type": "CanonicalState"}], "outputs": [{"name": "output", "type": "EnrichedState"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.86, "latency_ms": 260, "cost_usd": 0.0}}, {"id": "demo.enrich.passthrough", "kind": "passthrough", "name": "passthrough", "version": "1.0", "schema_version": "2.0", "description": "Certifies the state already carries the required context.", "roles": ["control"], "capabilities": ["enrich"], "tags": ["pass-through"], "inputs": [{"name": "input", "type": "CanonicalState"}], "outputs": [{"name": "output", "type": "EnrichedState"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.7, "latency_ms": 1, "cost_usd": 0.0}}, {"id": "demo.transform.deterministic_rules", "kind": "deterministic_rules", "name": "deterministic rules", "version": "1.0", "schema_version": "2.0", "description": "Applies reviewed, deterministic rules.", "roles": ["transform"], "capabilities": ["transform"], "inputs": [{"name": "input", "type": "EnrichedState"}], "outputs": [{"name": "output", "type": "CandidateResult"}], "parameters": [{"name": "ruleset", "type": "string", "default": "conservative", "choices": ["conservative", "aggressive"]}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.84, "latency_ms": 15, "cost_usd": 0.0}}, {"id": "demo.transform.llm_parser", "kind": "llm_parser", "name": "llm parser", "version": "1.0", "schema_version": "2.0", "description": "Asks a language model for a structured result.", "roles": ["model", "transform"], "capabilities": ["transform"], "permissions": ["llm"], "inputs": [{"name": "input", "type": "EnrichedState"}], "outputs": [{"name": "output", "type": "CandidateResult"}], "parameters": [{"name": "model", "type": "string", "default": "Gemini", "choices": ["Gemini", "DeepSeek", "GLM"]}, {"name": "strategy", "type": "string", "default": "single-schema", "choices": ["single-schema", "field-by-field"]}], "runtime": {"deterministic": false, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.9, "latency_ms": 1800, "cost_usd": 0.012}}, {"id": "demo.transform.statistical_model", "kind": "statistical_model", "name": "statistical model", "version": "1.0", "schema_version": "2.0", "description": "Applies a fitted statistical model.", "roles": ["model"], "capabilities": ["transform"], "inputs": [{"name": "input", "type": "EnrichedState"}], "outputs": [{"name": "output", "type": "CandidateResult"}], "parameters": [{"name": "family", "type": "string", "default": "linear", "choices": ["linear", "tree"]}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.87, "latency_ms": 45, "cost_usd": 0.0}}, {"id": "demo.transform.composite", "kind": "composite_transform", "name": "composite", "version": "1.0", "schema_version": "2.0", "description": "Runs a validated child graph and exposes its external ports.", "roles": ["composite"], "capabilities": ["transform"], "permissions": ["llm"], "inputs": [{"name": "input", "type": "EnrichedState"}], "outputs": [{"name": "output", "type": "CandidateResult"}], "parameters": [{"name": "children", "type": "string", "default": "rules+llm", "choices": ["rules+llm", "rules+model"]}], "runtime": {"deterministic": false, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.93, "latency_ms": 2100, "cost_usd": 0.014}}, {"id": "demo.transform.human_operator", "kind": "human_operator", "name": "human operator", "version": "1.0", "schema_version": "2.0", "description": "Routes the decision to an authorized person.", "roles": ["action"], "capabilities": ["transform"], "permissions": ["human"], "inputs": [{"name": "input", "type": "EnrichedState"}], "outputs": [{"name": "output", "type": "CandidateResult"}], "runtime": {"deterministic": false, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.98, "latency_ms": 900000, "cost_usd": 2.5}}, {"id": "demo.transform.browser_action", "kind": "browser_action", "name": "browser action", "version": "1.0", "schema_version": "2.0", "description": "Performs a permitted external effect in a browser.", "roles": ["action"], "capabilities": ["transform"], "permissions": ["browser", "network"], "effects": ["external:remote-state"], "inputs": [{"name": "input", "type": "EnrichedState"}], "outputs": [{"name": "output", "type": "CandidateResult"}], "runtime": {"deterministic": false, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.8, "latency_ms": 3200, "cost_usd": 0.0}}, {"id": "demo.verify.schema_json", "kind": "schema_validator", "name": "schema json", "version": "1.0", "schema_version": "2.0", "description": "Checks the result against a JSON Schema.", "roles": ["verifier"], "capabilities": ["verify"], "inputs": [{"name": "input", "type": "CandidateResult"}], "outputs": [{"name": "output", "type": "VerifiedOutcome"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.9, "latency_ms": 6, "cost_usd": 0.0}}, {"id": "demo.verify.schema_typed", "kind": "schema_validator", "name": "schema typed", "version": "1.0", "schema_version": "2.0", "description": "Checks the result against typed models.", "roles": ["verifier"], "capabilities": ["verify"], "inputs": [{"name": "input", "type": "CandidateResult"}], "outputs": [{"name": "output", "type": "VerifiedOutcome"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.92, "latency_ms": 9, "cost_usd": 0.0}}, {"id": "demo.verify.oracle", "kind": "oracle_check", "name": "oracle", "version": "1.0", "schema_version": "2.0", "description": "Compares against an independent source of truth.", "roles": ["verifier"], "capabilities": ["verify"], "inputs": [{"name": "input", "type": "CandidateResult"}], "outputs": [{"name": "output", "type": "VerifiedOutcome"}], "parameters": [{"name": "oracle", "type": "string", "default": "reference-data", "choices": ["reference-data", "recomputation"]}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.95, "latency_ms": 180, "cost_usd": 0.0}}, {"id": "demo.verify.consensus", "kind": "consensus_vote", "name": "consensus", "version": "1.0", "schema_version": "2.0", "description": "Requires agreement between independent producers.", "roles": ["verifier"], "capabilities": ["verify"], "inputs": [{"name": "input", "type": "CandidateResult"}], "outputs": [{"name": "output", "type": "VerifiedOutcome"}], "parameters": [{"name": "rule", "type": "string", "default": "unanimous", "choices": ["unanimous", "majority", "weighted"]}], "runtime": {"deterministic": false, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.97, "latency_ms": 2600, "cost_usd": 0.02}}, {"id": "demo.verify.human_review", "kind": "human_review", "name": "human review", "version": "1.0", "schema_version": "2.0", "description": "An authorized person accepts or rejects the outcome.", "roles": ["verifier"], "capabilities": ["verify"], "permissions": ["human"], "inputs": [{"name": "input", "type": "CandidateResult"}], "outputs": [{"name": "output", "type": "VerifiedOutcome"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.99, "latency_ms": 1200000, "cost_usd": 3.0}}, {"id": "demo.verify.visual_diff", "kind": "visual_diff", "name": "visual diff", "version": "1.0", "schema_version": "2.0", "description": "Compares rendered output against an approved baseline.", "roles": ["verifier"], "capabilities": ["verify"], "inputs": [{"name": "input", "type": "CandidateResult"}], "outputs": [{"name": "output", "type": "VerifiedOutcome"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.88, "latency_ms": 420, "cost_usd": 0.0}}, {"id": "demo.verify.ocr_check", "kind": "ocr_verifier", "name": "ocr check", "version": "1.0", "schema_version": "2.0", "description": "Confirms the result is visible to a reader, not merely present.", "roles": ["verifier"], "capabilities": ["verify"], "inputs": [{"name": "input", "type": "CandidateResult"}], "outputs": [{"name": "output", "type": "VerifiedOutcome"}], "parameters": [{"name": "backend", "type": "string", "default": "rapidocr", "choices": ["rapidocr", "tesseract"]}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.86, "latency_ms": 650, "cost_usd": 0.0}}, {"id": "demo.emit.file_json", "kind": "file_writer", "name": "file json", "version": "1.0", "schema_version": "2.0", "description": "Writes the result and receipt as JSON.", "roles": ["sink"], "capabilities": ["emit"], "permissions": ["filesystem:write"], "effects": ["local:file"], "inputs": [{"name": "input", "type": "VerifiedOutcome"}], "outputs": [{"name": "output", "type": "TaskReceipt"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.99, "latency_ms": 7, "cost_usd": 0.0}}, {"id": "demo.emit.file_columnar", "kind": "file_writer", "name": "file columnar", "version": "1.0", "schema_version": "2.0", "description": "Writes the result and receipt in a columnar format.", "roles": ["sink"], "capabilities": ["emit"], "permissions": ["filesystem:write"], "effects": ["local:file"], "inputs": [{"name": "input", "type": "VerifiedOutcome"}], "outputs": [{"name": "output", "type": "TaskReceipt"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.98, "latency_ms": 26, "cost_usd": 0.0}}, {"id": "demo.emit.api_publisher", "kind": "api_publisher", "name": "api publisher", "version": "1.0", "schema_version": "2.0", "description": "Publishes the result to an authorized endpoint.", "roles": ["sink", "action"], "capabilities": ["emit"], "permissions": ["network"], "effects": ["external:published"], "inputs": [{"name": "input", "type": "VerifiedOutcome"}], "outputs": [{"name": "output", "type": "TaskReceipt"}], "parameters": [{"name": "delivery", "type": "string", "default": "at-least-once", "choices": ["at-least-once", "exactly-once"]}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.93, "latency_ms": 290, "cost_usd": 0.0}}, {"id": "demo.emit.database_writer", "kind": "database_writer", "name": "database writer", "version": "1.0", "schema_version": "2.0", "description": "Writes the result to an authorized table.", "roles": ["sink"], "capabilities": ["emit"], "permissions": ["database:write"], "effects": ["external:row-state"], "inputs": [{"name": "input", "type": "VerifiedOutcome"}], "outputs": [{"name": "output", "type": "TaskReceipt"}], "parameters": [{"name": "mode", "type": "string", "default": "append", "choices": ["append", "upsert"]}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.96, "latency_ms": 110, "cost_usd": 0.0}}, {"id": "demo.emit.evidence_bundler", "kind": "evidence_bundler", "name": "evidence bundler", "version": "1.0", "schema_version": "2.0", "description": "Bundles artifacts, provenance and replay data into a receipt.", "roles": ["sink"], "capabilities": ["emit"], "permissions": ["filesystem:write"], "effects": ["local:file"], "inputs": [{"name": "input", "type": "VerifiedOutcome"}], "outputs": [{"name": "output", "type": "TaskReceipt"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.99, "latency_ms": 40, "cost_usd": 0.0}}, {"id": "demo.emit.notifier", "kind": "notifier", "name": "notifier", "version": "1.0", "schema_version": "2.0", "description": "Notifies authorized parties that the task completed.", "roles": ["sink", "action"], "capabilities": ["emit"], "permissions": ["network"], "effects": ["external:notification"], "inputs": [{"name": "input", "type": "VerifiedOutcome"}], "outputs": [{"name": "output", "type": "TaskReceipt"}], "runtime": {"deterministic": true, "sandbox": "process"}, "metrics": {"source": "illustrative-prior", "evidence": 0, "quality": 0.9, "latency_ms": 150, "cost_usd": 0.0}}], "candidates": [{"id": "demo.acquire.browser_adapter.chrome.browserport.headless.02013536", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chrome · BrowserPort · headless", "params": {"controller": "BrowserPort", "binary": "Chrome", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.chrome.browserport.headed.284863cb", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chrome · BrowserPort · headed", "params": {"controller": "BrowserPort", "binary": "Chrome", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.chromium.browserport.headless.ad62b5ee", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chromium · BrowserPort · headless", "params": {"controller": "BrowserPort", "binary": "Chromium", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.chromium.browserport.headed.eb97ce14", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chromium · BrowserPort · headed", "params": {"controller": "BrowserPort", "binary": "Chromium", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.edge.browserport.headless.ff1cdf67", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Edge · BrowserPort · headless", "params": {"controller": "BrowserPort", "binary": "Edge", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.edge.browserport.headed.d3497d86", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Edge · BrowserPort · headed", "params": {"controller": "BrowserPort", "binary": "Edge", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.firefox.browserport.headless.2d92d84b", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Firefox · BrowserPort · headless", "params": {"controller": "BrowserPort", "binary": "Firefox", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.firefox.browserport.headed.382a54da", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Firefox · BrowserPort · headed", "params": {"controller": "BrowserPort", "binary": "Firefox", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.webkit.browserport.headless.eee81e7d", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · WebKit · BrowserPort · headless", "params": {"controller": "BrowserPort", "binary": "WebKit", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.webkit.browserport.headed.acb96ce8", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · WebKit · BrowserPort · headed", "params": {"controller": "BrowserPort", "binary": "WebKit", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.brave.browserport.headless.45013e6e", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Brave · BrowserPort · headless", "params": {"controller": "BrowserPort", "binary": "Brave", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.brave.browserport.headed.2e59efe5", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Brave · BrowserPort · headed", "params": {"controller": "BrowserPort", "binary": "Brave", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.chrome.playwright.headless.11b2e04d", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chrome · Playwright · headless", "params": {"controller": "Playwright", "binary": "Chrome", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.chrome.playwright.headed.9f4e703f", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chrome · Playwright · headed", "params": {"controller": "Playwright", "binary": "Chrome", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.chromium.playwright.headless.f918e9ee", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chromium · Playwright · headless", "params": {"controller": "Playwright", "binary": "Chromium", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.chromium.playwright.headed.bdb4e881", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chromium · Playwright · headed", "params": {"controller": "Playwright", "binary": "Chromium", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.edge.playwright.headless.fd1d93c6", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Edge · Playwright · headless", "params": {"controller": "Playwright", "binary": "Edge", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.edge.playwright.headed.a0092eca", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Edge · Playwright · headed", "params": {"controller": "Playwright", "binary": "Edge", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.firefox.playwright.headless.22984131", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Firefox · Playwright · headless", "params": {"controller": "Playwright", "binary": "Firefox", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.firefox.playwright.headed.19939504", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Firefox · Playwright · headed", "params": {"controller": "Playwright", "binary": "Firefox", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.webkit.playwright.headless.11758c0d", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · WebKit · Playwright · headless", "params": {"controller": "Playwright", "binary": "WebKit", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.webkit.playwright.headed.d0410ba1", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · WebKit · Playwright · headed", "params": {"controller": "Playwright", "binary": "WebKit", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.brave.playwright.headless.bfd125bd", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Brave · Playwright · headless", "params": {"controller": "Playwright", "binary": "Brave", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.brave.playwright.headed.dafcdda4", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Brave · Playwright · headed", "params": {"controller": "Playwright", "binary": "Brave", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.chrome.selenium.headless.525d7325", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chrome · Selenium · headless", "params": {"controller": "Selenium", "binary": "Chrome", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.chrome.selenium.headed.5469438c", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chrome · Selenium · headed", "params": {"controller": "Selenium", "binary": "Chrome", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.chromium.selenium.headless.ad5a26e9", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chromium · Selenium · headless", "params": {"controller": "Selenium", "binary": "Chromium", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.chromium.selenium.headed.89acd76a", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chromium · Selenium · headed", "params": {"controller": "Selenium", "binary": "Chromium", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.edge.selenium.headless.608bb3e7", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Edge · Selenium · headless", "params": {"controller": "Selenium", "binary": "Edge", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.edge.selenium.headed.4ed816ca", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Edge · Selenium · headed", "params": {"controller": "Selenium", "binary": "Edge", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.firefox.selenium.headless.5c20979d", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Firefox · Selenium · headless", "params": {"controller": "Selenium", "binary": "Firefox", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.firefox.selenium.headed.2cd57496", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Firefox · Selenium · headed", "params": {"controller": "Selenium", "binary": "Firefox", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.webkit.selenium.headless.13e11106", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · WebKit · Selenium · headless", "params": {"controller": "Selenium", "binary": "WebKit", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.webkit.selenium.headed.1552c0f5", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · WebKit · Selenium · headed", "params": {"controller": "Selenium", "binary": "WebKit", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.brave.selenium.headless.801d4f99", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Brave · Selenium · headless", "params": {"controller": "Selenium", "binary": "Brave", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.brave.selenium.headed.d5f0847d", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Brave · Selenium · headed", "params": {"controller": "Selenium", "binary": "Brave", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.chrome.puppeteer.headless.009ca7e8", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chrome · Puppeteer · headless", "params": {"controller": "Puppeteer", "binary": "Chrome", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.chrome.puppeteer.headed.a9bbe5d3", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chrome · Puppeteer · headed", "params": {"controller": "Puppeteer", "binary": "Chrome", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.chromium.puppeteer.headless.cb477762", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chromium · Puppeteer · headless", "params": {"controller": "Puppeteer", "binary": "Chromium", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.chromium.puppeteer.headed.f1335ac8", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chromium · Puppeteer · headed", "params": {"controller": "Puppeteer", "binary": "Chromium", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.edge.puppeteer.headless.aeca0b0c", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Edge · Puppeteer · headless", "params": {"controller": "Puppeteer", "binary": "Edge", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.edge.puppeteer.headed.e7e4fae1", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Edge · Puppeteer · headed", "params": {"controller": "Puppeteer", "binary": "Edge", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.firefox.puppeteer.headless.769aa5fc", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Firefox · Puppeteer · headless", "params": {"controller": "Puppeteer", "binary": "Firefox", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.firefox.puppeteer.headed.8f78d442", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Firefox · Puppeteer · headed", "params": {"controller": "Puppeteer", "binary": "Firefox", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.webkit.puppeteer.headless.b200a1d5", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · WebKit · Puppeteer · headless", "params": {"controller": "Puppeteer", "binary": "WebKit", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.webkit.puppeteer.headed.0445ddf3", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · WebKit · Puppeteer · headed", "params": {"controller": "Puppeteer", "binary": "WebKit", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.brave.puppeteer.headless.41223f3f", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Brave · Puppeteer · headless", "params": {"controller": "Puppeteer", "binary": "Brave", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.brave.puppeteer.headed.80df8067", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Brave · Puppeteer · headed", "params": {"controller": "Puppeteer", "binary": "Brave", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.chrome.cdp.headless.7b3d2d1a", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chrome · CDP · headless", "params": {"controller": "CDP", "binary": "Chrome", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.chrome.cdp.headed.bf606d79", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chrome · CDP · headed", "params": {"controller": "CDP", "binary": "Chrome", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.chromium.cdp.headless.dcb84e01", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chromium · CDP · headless", "params": {"controller": "CDP", "binary": "Chromium", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.chromium.cdp.headed.b5f730a4", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Chromium · CDP · headed", "params": {"controller": "CDP", "binary": "Chromium", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.edge.cdp.headless.1018c1fd", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Edge · CDP · headless", "params": {"controller": "CDP", "binary": "Edge", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.edge.cdp.headed.8ccf465d", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Edge · CDP · headed", "params": {"controller": "CDP", "binary": "Edge", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.firefox.cdp.headless.c2301d7d", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Firefox · CDP · headless", "params": {"controller": "CDP", "binary": "Firefox", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.firefox.cdp.headed.c06b076b", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Firefox · CDP · headed", "params": {"controller": "CDP", "binary": "Firefox", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.webkit.cdp.headless.eac28b36", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · WebKit · CDP · headless", "params": {"controller": "CDP", "binary": "WebKit", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.webkit.cdp.headed.d9646df0", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · WebKit · CDP · headed", "params": {"controller": "CDP", "binary": "WebKit", "display": "headed"}}, {"id": "demo.acquire.browser_adapter.brave.cdp.headless.1be4a10d", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Brave · CDP · headless", "params": {"controller": "CDP", "binary": "Brave", "display": "headless"}}, {"id": "demo.acquire.browser_adapter.brave.cdp.headed.6313c7b2", "node_id": "demo.acquire.browser_adapter", "name": "browser adapter · Brave · CDP · headed", "params": {"controller": "CDP", "binary": "Brave", "display": "headed"}}, {"id": "demo.acquire.file_loader.file.7623f426", "node_id": "demo.acquire.file_loader", "name": "file loader · file", "params": {"mode": "file"}}, {"id": "demo.acquire.file_loader.directory.acf57694", "node_id": "demo.acquire.file_loader", "name": "file loader · directory", "params": {"mode": "directory"}}, {"id": "demo.acquire.file_loader.glob.27bbb52a", "node_id": "demo.acquire.file_loader", "name": "file loader · glob", "params": {"mode": "glob"}}, {"id": "demo.acquire.api_loader.get.78b22e42", "node_id": "demo.acquire.api_loader", "name": "api loader · GET", "params": {"method": "GET"}}, {"id": "demo.acquire.api_loader.post.34eba557", "node_id": "demo.acquire.api_loader", "name": "api loader · POST", "params": {"method": "POST"}}, {"id": "demo.acquire.api_loader.put.ad214c53", "node_id": "demo.acquire.api_loader", "name": "api loader · PUT", "params": {"method": "PUT"}}, {"id": "demo.acquire.database_loader.postgres.c03717ca", "node_id": "demo.acquire.database_loader", "name": "database loader · postgres", "params": {"dialect": "postgres"}}, {"id": "demo.acquire.database_loader.mysql.bb783976", "node_id": "demo.acquire.database_loader", "name": "database loader · mysql", "params": {"dialect": "mysql"}}, {"id": "demo.acquire.database_loader.sqlite.cd9207b6", "node_id": "demo.acquire.database_loader", "name": "database loader · sqlite", "params": {"dialect": "sqlite"}}, {"id": "demo.acquire.database_loader.bigquery.1e1d27ee", "node_id": "demo.acquire.database_loader", "name": "database loader · bigquery", "params": {"dialect": "bigquery"}}, {"id": "demo.acquire.queue_kafka", "node_id": "demo.acquire.queue_kafka", "name": "queue kafka"}, {"id": "demo.acquire.queue_sqs", "node_id": "demo.acquire.queue_sqs", "name": "queue sqs"}, {"id": "demo.acquire.stream_http", "node_id": "demo.acquire.stream_http", "name": "stream http"}, {"id": "demo.acquire.stream_websocket", "node_id": "demo.acquire.stream_websocket", "name": "stream websocket"}, {"id": "demo.acquire.archive_zip", "node_id": "demo.acquire.archive_zip", "name": "archive zip"}, {"id": "demo.acquire.archive_tar", "node_id": "demo.acquire.archive_tar", "name": "archive tar"}, {"id": "demo.canonicalize.text_normalizer.preserve.nfc.4b139767", "node_id": "demo.canonicalize.text_normalizer", "name": "text normalizer · preserve · NFC", "params": {"form": "NFC", "case": "preserve"}}, {"id": "demo.canonicalize.text_normalizer.fold.nfc.39c799a2", "node_id": "demo.canonicalize.text_normalizer", "name": "text normalizer · fold · NFC", "params": {"form": "NFC", "case": "fold"}}, {"id": "demo.canonicalize.text_normalizer.preserve.nfkc.163f8c8a", "node_id": "demo.canonicalize.text_normalizer", "name": "text normalizer · preserve · NFKC", "params": {"form": "NFKC", "case": "preserve"}}, {"id": "demo.canonicalize.text_normalizer.fold.nfkc.b7cf3e3e", "node_id": "demo.canonicalize.text_normalizer", "name": "text normalizer · fold · NFKC", "params": {"form": "NFKC", "case": "fold"}}, {"id": "demo.canonicalize.text_normalizer.preserve.nfd.beb9cd70", "node_id": "demo.canonicalize.text_normalizer", "name": "text normalizer · preserve · NFD", "params": {"form": "NFD", "case": "preserve"}}, {"id": "demo.canonicalize.text_normalizer.fold.nfd.092f62f1", "node_id": "demo.canonicalize.text_normalizer", "name": "text normalizer · fold · NFD", "params": {"form": "NFD", "case": "fold"}}, {"id": "demo.canonicalize.schema_mapper.strict.d7d3cfad", "node_id": "demo.canonicalize.schema_mapper", "name": "schema mapper · strict", "params": {"strategy": "strict"}}, {"id": "demo.canonicalize.schema_mapper.lenient.db56168a", "node_id": "demo.canonicalize.schema_mapper", "name": "schema mapper · lenient", "params": {"strategy": "lenient"}}, {"id": "demo.canonicalize.schema_mapper.inferred.fb02f3a7", "node_id": "demo.canonicalize.schema_mapper", "name": "schema mapper · inferred", "params": {"strategy": "inferred"}}, {"id": "demo.canonicalize.unit_metric", "node_id": "demo.canonicalize.unit_metric", "name": "unit metric"}, {"id": "demo.canonicalize.unit_imperial", "node_id": "demo.canonicalize.unit_imperial", "name": "unit imperial"}, {"id": "demo.canonicalize.encoding_chardet", "node_id": "demo.canonicalize.encoding_chardet", "name": "encoding chardet"}, {"id": "demo.canonicalize.encoding_bom", "node_id": "demo.canonicalize.encoding_bom", "name": "encoding bom"}, {"id": "demo.canonicalize.format_parser.json.61dc29a0", "node_id": "demo.canonicalize.format_parser", "name": "format parser · json", "params": {"format": "json"}}, {"id": "demo.canonicalize.format_parser.csv.7eb7a319", "node_id": "demo.canonicalize.format_parser", "name": "format parser · csv", "params": {"format": "csv"}}, {"id": "demo.canonicalize.format_parser.xml.dd052a3a", "node_id": "demo.canonicalize.format_parser", "name": "format parser · xml", "params": {"format": "xml"}}, {"id": "demo.canonicalize.format_parser.yaml.b0d363f5", "node_id": "demo.canonicalize.format_parser", "name": "format parser · yaml", "params": {"format": "yaml"}}, {"id": "demo.canonicalize.identity_resolver.natural.2477b2b9", "node_id": "demo.canonicalize.identity_resolver", "name": "identity resolver · natural", "params": {"key": "natural"}}, {"id": "demo.canonicalize.identity_resolver.surrogate.b30a0f13", "node_id": "demo.canonicalize.identity_resolver", "name": "identity resolver · surrogate", "params": {"key": "surrogate"}}, {"id": "demo.canonicalize.identity_resolver.composite.30f77fb4", "node_id": "demo.canonicalize.identity_resolver", "name": "identity resolver · composite", "params": {"key": "composite"}}, {"id": "demo.canonicalize.table_canonicalizer.first-row.a70894da", "node_id": "demo.canonicalize.table_canonicalizer", "name": "table canonicalizer · first-row", "params": {"headers": "first-row"}}, {"id": "demo.canonicalize.table_canonicalizer.declared.5f2f8377", "node_id": "demo.canonicalize.table_canonicalizer", "name": "table canonicalizer · declared", "params": {"headers": "declared"}}, {"id": "demo.canonicalize.table_canonicalizer.inferred.ac5137f6", "node_id": "demo.canonicalize.table_canonicalizer", "name": "table canonicalizer · inferred", "params": {"headers": "inferred"}}, {"id": "demo.canonicalize.locale_normalizer.en-us.51a3c39a", "node_id": "demo.canonicalize.locale_normalizer", "name": "locale normalizer · en-US", "params": {"locale": "en-US"}}, {"id": "demo.canonicalize.locale_normalizer.en-gb.910aa7ce", "node_id": "demo.canonicalize.locale_normalizer", "name": "locale normalizer · en-GB", "params": {"locale": "en-GB"}}, {"id": "demo.canonicalize.locale_normalizer.de-de.528ee685", "node_id": "demo.canonicalize.locale_normalizer", "name": "locale normalizer · de-DE", "params": {"locale": "de-DE"}}, {"id": "demo.canonicalize.passthrough", "node_id": "demo.canonicalize.passthrough", "name": "passthrough", "tags": ["pass-through"]}, {"id": "demo.enrich.context_joiner.inner.f8ebf160", "node_id": "demo.enrich.context_joiner", "name": "context joiner · inner", "params": {"join": "inner"}}, {"id": "demo.enrich.context_joiner.left.45f3d727", "node_id": "demo.enrich.context_joiner", "name": "context joiner · left", "params": {"join": "left"}}, {"id": "demo.enrich.context_joiner.fuzzy.f0b6ecb8", "node_id": "demo.enrich.context_joiner", "name": "context joiner · fuzzy", "params": {"join": "fuzzy"}}, {"id": "demo.enrich.reference_lookup.internal.7bcdbdbd", "node_id": "demo.enrich.reference_lookup", "name": "reference lookup · internal", "params": {"source": "internal"}}, {"id": "demo.enrich.reference_lookup.external.46429466", "node_id": "demo.enrich.reference_lookup", "name": "reference lookup · external", "params": {"source": "external"}}, {"id": "demo.enrich.embedding_enricher.small.d6798da8", "node_id": "demo.enrich.embedding_enricher", "name": "embedding enricher · small", "params": {"model": "small"}}, {"id": "demo.enrich.embedding_enricher.base.4054f14c", "node_id": "demo.enrich.embedding_enricher", "name": "embedding enricher · base", "params": {"model": "base"}}, {"id": "demo.enrich.embedding_enricher.large.66a187e7", "node_id": "demo.enrich.embedding_enricher", "name": "embedding enricher · large", "params": {"model": "large"}}, {"id": "demo.enrich.provenance_stamper", "node_id": "demo.enrich.provenance_stamper", "name": "provenance stamper"}, {"id": "demo.enrich.freshness_ttl", "node_id": "demo.enrich.freshness_ttl", "name": "freshness ttl"}, {"id": "demo.enrich.freshness_etag", "node_id": "demo.enrich.freshness_etag", "name": "freshness etag"}, {"id": "demo.enrich.geocoder", "node_id": "demo.enrich.geocoder", "name": "geocoder"}, {"id": "demo.enrich.passthrough", "node_id": "demo.enrich.passthrough", "name": "passthrough", "tags": ["pass-through"]}, {"id": "demo.transform.deterministic_rules.conservative.edeb0b14", "node_id": "demo.transform.deterministic_rules", "name": "deterministic rules · conservative", "params": {"ruleset": "conservative"}}, {"id": "demo.transform.deterministic_rules.aggressive.0686452c", "node_id": "demo.transform.deterministic_rules", "name": "deterministic rules · aggressive", "params": {"ruleset": "aggressive"}}, {"id": "demo.transform.llm_parser.gemini.single-schema.c1f4d978", "node_id": "demo.transform.llm_parser", "name": "llm parser · Gemini · single-schema", "params": {"model": "Gemini", "strategy": "single-schema"}}, {"id": "demo.transform.llm_parser.gemini.field-by-field.c294af8f", "node_id": "demo.transform.llm_parser", "name": "llm parser · Gemini · field-by-field", "params": {"model": "Gemini", "strategy": "field-by-field"}}, {"id": "demo.transform.llm_parser.deepseek.single-schema.4ea72f4c", "node_id": "demo.transform.llm_parser", "name": "llm parser · DeepSeek · single-schema", "params": {"model": "DeepSeek", "strategy": "single-schema"}}, {"id": "demo.transform.llm_parser.deepseek.field-by-field.e6cbbbe5", "node_id": "demo.transform.llm_parser", "name": "llm parser · DeepSeek · field-by-field", "params": {"model": "DeepSeek", "strategy": "field-by-field"}}, {"id": "demo.transform.llm_parser.glm.single-schema.37e19864", "node_id": "demo.transform.llm_parser", "name": "llm parser · GLM · single-schema", "params": {"model": "GLM", "strategy": "single-schema"}}, {"id": "demo.transform.llm_parser.glm.field-by-field.7cc976f3", "node_id": "demo.transform.llm_parser", "name": "llm parser · GLM · field-by-field", "params": {"model": "GLM", "strategy": "field-by-field"}}, {"id": "demo.transform.statistical_model.linear.54cc921b", "node_id": "demo.transform.statistical_model", "name": "statistical model · linear", "params": {"family": "linear"}}, {"id": "demo.transform.statistical_model.tree.dbb904f7", "node_id": "demo.transform.statistical_model", "name": "statistical model · tree", "params": {"family": "tree"}}, {"id": "demo.transform.composite.rules-llm.c20cf6f5", "node_id": "demo.transform.composite", "name": "composite · rules+llm", "params": {"children": "rules+llm"}}, {"id": "demo.transform.composite.rules-model.aa7bc6b4", "node_id": "demo.transform.composite", "name": "composite · rules+model", "params": {"children": "rules+model"}}, {"id": "demo.transform.human_operator", "node_id": "demo.transform.human_operator", "name": "human operator"}, {"id": "demo.transform.browser_action", "node_id": "demo.transform.browser_action", "name": "browser action"}, {"id": "demo.verify.schema_json", "node_id": "demo.verify.schema_json", "name": "schema json"}, {"id": "demo.verify.schema_typed", "node_id": "demo.verify.schema_typed", "name": "schema typed"}, {"id": "demo.verify.oracle.reference-data.09137280", "node_id": "demo.verify.oracle", "name": "oracle · reference-data", "params": {"oracle": "reference-data"}}, {"id": "demo.verify.oracle.recomputation.844b8e66", "node_id": "demo.verify.oracle", "name": "oracle · recomputation", "params": {"oracle": "recomputation"}}, {"id": "demo.verify.consensus.unanimous.adaa2e59", "node_id": "demo.verify.consensus", "name": "consensus · unanimous", "params": {"rule": "unanimous"}}, {"id": "demo.verify.consensus.majority.932f8596", "node_id": "demo.verify.consensus", "name": "consensus · majority", "params": {"rule": "majority"}}, {"id": "demo.verify.consensus.weighted.513ff31a", "node_id": "demo.verify.consensus", "name": "consensus · weighted", "params": {"rule": "weighted"}}, {"id": "demo.verify.human_review", "node_id": "demo.verify.human_review", "name": "human review"}, {"id": "demo.verify.visual_diff", "node_id": "demo.verify.visual_diff", "name": "visual diff"}, {"id": "demo.verify.ocr_check.rapidocr.ed28bda9", "node_id": "demo.verify.ocr_check", "name": "ocr check · rapidocr", "params": {"backend": "rapidocr"}}, {"id": "demo.verify.ocr_check.tesseract.e437fbf8", "node_id": "demo.verify.ocr_check", "name": "ocr check · tesseract", "params": {"backend": "tesseract"}}, {"id": "demo.emit.file_json", "node_id": "demo.emit.file_json", "name": "file json"}, {"id": "demo.emit.file_columnar", "node_id": "demo.emit.file_columnar", "name": "file columnar"}, {"id": "demo.emit.api_publisher.at-least-once.f3328466", "node_id": "demo.emit.api_publisher", "name": "api publisher · at-least-once", "params": {"delivery": "at-least-once"}}, {"id": "demo.emit.api_publisher.exactly-once.3961c5ed", "node_id": "demo.emit.api_publisher", "name": "api publisher · exactly-once", "params": {"delivery": "exactly-once"}}, {"id": "demo.emit.database_writer.append.7741c055", "node_id": "demo.emit.database_writer", "name": "database writer · append", "params": {"mode": "append"}}, {"id": "demo.emit.database_writer.upsert.4de1eedc", "node_id": "demo.emit.database_writer", "name": "database writer · upsert", "params": {"mode": "upsert"}}, {"id": "demo.emit.evidence_bundler", "node_id": "demo.emit.evidence_bundler", "name": "evidence bundler"}, {"id": "demo.emit.notifier", "node_id": "demo.emit.notifier", "name": "notifier"}], "stages": [{"id": "acquire", "name": "Acquire inputs", "description": "Resolve authorized task references into readable, versioned handles.", "input_type": "TaskReference", "output_type": "InputHandle", "success": "the input is readable, identified and versioned", "variant_axes": ["controller", "binary", "display", "transport"], "required_capabilities": ["acquire"], "candidates": ["demo.acquire.browser_adapter.chrome.browserport.headless.02013536", "demo.acquire.browser_adapter.chrome.browserport.headed.284863cb", "demo.acquire.browser_adapter.chromium.browserport.headless.ad62b5ee", "demo.acquire.browser_adapter.chromium.browserport.headed.eb97ce14", "demo.acquire.browser_adapter.edge.browserport.headless.ff1cdf67", "demo.acquire.browser_adapter.edge.browserport.headed.d3497d86", "demo.acquire.browser_adapter.firefox.browserport.headless.2d92d84b", "demo.acquire.browser_adapter.firefox.browserport.headed.382a54da", "demo.acquire.browser_adapter.webkit.browserport.headless.eee81e7d", "demo.acquire.browser_adapter.webkit.browserport.headed.acb96ce8", "demo.acquire.browser_adapter.brave.browserport.headless.45013e6e", "demo.acquire.browser_adapter.brave.browserport.headed.2e59efe5", "demo.acquire.browser_adapter.chrome.playwright.headless.11b2e04d", "demo.acquire.browser_adapter.chrome.playwright.headed.9f4e703f", "demo.acquire.browser_adapter.chromium.playwright.headless.f918e9ee", "demo.acquire.browser_adapter.chromium.playwright.headed.bdb4e881", "demo.acquire.browser_adapter.edge.playwright.headless.fd1d93c6", "demo.acquire.browser_adapter.edge.playwright.headed.a0092eca", "demo.acquire.browser_adapter.firefox.playwright.headless.22984131", "demo.acquire.browser_adapter.firefox.playwright.headed.19939504", "demo.acquire.browser_adapter.webkit.playwright.headless.11758c0d", "demo.acquire.browser_adapter.webkit.playwright.headed.d0410ba1", "demo.acquire.browser_adapter.brave.playwright.headless.bfd125bd", "demo.acquire.browser_adapter.brave.playwright.headed.dafcdda4", "demo.acquire.browser_adapter.chrome.selenium.headless.525d7325", "demo.acquire.browser_adapter.chrome.selenium.headed.5469438c", "demo.acquire.browser_adapter.chromium.selenium.headless.ad5a26e9", "demo.acquire.browser_adapter.chromium.selenium.headed.89acd76a", "demo.acquire.browser_adapter.edge.selenium.headless.608bb3e7", "demo.acquire.browser_adapter.edge.selenium.headed.4ed816ca", "demo.acquire.browser_adapter.firefox.selenium.headless.5c20979d", "demo.acquire.browser_adapter.firefox.selenium.headed.2cd57496", "demo.acquire.browser_adapter.webkit.selenium.headless.13e11106", "demo.acquire.browser_adapter.webkit.selenium.headed.1552c0f5", "demo.acquire.browser_adapter.brave.selenium.headless.801d4f99", "demo.acquire.browser_adapter.brave.selenium.headed.d5f0847d", "demo.acquire.browser_adapter.chrome.puppeteer.headless.009ca7e8", "demo.acquire.browser_adapter.chrome.puppeteer.headed.a9bbe5d3", "demo.acquire.browser_adapter.chromium.puppeteer.headless.cb477762", "demo.acquire.browser_adapter.chromium.puppeteer.headed.f1335ac8", "demo.acquire.browser_adapter.edge.puppeteer.headless.aeca0b0c", "demo.acquire.browser_adapter.edge.puppeteer.headed.e7e4fae1", "demo.acquire.browser_adapter.firefox.puppeteer.headless.769aa5fc", "demo.acquire.browser_adapter.firefox.puppeteer.headed.8f78d442", "demo.acquire.browser_adapter.webkit.puppeteer.headless.b200a1d5", "demo.acquire.browser_adapter.webkit.puppeteer.headed.0445ddf3", "demo.acquire.browser_adapter.brave.puppeteer.headless.41223f3f", "demo.acquire.browser_adapter.brave.puppeteer.headed.80df8067", "demo.acquire.browser_adapter.chrome.cdp.headless.7b3d2d1a", "demo.acquire.browser_adapter.chrome.cdp.headed.bf606d79", "demo.acquire.browser_adapter.chromium.cdp.headless.dcb84e01", "demo.acquire.browser_adapter.chromium.cdp.headed.b5f730a4", "demo.acquire.browser_adapter.edge.cdp.headless.1018c1fd", "demo.acquire.browser_adapter.edge.cdp.headed.8ccf465d", "demo.acquire.browser_adapter.firefox.cdp.headless.c2301d7d", "demo.acquire.browser_adapter.firefox.cdp.headed.c06b076b", "demo.acquire.browser_adapter.webkit.cdp.headless.eac28b36", "demo.acquire.browser_adapter.webkit.cdp.headed.d9646df0", "demo.acquire.browser_adapter.brave.cdp.headless.1be4a10d", "demo.acquire.browser_adapter.brave.cdp.headed.6313c7b2", "demo.acquire.file_loader.file.7623f426", "demo.acquire.file_loader.directory.acf57694", "demo.acquire.file_loader.glob.27bbb52a", "demo.acquire.api_loader.get.78b22e42", "demo.acquire.api_loader.post.34eba557", "demo.acquire.api_loader.put.ad214c53", "demo.acquire.database_loader.postgres.c03717ca", "demo.acquire.database_loader.mysql.bb783976", "demo.acquire.database_loader.sqlite.cd9207b6", "demo.acquire.database_loader.bigquery.1e1d27ee", "demo.acquire.queue_kafka", "demo.acquire.queue_sqs", "demo.acquire.stream_http", "demo.acquire.stream_websocket", "demo.acquire.archive_zip", "demo.acquire.archive_tar"]}, {"id": "canonicalize", "name": "Canonicalize representation", "description": "Make schema, units, encoding and identity explicit.", "input_type": "InputHandle", "output_type": "CanonicalState", "success": "downstream nodes receive a typed, versioned representation", "optional": true, "variant_axes": ["format", "schema", "units", "locale", "precision"], "required_capabilities": ["canonicalize"], "candidates": ["demo.canonicalize.text_normalizer.preserve.nfc.4b139767", "demo.canonicalize.text_normalizer.fold.nfc.39c799a2", "demo.canonicalize.text_normalizer.preserve.nfkc.163f8c8a", "demo.canonicalize.text_normalizer.fold.nfkc.b7cf3e3e", "demo.canonicalize.text_normalizer.preserve.nfd.beb9cd70", "demo.canonicalize.text_normalizer.fold.nfd.092f62f1", "demo.canonicalize.schema_mapper.strict.d7d3cfad", "demo.canonicalize.schema_mapper.lenient.db56168a", "demo.canonicalize.schema_mapper.inferred.fb02f3a7", "demo.canonicalize.unit_metric", "demo.canonicalize.unit_imperial", "demo.canonicalize.encoding_chardet", "demo.canonicalize.encoding_bom", "demo.canonicalize.format_parser.json.61dc29a0", "demo.canonicalize.format_parser.csv.7eb7a319", "demo.canonicalize.format_parser.xml.dd052a3a", "demo.canonicalize.format_parser.yaml.b0d363f5", "demo.canonicalize.identity_resolver.natural.2477b2b9", "demo.canonicalize.identity_resolver.surrogate.b30a0f13", "demo.canonicalize.identity_resolver.composite.30f77fb4", "demo.canonicalize.table_canonicalizer.first-row.a70894da", "demo.canonicalize.table_canonicalizer.declared.5f2f8377", "demo.canonicalize.table_canonicalizer.inferred.ac5137f6", "demo.canonicalize.locale_normalizer.en-us.51a3c39a", "demo.canonicalize.locale_normalizer.en-gb.910aa7ce", "demo.canonicalize.locale_normalizer.de-de.528ee685", "demo.canonicalize.passthrough"]}, {"id": "enrich", "name": "Enrich and derive context", "description": "Attach required context, evidence, provenance and freshness.", "input_type": "CanonicalState", "output_type": "EnrichedState", "success": "every derived field carries a source and a freshness stamp", "optional": true, "variant_axes": ["source", "recency", "depth"], "required_capabilities": ["enrich"], "candidates": ["demo.enrich.context_joiner.inner.f8ebf160", "demo.enrich.context_joiner.left.45f3d727", "demo.enrich.context_joiner.fuzzy.f0b6ecb8", "demo.enrich.reference_lookup.internal.7bcdbdbd", "demo.enrich.reference_lookup.external.46429466", "demo.enrich.embedding_enricher.small.d6798da8", "demo.enrich.embedding_enricher.base.4054f14c", "demo.enrich.embedding_enricher.large.66a187e7", "demo.enrich.provenance_stamper", "demo.enrich.freshness_ttl", "demo.enrich.freshness_etag", "demo.enrich.geocoder", "demo.enrich.passthrough"]}, {"id": "transform", "name": "Transform or act", "description": "Produce the result, or perform a permitted external effect.", "input_type": "EnrichedState", "output_type": "CandidateResult", "success": "a candidate result exists with its inputs recorded", "variant_axes": ["method", "model", "strategy"], "required_capabilities": ["transform"], "candidates": ["demo.transform.deterministic_rules.conservative.edeb0b14", "demo.transform.deterministic_rules.aggressive.0686452c", "demo.transform.llm_parser.gemini.single-schema.c1f4d978", "demo.transform.llm_parser.gemini.field-by-field.c294af8f", "demo.transform.llm_parser.deepseek.single-schema.4ea72f4c", "demo.transform.llm_parser.deepseek.field-by-field.e6cbbbe5", "demo.transform.llm_parser.glm.single-schema.37e19864", "demo.transform.llm_parser.glm.field-by-field.7cc976f3", "demo.transform.statistical_model.linear.54cc921b", "demo.transform.statistical_model.tree.dbb904f7", "demo.transform.composite.rules-llm.c20cf6f5", "demo.transform.composite.rules-model.aa7bc6b4", "demo.transform.human_operator", "demo.transform.browser_action"]}, {"id": "verify", "name": "Verify success", "description": "Judge the outcome independently of whatever produced it.", "input_type": "CandidateResult", "output_type": "VerifiedOutcome", "success": "an independent check accepted the outcome", "variant_axes": ["independence", "strictness", "sample"], "required_capabilities": ["verify"], "candidates": ["demo.verify.schema_json", "demo.verify.schema_typed", "demo.verify.oracle.reference-data.09137280", "demo.verify.oracle.recomputation.844b8e66", "demo.verify.consensus.unanimous.adaa2e59", "demo.verify.consensus.majority.932f8596", "demo.verify.consensus.weighted.513ff31a", "demo.verify.human_review", "demo.verify.visual_diff", "demo.verify.ocr_check.rapidocr.ed28bda9", "demo.verify.ocr_check.tesseract.e437fbf8"]}, {"id": "emit", "name": "Emit result and receipt", "description": "Persist or return the result, evidence, provenance and replay data.", "input_type": "VerifiedOutcome", "output_type": "TaskReceipt", "success": "the receipt is durable and the run is replayable", "variant_axes": ["destination", "durability", "format"], "required_capabilities": ["emit"], "candidates": ["demo.emit.file_json", "demo.emit.file_columnar", "demo.emit.api_publisher.at-least-once.f3328466", "demo.emit.api_publisher.exactly-once.3961c5ed", "demo.emit.database_writer.append.7741c055", "demo.emit.database_writer.upsert.4de1eedc", "demo.emit.evidence_bundler", "demo.emit.notifier"]}], "solutions": [{"id": "cheapest", "name": "Cheapest route", "status": "baseline", "route": {"acquire": "demo.acquire.file_loader.file.7623f426", "canonicalize": "demo.canonicalize.encoding_bom", "enrich": "demo.enrich.provenance_stamper", "transform": "demo.transform.deterministic_rules.conservative.edeb0b14", "verify": "demo.verify.schema_json", "emit": "demo.emit.file_json"}, "description": "What runs before there is any evidence: no browser, no model, no external effect.", "metrics": {"quality": 0.84, "latency_ms": 41, "cost_usd": 0.0}, "tags": ["baseline", "deterministic"]}, {"id": "accuracy_first", "name": "Accuracy-first route", "status": "candidate", "route": {"acquire": "demo.acquire.database_loader.postgres.c03717ca", "canonicalize": "demo.canonicalize.schema_mapper.strict.d7d3cfad", "enrich": "demo.enrich.reference_lookup.internal.7bcdbdbd", "transform": "demo.transform.composite.rules-llm.c20cf6f5", "verify": "demo.verify.consensus.majority.932f8596", "emit": "demo.emit.evidence_bundler"}, "description": "Composite transformation with independent consensus, and a human as the last fallback.", "fallbacks": {"verify": ["demo.verify.oracle.reference-data.09137280", "demo.verify.human_review"]}, "metrics": {"quality": 0.97, "latency_ms": 1420, "cost_usd": 0.031}, "tags": ["quality", "independent-verification"]}, {"id": "learned", "name": "Learned route", "status": "learned", "route": {"acquire": "demo.acquire.browser_adapter.firefox.playwright.headless.22984131", "canonicalize": "demo.canonicalize.text_normalizer.fold.nfkc.b7cf3e3e", "enrich": "demo.enrich.provenance_stamper", "transform": "demo.transform.llm_parser.glm.field-by-field.7cc976f3", "verify": "demo.verify.ocr_check.rapidocr.ed28bda9", "emit": "demo.emit.evidence_bundler"}, "description": "Where evidence moved the choice: a defended source needed a real browser, and OCR caught a result that was present in the data and invisible on the page.", "fallbacks": {"acquire": ["demo.acquire.browser_adapter.chrome.selenium.headless.525d7325"], "transform": ["demo.transform.deterministic_rules.aggressive.0686452c"]}, "metrics": {"quality": 0.94, "latency_ms": 4300, "cost_usd": 0.018}, "tags": ["learned", "browser", "ocr"]}, {"id": "fastest", "name": "Fastest route", "status": "candidate", "route": {"acquire": "demo.acquire.file_loader.file.7623f426", "canonicalize": "demo.canonicalize.passthrough", "enrich": "demo.enrich.passthrough", "transform": "demo.transform.deterministic_rules.aggressive.0686452c", "verify": "demo.verify.schema_json", "emit": "demo.emit.file_json"}, "description": "Every stage taking its cheapest admitted candidate.", "metrics": {"quality": 0.7, "latency_ms": 30, "cost_usd": 0.0}, "tags": ["speed", "pass-through"]}, {"id": "human_in_the_loop", "name": "Human-in-the-loop route", "status": "candidate", "route": {"acquire": "demo.acquire.api_loader.get.78b22e42", "canonicalize": "demo.canonicalize.format_parser.json.61dc29a0", "enrich": "demo.enrich.freshness_etag", "transform": "demo.transform.human_operator", "verify": "demo.verify.human_review", "emit": "demo.emit.notifier"}, "description": "For effects that are hard to undo: a person decides, and a person checks.", "metrics": {"quality": 0.99, "latency_ms": 2100000, "cost_usd": 5.5}, "tags": ["authority", "irreversible"]}], "feedback_channels": [{"id": "feedback.contract", "name": "Contract compatibility", "signal": "ValidationReport", "scope": "edge", "producer": "validator", "consumer": "compiler", "action": "reject or repair the candidate or edge before execution", "description": "Ports, capabilities and bindings, checked before anything runs.", "required": true}, {"id": "feedback.diagnosis", "name": "Execution diagnosis", "signal": "Diagnosis", "scope": "candidate", "producer": "runner", "consumer": "optimizer", "action": "retry, activate a fallback, or demote the candidate", "description": "Success, transient failure, permanent failure, timeout, dependency failure, or invalid output — a classification, not a log line."}, {"id": "feedback.verification", "name": "Independent verification", "signal": "Verdict", "scope": "route", "producer": "verifier", "consumer": "optimizer", "action": "accept, reject, escalate, retry, or activate a fallback", "description": "From an oracle independent of the producer. A technically completed route can still be rejected here.", "required": true}, {"id": "feedback.quality", "name": "Quality and yield", "signal": "Measurement", "scope": "context", "producer": "verifier", "consumer": "optimizer", "action": "update task-context performance evidence", "description": "Attributed to a task context, because a candidate can be best for one document class and poor for another."}, {"id": "feedback.latency", "name": "Latency and resources", "signal": "Measurement", "scope": "candidate", "producer": "runner", "consumer": "optimizer", "action": "update runtime, resource and capacity estimates", "description": "Measured, not declared."}, {"id": "feedback.cost", "name": "Cost and tokens", "signal": "Measurement", "scope": "candidate", "producer": "runner", "consumer": "optimizer", "action": "update monetary, token and service usage", "description": "Cost is a first-class objective, not an afterthought."}, {"id": "feedback.policy", "name": "Policy, authority and effects", "signal": "PolicyEvent", "scope": "registry", "producer": "policy", "consumer": "compiler", "action": "block or constrain candidates beyond permission or budget", "description": "A high score cannot legalise a candidate that lacks a required permission.", "required": true}, {"id": "feedback.drift", "name": "Provenance, drift and freshness", "signal": "ProvenanceEvent", "scope": "version", "producer": "registry", "consumer": "optimizer", "action": "invalidate or discount evidence gathered before the change", "description": "When code, data, schema, model or environment moves, old evidence describes something that no longer exists."}], "optimization_profiles": [{"id": "profile.balanced", "name": "Balanced", "strategy": "weighted", "objectives": [{"metric": "quality", "direction": "maximize", "weight": 0.5}, {"metric": "latency_ms", "direction": "minimize", "weight": 0.25}, {"metric": "cost_usd", "direction": "minimize", "weight": 0.25}], "minimum_evidence": 5, "exploration": 0.1, "description": "The default when nothing about the task is unusual."}, {"id": "profile.quality", "name": "Quality first", "strategy": "weighted", "objectives": [{"metric": "quality", "direction": "maximize", "weight": 0.8}, {"metric": "cost_usd", "direction": "minimize", "weight": 0.1}, {"metric": "latency_ms", "direction": "minimize", "weight": 0.1}], "minimum_evidence": 8, "exploration": 0.05, "description": "For work where being wrong costs more than being slow."}, {"id": "profile.speed", "name": "Speed first", "strategy": "weighted", "objectives": [{"metric": "latency_ms", "direction": "minimize", "weight": 0.7}, {"metric": "quality", "direction": "maximize", "weight": 0.3}], "minimum_evidence": 3, "exploration": 0.15, "description": "For interactive work with a human waiting."}, {"id": "profile.cost", "name": "Cost first", "strategy": "weighted", "objectives": [{"metric": "cost_usd", "direction": "minimize", "weight": 0.7}, {"metric": "quality", "direction": "maximize", "weight": 0.3}], "minimum_evidence": 3, "exploration": 0.2, "description": "For large batches where unit cost dominates."}], "metadata": {"generator": "browsergraph.demo", "metrics_note": "Every metric here is an illustrative prior, not a measurement. Real optimization consumes real receipts.", "route_count": 32864832, "transition_count": 2827}}</script>
+<header>
+  <h1 id="wb-title"></h1>
+  <div class="sub" id="wb-task"></div>
+  <div class="sub"><b>Success:</b> <span id="wb-success"></span></div>
+  <div class="counts" id="wb-counts"></div>
+  <nav id="tabs" role="tablist"></nav>
+</header>
+<main>
+  <section class="view" id="view-candidates">
+    <div class="bar">
+      <input type="search" id="q" placeholder="Search candidates, definitions, tags">
+      <label>Role <select id="role-filter"><option value="">any</option></select></label>
+      <label>Permission <select id="perm-filter"><option value="">any</option></select></label>
+      <label><input type="checkbox" id="collapse"> collapse groups</label>
+      <span class="pill" id="visible-count"></span>
+    </div>
+    <div class="routes" id="route-chips"></div>
+    <div class="split">
+      <div class="scroll"><div class="stages" id="candidate-stages"></div></div>
+      <aside class="panel" id="inspector"><h3>Inspector</h3>
+        <div class="sub">Select a candidate to see its definition, bindings,
+        contracts, authority and evidence.</div></aside>
+    </div>
+    <div class="note">Filters change what is <em>visible</em>. They never change what the
+      registry contains — a stage always admits every compatible candidate, and the
+      count above says how many are hidden.</div>
+  </section>
+
+  <section class="view" id="view-network">
+    <div class="bar">
+      <label>Routes drawn <select id="sample">
+        <option value="0">none (background only)</option>
+        <option value="50" selected>50</option>
+        <option value="200">200</option>
+        <option value="1000">1000</option></select></label>
+      <label><input type="checkbox" id="show-bg" checked> all adjacent transitions</label>
+      <label><input type="checkbox" id="selected-only"> named routes only</label>
+      <span class="legend">
+        <span><i class="swatch" style="background:var(--baseline)"></i> baseline</span>
+        <span><i class="swatch" style="background:var(--learned)"></i> learned</span>
+        <span><i class="swatch" style="background:var(--accent)"></i> custom</span>
+        <span><i class="swatch" style="background:var(--line)"></i> possible</span>
+      </span>
+    </div>
+    <div class="scroll" id="network"></div>
+    <div class="note">Columns are task stages and never move. Every edge joins
+      <em>adjacent</em> stages only — there is no force layout, no backward edge and no
+      diagonal across stages, because the picture has to keep saying what runs in what
+      order. Sampling is deterministic: the same seed draws the same routes.</div>
+  </section>
+
+  <section class="view" id="view-compare">
+    <div class="bar">
+      <label>Baseline <select id="baseline-select"></select></label>
+      <label>Rank by <select id="compare-profile"></select></label>
+    </div>
+    <div class="scroll"><table id="compare-table"></table></div>
+    <div class="note">Complete routes are compared, not isolated candidate scores: a
+      candidate that is strongest alone can still lose in a route whose later stages
+      cannot verify what it produces. Highlighted cells differ from the baseline.</div>
+  </section>
+
+  <section class="view" id="view-builder">
+    <div class="bar">
+      <button id="prev" class="route-chip">‹ previous stage</button>
+      <span class="pill" id="builder-where"></span>
+      <button id="next" class="route-chip">next stage ›</button>
+      <label>Objective <select id="builder-profile"></select></label>
+    </div>
+    <div class="bar">
+      <span class="pill">Allow:</span>
+      <label><input type="checkbox" class="policy" value="network" checked> network</label>
+      <label><input type="checkbox" class="policy" value="browser" checked> browser</label>
+      <label><input type="checkbox" class="policy" value="llm" checked> llm</label>
+      <label><input type="checkbox" class="policy" value="human" checked> human</label>
+      <label><input type="checkbox" id="allow-effects" checked> external effects</label>
+      <label><input type="checkbox" id="require-deterministic"> deterministic only</label>
+    </div>
+    <div class="split">
+      <div>
+        <div class="panel" id="builder-stage"></div>
+        <div class="panel" style="margin-top:12px" id="builder-route"></div>
+      </div>
+      <aside class="panel" id="builder-validation"></aside>
+    </div>
+    <div class="note">Ineligible candidates stay visible and say why they are blocked.
+      Hiding them would answer "what can I pick" while quietly changing the question to
+      "what did the current policy leave".</div>
+  </section>
+
+  <section class="view" id="view-feedback">
+    <div class="panel">
+      <h3>Execution stays left to right</h3>
+      <div class="flow" id="feedback-route"></div>
+      <div class="sub">Receipts are emitted <em>beside</em> the task line, never as a
+        backward edge inside it. The optimizer is not a stage.</div>
+    </div>
+    <div class="split" style="margin-top:12px">
+      <div class="panel">
+        <h3>Typed feedback channels</h3>
+        <table id="feedback-table"></table>
+      </div>
+      <aside class="panel">
+        <h3>Control plane order</h3>
+        <ol class="tight" id="control-order"></ol>
+        <h3 style="margin-top:14px">Hard constraints precede soft scoring</h3>
+        <ol class="tight" id="gate-order"></ol>
+        <div class="note">A high predicted score cannot legalise a candidate that lacks
+          a required permission or produces the wrong type.</div>
+      </aside>
+    </div>
+    <div class="panel" style="margin-top:12px">
+      <h3>Optimization profiles</h3>
+      <table id="profile-table"></table>
+    </div>
+  </section>
+</main>
+<script>
+"use strict";
+const WB = JSON.parse(document.getElementById("workbench-data").textContent);
+const NODES = Object.fromEntries(WB.nodes.map(n => [n.id, n]));
+const CAND  = Object.fromEntries(WB.candidates.map(c => [c.id, c]));
+const STAGES = WB.stages;
+const $ = s => document.querySelector(s);
+const el = (tag, cls, text) => { const e = document.createElement(tag);
+  if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const fmt = n => n.toLocaleString("en-US");
+
+/* The custom route starts as a copy of the first solution, so the builder and the
+   candidate view always have something complete to talk about. */
+const START = WB.solutions[0] ? {...WB.solutions[0].route} : {};
+let custom = {...START};
+let activeRoutes = new Set(WB.solutions.slice(0, 3).map(s => s.id));
+let selected = null, stageIndex = 0;
+
+/* ---------- header ---------- */
+$("#wb-title").textContent = WB.title;
+$("#wb-task").textContent = WB.task;
+$("#wb-success").textContent = WB.success;
+const counts = [
+  [STAGES.length, "stages"], [WB.nodes.length, "definitions"],
+  [WB.candidates.length, "atomic candidates"],
+  [WB.metadata.route_count ?? 0, "complete routes"],
+  [WB.metadata.transition_count ?? 0, "adjacent transitions"],
+  [WB.feedback_channels.length, "feedback channels"],
+];
+counts.forEach(([n, label]) => { const c = el("div", "count");
+  c.append(el("b", null, fmt(n)), el("span", null, label)); $("#wb-counts").append(c); });
+
+/* ---------- tabs ---------- */
+const VIEWS = [["candidates","All candidates"],["network","Path network"],
+  ["compare","Compare routes"],["builder","Build step by step"],
+  ["feedback","Feedback & optimization"]];
+VIEWS.forEach(([id, label]) => {
+  const b = el("button", null, label);
+  b.setAttribute("role", "tab"); b.dataset.view = id;
+  b.onclick = () => show(id); $("#tabs").append(b);
+});
+function show(id){
+  VIEWS.forEach(([v]) => {
+    $("#view-" + v).classList.toggle("on", v === id);
+    $(`#tabs button[data-view="${v}"]`).setAttribute("aria-selected", v === id);
+  });
+  if (id === "network") drawNetwork();
+  if (id === "compare") drawCompare();
+  if (id === "builder") drawBuilder();
+}
+
+/* ---------- helpers ---------- */
+const nodeOf = cid => NODES[(CAND[cid] || {}).node_id] || {};
+const permsOf = cid => nodeOf(cid).permissions || [];
+const effectsOf = cid => nodeOf(cid).effects || [];
+const metricsOf = cid => nodeOf(cid).metrics || {};
+const isDeterministic = cid => ((nodeOf(cid).runtime) || {}).deterministic !== false;
+
+function routeColour(sol){
+  if (!sol) return "var(--accent)";
+  if (sol.status === "baseline") return "var(--baseline)";
+  if (sol.status === "learned") return "var(--learned)";
+  return "var(--accent)";
+}
+
+/* ---------- view 1: all candidates ---------- */
+function buildCandidateView(){
+  const wrap = $("#candidate-stages"); wrap.innerHTML = "";
+  const roles = new Set(), perms = new Set();
+  WB.nodes.forEach(n => { (n.roles||[]).forEach(r => roles.add(r));
+                          (n.permissions||[]).forEach(p => perms.add(p)); });
+  fill($("#role-filter"), roles); fill($("#perm-filter"), perms);
+
+  STAGES.forEach((stage, i) => {
+    const col = el("div", "stage");
+    const head = el("div", "stage-head");
+    head.append(el("div", "stage-order", `Stage ${i + 1}`));
+    const name = el("div", "stage-name", stage.name);
+    if (stage.optional) name.append(el("span", "opt", "optional"));
+    head.append(name);
+    const types = el("div", "types");
+    types.innerHTML = `<b>${stage.input_type}</b> → <b>${stage.output_type}</b>`;
+    head.append(types, el("div", "types", `${stage.candidates.length} candidates`));
+    col.append(head);
+
+    const body = el("div", "stage-body"); body.dataset.stage = stage.id;
+    /* grouped by definition, because forty browser bindings in a flat list is
+       unreadable and hides that they are one implementation */
+    const groups = {};
+    stage.candidates.forEach(cid => {
+      const nid = CAND[cid].node_id; (groups[nid] = groups[nid] || []).push(cid); });
+    Object.entries(groups).forEach(([nid, cids]) => {
+      const g = el("div", "group"); g.dataset.node = nid;
+      const gn = el("div", "group-name");
+      gn.append(el("span", null, (NODES[nid].name || nid)),
+                el("span", null, String(cids.length)));
+      gn.onclick = () => g.classList.toggle("folded", !g.classList.contains("folded"))
+        || render();
+      g.append(gn);
+      cids.forEach(cid => g.append(candidateCard(cid, stage)));
+      body.append(g);
+    });
+    col.append(body); wrap.append(col);
+  });
+  render();
+}
+function fill(sel, values){
+  [...values].sort().forEach(v => { const o = el("option", null, v); o.value = v;
+    sel.append(o); });
+}
+function candidateCard(cid, stage){
+  const c = CAND[cid], n = NODES[c.node_id];
+  const card = el("div", "cand"); card.dataset.cid = cid; card.dataset.stage = stage.id;
+  const title = el("div"); title.append(el("span", null, c.name));
+  card.append(title);
+  const bits = Object.entries(c.params || {}).map(([k, v]) => `${k}=${v}`).join(" · ");
+  if (bits) card.append(el("div", "binding", bits));
+  const meta = el("div", "binding");
+  (n.permissions || []).forEach(p => meta.append(el("span", "tag", p)));
+  (n.effects || []).length && meta.append(el("span", "tag", "effect"));
+  if (meta.childNodes.length) card.append(meta);
+  card.onclick = () => { selected = cid; custom[stage.id] = cid; render(); inspect(cid); };
+  return card;
+}
+function matches(cid){
+  const q = $("#q").value.trim().toLowerCase();
+  const role = $("#role-filter").value, perm = $("#perm-filter").value;
+  const c = CAND[cid], n = NODES[c.node_id];
+  if (role && !(n.roles || []).includes(role)) return false;
+  if (perm && !(n.permissions || []).includes(perm)) return false;
+  if (!q) return true;
+  const hay = [c.name, c.id, n.name, n.description, (n.tags || []).join(" "),
+               Object.entries(c.params || {}).map(([k,v]) => k + v).join(" ")]
+              .join(" ").toLowerCase();
+  return hay.includes(q);
+}
+function render(){
+  let shown = 0;
+  const collapsed = $("#collapse").checked;
+  document.querySelectorAll("#candidate-stages .group").forEach(g => {
+    let any = false;
+    g.querySelectorAll(".cand").forEach(card => {
+      const cid = card.dataset.cid, ok = matches(cid);
+      card.classList.toggle("dim", !ok);
+      const inRoute = [...activeRoutes].some(id => {
+        const sol = WB.solutions.find(s => s.id === id);
+        return sol && sol.route[card.dataset.stage] === cid; });
+      card.classList.toggle("picked", custom[card.dataset.stage] === cid || inRoute);
+      card.style.display = (collapsed && !ok) ? "none" : "";
+      if (ok) { any = true; shown++; }
+    });
+    g.style.display = any || !collapsed ? "" : "none";
+  });
+  $("#visible-count").textContent =
+    `${shown} of ${WB.candidates.length} candidates visible`;
+  drawRouteChips();
+}
+function drawRouteChips(){
+  const box = $("#route-chips"); box.innerHTML = "";
+  WB.solutions.forEach(sol => {
+    const chip = el("button", "route-chip");
+    chip.setAttribute("aria-pressed", activeRoutes.has(sol.id));
+    const dot = el("span", "dot"); dot.style.background = routeColour(sol);
+    chip.append(dot, el("span", null, sol.name),
+                el("span", "pill", sol.status));
+    chip.onclick = () => { activeRoutes.has(sol.id) ? activeRoutes.delete(sol.id)
+                                                    : activeRoutes.add(sol.id);
+                           render(); };
+    box.append(chip);
+  });
+  const reset = el("button", "route-chip");
+  reset.append(el("span", null, "reset custom route"));
+  reset.onclick = () => { custom = {...START}; render(); };
+  box.append(reset);
+}
+function inspect(cid){
+  const c = CAND[cid], n = NODES[c.node_id];
+  const box = $("#inspector"); box.innerHTML = "";
+  box.append(el("h3", null, c.name));
+  box.append(el("div", "sub", n.description || ""));
+  const dl = el("dl", "kv");
+  const rows = [
+    ["definition", n.id], ["kind", n.kind], ["version", n.version],
+    ["roles", (n.roles || []).join(", ")],
+    ["capabilities", (n.capabilities || []).join(", ")],
+    ["inputs", (n.inputs || []).map(p => `${p.name}:${p.type}`).join(", ") || "—"],
+    ["outputs", (n.outputs || []).map(p => `${p.name}:${p.type}`).join(", ")],
+    ["bindings", Object.entries(c.params || {}).map(([k, v]) => `${k}=${v}`)
+                 .join(", ") || "—"],
+    ["permissions", (n.permissions || []).join(", ") || "none"],
+    ["effects", (n.effects || []).join(", ") || "none"],
+    ["deterministic", String(((n.runtime) || {}).deterministic !== false)],
+    ["candidate id", c.id],
+  ];
+  rows.forEach(([k, v]) => { dl.append(el("dt", null, k), el("dd", "mono", v)); });
+  box.append(dl);
+  const m = n.metrics || {};
+  if (Object.keys(m).length){
+    box.append(el("h3", null, "Evidence"));
+    const dl2 = el("dl", "kv");
+    Object.entries(m).forEach(([k, v]) =>
+      dl2.append(el("dt", null, k), el("dd", "mono", String(v))));
+    box.append(dl2);
+    if (m.source === "illustrative-prior")
+      box.append(el("div", "note",
+        "An illustrative prior, not a measurement. Nothing has run yet."));
+  }
+}
+
+/* ---------- view 2: path network ---------- */
+function drawNetwork(){
+  const host = $("#network"); host.innerHTML = "";
+  // Wide enough for a full binding: "browser adapter · Chrome · BrowserPort ·
+  // headless" is 48 characters, and truncating it made headless and headed
+  // rows identical on screen — the one dimension a reader most needs to see.
+  const colW = 268, gap = 100, rowH = 15, top = 62, pad = 22;
+  const tallest = Math.max(...STAGES.map(s => s.candidates.length));
+  const width = STAGES.length * colW + (STAGES.length - 1) * gap + pad * 2;
+  const height = top + tallest * rowH + 46;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", width); svg.setAttribute("height", height);
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  const mk = (tag, attrs) => { const e =
+    document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+
+  /* position: column = stage order, row = index within the stage. Fixed. A
+     force layout would move these, and the position is the meaning. */
+  const pos = {};
+  STAGES.forEach((stage, si) => {
+    const x = pad + si * (colW + gap);
+    stage.candidates.forEach((cid, ci) => { pos[cid] = {x, y: top + ci * rowH, si}; });
+    const label = mk("text", {x, y: 24, fill: "var(--stage)",
+      "font-size": 13, "font-weight": 650});
+    label.textContent = `${si + 1}. ${stage.name}`;
+    svg.append(label);
+    const sub = mk("text", {x, y: 41, fill: "var(--muted)", "font-size": 11});
+    sub.textContent = `${stage.candidates.length} candidates`;
+    svg.append(sub);
+  });
+
+  /* Edges live in the gutter between columns, never across a label band. The
+     first draft drew them dot-to-dot, which put 2,827 hairlines straight
+     through every candidate name and made the column unreadable. */
+  const bg = mk("g", {opacity: .16});
+  if ($("#show-bg").checked && !$("#selected-only").checked){
+    for (let i = 0; i < STAGES.length - 1; i++){
+      STAGES[i].candidates.forEach(a => STAGES[i + 1].candidates.forEach(b => {
+        const p = pos[a], q = pos[b];
+        bg.append(mk("line", {x1: p.x + colW, y1: p.y, x2: q.x, y2: q.y,
+          stroke: "var(--line)", "stroke-width": .5}));
+      }));
+    }
+  }
+  svg.append(bg);
+
+  /* deterministic sampling — same seed, same picture, every time */
+  const n = $("#selected-only").checked ? 0 : parseInt($("#sample").value, 10);
+  if (n){
+    let seed = 20260808;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    const g = mk("g", {opacity: .5});
+    for (let k = 0; k < n; k++){
+      const pick = STAGES.map(s => s.candidates[Math.floor(rnd() * s.candidates.length)]);
+      g.append(routeLine(mk, pick, pos, colW, "var(--muted)", .6));
+    }
+    svg.append(g);
+  }
+
+  WB.solutions.filter(s => activeRoutes.has(s.id)).forEach(sol => {
+    const pick = STAGES.map(s => sol.route[s.id]);
+    svg.append(routeLine(mk, pick, pos, colW, routeColour(sol), 2.4));
+  });
+  svg.append(routeLine(mk, STAGES.map(s => custom[s.id]), pos, colW,
+                       "var(--accent)", 1.8, "5 4"));
+
+  /* Labels last, so they sit above every edge. Every candidate gets one — the
+     first draft labelled only stages with 30 or fewer, which left the 76-strong
+     acquire column as a wall of anonymous dots. That column is the whole point:
+     one definition, three dimensions, sixty concrete choices. */
+  const chars = Math.max(8, Math.floor((colW - 14) / 5.05));
+  STAGES.forEach(stage => stage.candidates.forEach(cid => {
+    const p = pos[cid], picked = custom[stage.id] === cid;
+    const hit = mk("circle", {cx: p.x, cy: p.y, r: picked ? 4.2 : 3.2,
+      fill: "var(--accent)", opacity: picked ? 1 : .35, cursor: "pointer"});
+    const t = mk("title", {}); t.textContent = CAND[cid].name; hit.append(t);
+    hit.onclick = () => { custom[stage.id] = cid; selected = cid; drawNetwork();
+                          render(); inspect(cid); };
+    svg.append(hit);
+    const full = CAND[cid].name;
+    const label = mk("text", {x: p.x + 8, y: p.y + 3.4, "font-size": 9,
+      fill: picked ? "var(--ink)" : "var(--muted)", cursor: "pointer"});
+    label.textContent = full.length > chars ? full.slice(0, chars - 1) + "…" : full;
+    const lt = mk("title", {}); lt.textContent = full; label.append(lt);
+    label.onclick = hit.onclick;
+    svg.append(label);
+  }));
+  host.append(svg);
+}
+function routeLine(mk, ids, pos, colW, stroke, width, dash){
+  /* A stub across this column's label band, then one segment through the
+     gutter to the next stage. Keeps every edge out of the text. */
+  const g = mk("g", {});
+  const attrs = {stroke, "stroke-width": width, fill: "none",
+                 "stroke-linecap": "round"};
+  if (dash) attrs["stroke-dasharray"] = dash;
+  ids.forEach((id, i) => {
+    const p = pos[id];
+    if (!p) return;
+    g.append(mk("line", {...attrs, x1: p.x, y1: p.y, x2: p.x + colW, y2: p.y,
+                         opacity: .5}));
+    const q = pos[ids[i + 1]];
+    if (q) g.append(mk("line", {...attrs, x1: p.x + colW, y1: p.y,
+                                x2: q.x, y2: q.y}));
+  });
+  return g;
+}
+["#sample", "#show-bg", "#selected-only"].forEach(s =>
+  $(s).addEventListener("change", drawNetwork));
+
+/* ---------- view 3: compare ---------- */
+function drawCompare(){
+  const sel = $("#baseline-select");
+  if (!sel.options.length){
+    WB.solutions.forEach(s => { const o = el("option", null, s.name); o.value = s.id;
+      sel.append(o); });
+    fillProfiles($("#compare-profile"));
+    sel.onchange = drawCompare; $("#compare-profile").onchange = drawCompare;
+  }
+  const base = WB.solutions.find(s => s.id === sel.value) || WB.solutions[0];
+  const profile = WB.optimization_profiles.find(p => p.id === $("#compare-profile").value);
+  const table = $("#compare-table"); table.innerHTML = "";
+  const head = el("tr");
+  head.append(el("th", null, "route"));
+  STAGES.forEach(s => head.append(el("th", null, s.name)));
+  head.append(el("th", null, "quality"), el("th", null, "latency ms"),
+              el("th", null, "cost usd"), el("th", null, "score"));
+  const tablehead = el("thead"); tablehead.append(head); table.append(tablehead);
+  const body = el("tbody");
+  const scored = WB.solutions.map(s => ({s, score: profile ? score(profile, s.metrics) : 0}));
+  scored.sort((a, b) => b.score - a.score);
+  scored.forEach(({s, score: sc}) => {
+    const tr = el("tr");
+    const first = el("td");
+    const dot = el("span", "dot"); dot.style.background = routeColour(s);
+    first.append(dot, el("span", null, s.name), el("div", "binding", s.description || ""));
+    tr.append(first);
+    STAGES.forEach(stage => {
+      const cid = s.route[stage.id];
+      const td = el("td", cid !== base.route[stage.id] ? "diff" : "");
+      td.append(el("div", null, cid ? CAND[cid].name : "—"));
+      const fb = (s.fallbacks || {})[stage.id];
+      if (fb && fb.length)
+        td.append(el("div", "binding",
+          "fallback: " + fb.map(f => CAND[f] ? CAND[f].name : f).join(", ")));
+      tr.append(td);
+    });
+    const m = s.metrics || {};
+    tr.append(el("td", "num", m.quality ?? "—"),
+              el("td", "num", m.latency_ms != null ? fmt(m.latency_ms) : "—"),
+              el("td", "num", m.cost_usd ?? "—"),
+              el("td", "num", sc.toFixed(3)));
+    body.append(tr);
+  });
+  table.append(body);
+}
+function fillProfiles(sel){
+  WB.optimization_profiles.forEach(p => { const o = el("option", null, p.name);
+    o.value = p.id; sel.append(o); });
+}
+function score(profile, metrics){
+  /* An absent measurement is skipped, not scored zero — otherwise anything new
+     is punished for being new and the system quietly stops exploring. */
+  let total = 0, weight = 0;
+  (profile.objectives || []).forEach(o => {
+    if (!(o.metric in (metrics || {}))) return;
+    const raw = Number(metrics[o.metric]);
+    const norm = o.metric === "quality" ? raw
+               : o.metric === "latency_ms" ? 1 - Math.min(1, raw / 5000)
+               : 1 - Math.min(1, raw / 1);
+    total += o.weight * (o.direction === "maximize" ? norm : norm);
+    weight += o.weight;
+  });
+  return weight ? total / weight : 0;
+}
+
+/* ---------- view 4: builder ---------- */
+function drawBuilder(){
+  if (!$("#builder-profile").options.length){
+    fillProfiles($("#builder-profile"));
+    $("#builder-profile").onchange = drawBuilder;
+    $("#prev").onclick = () => { stageIndex = Math.max(0, stageIndex - 1); drawBuilder(); };
+    $("#next").onclick = () => { stageIndex = Math.min(STAGES.length - 1, stageIndex + 1);
+                                 drawBuilder(); };
+    document.querySelectorAll(".policy, #allow-effects, #require-deterministic")
+      .forEach(c => c.onchange = drawBuilder);
+  }
+  const stage = STAGES[stageIndex];
+  $("#builder-where").textContent = `stage ${stageIndex + 1} of ${STAGES.length}`;
+  const box = $("#builder-stage"); box.innerHTML = "";
+  box.append(el("h3", null, `${stageIndex + 1}. ${stage.name}`));
+  box.append(el("div", "sub", stage.description));
+  box.append(el("div", "note", `Succeeds when: ${stage.success}`));
+
+  const profile = WB.optimization_profiles.find(p => p.id === $("#builder-profile").value);
+  const ranked = stage.candidates.map(cid => ({cid, block: blockedReason(cid)}))
+    .map(x => ({...x, score: x.block ? -1 : score(profile, metricsOf(x.cid))}))
+    .sort((a, b) => b.score - a.score);
+  const best = ranked.find(r => !r.block);
+
+  ranked.forEach(({cid, block, score: sc}) => {
+    const card = el("div", "cand" + (block ? " blocked" : "") +
+                    (custom[stage.id] === cid ? " picked" : ""));
+    card.append(el("div", null, CAND[cid].name));
+    const bits = Object.entries(CAND[cid].params || {})
+      .map(([k, v]) => `${k}=${v}`).join(" · ");
+    if (bits) card.append(el("div", "binding", bits));
+    if (block) card.append(el("div", "why", block));
+    else card.append(el("div", "binding",
+      `score ${sc.toFixed(3)}${best && best.cid === cid ? "  ← recommended" : ""}`));
+    if (!block) card.onclick = () => { custom[stage.id] = cid; drawBuilder(); render(); };
+    box.append(card);
+  });
+
+  const rbox = $("#builder-route"); rbox.innerHTML = "";
+  rbox.append(el("h3", null, "Current route"));
+  const flow = el("div", "flow");
+  STAGES.forEach((s, i) => {
+    if (i) flow.append(el("span", "arrow", "→"));
+    const step = el("div", "step");
+    step.append(el("div", "binding", s.name));
+    step.append(el("div", null, custom[s.id] ? CAND[custom[s.id]].name : "— not chosen —"));
+    if (i === stageIndex) step.style.outline = "2px solid var(--accent)";
+    flow.append(step);
+  });
+  rbox.append(flow);
+
+  const vbox = $("#builder-validation"); vbox.innerHTML = "";
+  vbox.append(el("h3", null, "Live validation"));
+  const problems = validateRoute();
+  if (!problems.length) vbox.append(el("div", "ok", "✓ complete, contract-clean and "
+    + "within the current policy"));
+  else {
+    const ul = el("ul", "tight");
+    problems.forEach(p => ul.append(el("li", "err", p)));
+    vbox.append(ul);
+  }
+  vbox.append(el("h3", null, "Policy in force"));
+  const ul2 = el("ul", "tight");
+  allowedPerms().forEach(p => ul2.append(el("li", null, "allow " + p)));
+  if (!$("#allow-effects").checked) ul2.append(el("li", null, "no external effects"));
+  if ($("#require-deterministic").checked) ul2.append(el("li", null, "deterministic only"));
+  vbox.append(ul2);
+}
+function allowedPerms(){
+  return [...document.querySelectorAll(".policy")].filter(c => c.checked)
+    .map(c => c.value);
+}
+function blockedReason(cid){
+  const allowed = allowedPerms();
+  const missing = permsOf(cid).filter(p => {
+    const head = p.split(":")[0];
+    if (["filesystem", "database"].includes(head)) return false;
+    return !allowed.includes(head);
+  });
+  if (missing.length) return `needs ${missing.join(", ")} — not permitted here`;
+  if (!$("#allow-effects").checked && effectsOf(cid).some(e => e.startsWith("external")))
+    return "changes external state — not permitted here";
+  if ($("#require-deterministic").checked && !isDeterministic(cid))
+    return "not deterministic";
+  return "";
+}
+function validateRoute(){
+  const out = [];
+  STAGES.forEach(stage => {
+    const cid = custom[stage.id];
+    if (!cid) { out.push(`stage "${stage.name}" has no choice`); return; }
+    if (!stage.candidates.includes(cid))
+      out.push(`"${CAND[cid].name}" is not admitted to "${stage.name}"`);
+    const why = blockedReason(cid);
+    if (why) out.push(`${stage.name}: ${CAND[cid].name} — ${why}`);
+  });
+  for (let i = 0; i < STAGES.length - 1; i++){
+    if (STAGES[i].output_type !== STAGES[i + 1].input_type)
+      out.push(`${STAGES[i].name} produces ${STAGES[i].output_type} but `
+               + `${STAGES[i + 1].name} consumes ${STAGES[i + 1].input_type}`);
+  }
+  return out;
+}
+
+/* ---------- view 5: feedback ---------- */
+function drawFeedback(){
+  const flow = $("#feedback-route");
+  STAGES.forEach((s, i) => {
+    if (i) flow.append(el("span", "arrow", "→"));
+    const step = el("div", "step");
+    step.append(el("div", "binding", `stage ${i + 1}`), el("div", null, s.name));
+    flow.append(step);
+  });
+  flow.append(el("span", "arrow", "⇢"));
+  const receipt = el("div", "step"); receipt.style.borderLeft = "3px solid var(--learned)";
+  receipt.append(el("div", "binding", "control plane"), el("div", null, "TaskReceipt"));
+  flow.append(receipt);
+
+  const t = $("#feedback-table");
+  const head = el("tr");
+  ["channel", "signal", "scope", "producer → consumer", "authorises"]
+    .forEach(h => head.append(el("th", null, h)));
+  const thead = el("thead"); thead.append(head); t.append(thead);
+  const body = el("tbody");
+  WB.feedback_channels.forEach(f => {
+    const tr = el("tr");
+    const first = el("td");
+    first.append(el("div", null, f.name));
+    first.append(el("div", "binding", f.description || ""));
+    if (f.required) first.append(el("span", "tag", "required"));
+    tr.append(first, el("td", "mono", f.signal), el("td", "mono", f.scope),
+              el("td", "binding", `${f.producer} → ${f.consumer}`),
+              el("td", null, f.action));
+    body.append(tr);
+  });
+  t.append(body);
+
+  ["Observe — collect status, verdict, latency, cost, yield, policy, provenance",
+   "Attribute — to candidate, edge, stage, route, context, version, environment",
+   "Diagnose — contract error, policy block, transient failure, quality miss, drift",
+   "Propose — swap a candidate, activate a fallback, adjust a binding, insert an adapter",
+   "Gate — revalidate contracts, permissions, effects, budgets, runtime",
+   "Learn — update uncertainty-aware evidence, keep the receipts"]
+    .forEach(s => $("#control-order").append(el("li", null, s)));
+  ["registry discovery", "parameter binding validation", "technical contract validation",
+   "permission, effect, dependency, runtime and resource policy",
+   "evidence sufficiency and freshness", "objective scoring",
+   "explore or exploit", "route proposal", "full route revalidation", "execution",
+   "independent verification", "receipt update"]
+    .forEach(s => $("#gate-order").append(el("li", null, s)));
+
+  const pt = $("#profile-table");
+  const ph = el("tr");
+  ["profile", "strategy", "objectives", "min evidence", "exploration"]
+    .forEach(h => ph.append(el("th", null, h)));
+  const pthead = el("thead"); pthead.append(ph); pt.append(pthead);
+  const pb = el("tbody");
+  WB.optimization_profiles.forEach(p => {
+    const tr = el("tr");
+    const first = el("td");
+    first.append(el("div", null, p.name), el("div", "binding", p.description || ""));
+    tr.append(first, el("td", "mono", p.strategy),
+      el("td", null, (p.objectives || [])
+        .map(o => `${o.direction === "maximize" ? "↑" : "↓"} ${o.metric} ×${o.weight}`)
+        .join("  ")),
+      el("td", "num", p.minimum_evidence), el("td", "num", p.exploration));
+    pb.append(tr);
+  });
+  pt.append(pb);
+}
+
+/* ---------- go ---------- */
+buildCandidateView();
+drawFeedback();
+["#q", "#role-filter", "#perm-filter", "#collapse"].forEach(s =>
+  $(s).addEventListener("input", render));
+show("candidates");
+</script>
+</body>
+</html>

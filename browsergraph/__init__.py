@@ -22,7 +22,26 @@ from browsergraph.dimensions import (
     validate,
 )
 from browsergraph.graph import Edge, EdgeKind, Graph, RunResult, run
+from browsergraph.manifest import (
+    NodeDefinition,
+    NodeManifest,
+    ParameterSpec,
+    PortSpec,
+    described_node,
+    manifest_of,
+)
 from browsergraph.ports import BrowserPort, Context, Element, PageState
+from browsergraph.workbench import (
+    FeedbackDefinition,
+    NodeCandidate,
+    OptimizationObjective,
+    OptimizationProfile,
+    SolutionDefinition,
+    StageDefinition,
+    WorkbenchDefinition,
+    candidate_id,
+    expand_node_candidates,
+)
 
 __all__ = [
     "Behavior", "Binary", "Display", "Engine", "Identity", "LLMConfig",
@@ -30,4 +49,11 @@ __all__ = [
     "Graph", "RunResult", "run", "Edge", "EdgeKind",
     "BrowserPort", "Context", "Element", "PageState",
     "Contract", "ContractError", "contract_of",
+    # the portable description layer: what a node is, separately from what it does
+    "NodeManifest", "NodeDefinition", "PortSpec", "ParameterSpec",
+    "described_node", "manifest_of",
+    # stages, candidates, routes, feedback, optimization
+    "NodeCandidate", "StageDefinition", "SolutionDefinition", "FeedbackDefinition",
+    "OptimizationObjective", "OptimizationProfile", "WorkbenchDefinition",
+    "candidate_id", "expand_node_candidates",
 ]

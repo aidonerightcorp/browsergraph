@@ -114,6 +114,44 @@ def check_browsers() -> list[Check]:
     return out
 
 
+def check_drivers() -> list[Check]:
+    """Does each browser have a driver built for *its* version?
+
+    A mismatch here is the single most misleading failure in this whole stack:
+    it surfaces as "cannot connect to chrome", which reads like the browser
+    crashed. Checking it costs one `--version` per browser and no network.
+    """
+    from browsergraph import fetch
+    from browsergraph.binaries import resolve
+    from browsergraph.dimensions import Binary
+
+    out = []
+    for binary in (Binary.SYSTEM_CHROME, Binary.CHROME_FOR_TESTING, Binary.BRAVE):
+        found = resolve(binary)
+        if not found.ok:
+            continue
+        # Brave's leading number is its Chromium major — checked against the
+        # user agent (Brave 148.1.90.124 reports HeadlessChrome/148), not
+        # assumed from the shape of the version string.
+        version = fetch.binary_version(found.path)
+        want = fetch.major(version)
+        have = fetch.cached("chromedriver", want) if want else ""
+        out.append(Check(
+            f"driver:{binary.value}", bool(have),
+            f"browser {version or '?'}, driver "
+            + (f"{want} cached" if have else "none cached for that version"),
+            f"browsergraph fetch --match {binary.value}"))
+
+    firefox = resolve(Binary.FIREFOX)
+    if firefox.ok:
+        from browsergraph.binaries import cached_driver
+        gecko = cached_driver("geckodriver")
+        out.append(Check("driver:firefox", bool(gecko),
+                         gecko or "no killable geckodriver cached",
+                         "browsergraph fetch geckodriver"))
+    return out
+
+
 def check_display() -> list[Check]:
     disp = os.environ.get("DISPLAY", "")
     out = [Check("display:X", bool(disp), disp or "DISPLAY unset",
@@ -196,6 +234,7 @@ def run_all(cfg: LLMConfig | None = None) -> Report:
     rep.add(check_python())
     rep.add(*check_engines())
     rep.add(*check_browsers())
+    rep.add(*check_drivers())
     rep.add(*check_display())
     rep.add(*check_media())
     rep.add(*check_ollama(cfg))

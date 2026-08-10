@@ -255,7 +255,27 @@ def ensure_browser(engine: Engine = Engine.PLAYWRIGHT, *, install: bool = True,
             report.executable_path = path
             return report
 
-    # 6. Honest failure. engine=http still works and needs none of this.
+    # 6. Download a browser outright. Chrome for Testing is a plain zip that
+    #    needs no privileges and no package manager, which makes it the last
+    #    thing that can still work on a locked-down box: no apt, no root, no
+    #    system browser, and it ships with a chromedriver built from the same
+    #    revision so nothing can drift out of step afterwards.
+    if install:
+        from browsergraph import fetch as _fetch
+        got = _fetch.fetch("chrome")
+        s = report.add(Step("download Chrome for Testing", ran="fetch chrome",
+                            ok=got.ok, detail=got.path if got.ok else got.error[:160]))
+        say(str(s))
+        if got.ok:
+            ok, log2 = launches(engine, executable_path=got.path)
+            report.add(Step(f"launch downloaded chrome {got.version}", ok=ok,
+                            detail="" if ok else log2[:120]))
+            if ok:
+                report.ok = True
+                report.executable_path = got.path
+                return report
+
+    # 7. Honest failure. engine=http still works and needs none of this.
     report.add(Step("browser-less fallback available", ok=True,
                     detail="engine=http needs no browser (no JavaScript)"))
     return report
