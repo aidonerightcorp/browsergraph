@@ -58,6 +58,35 @@ candidates across 14 sub-steps, five synchronized views, one offline file.
 [Kaggle notebook](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 installs a browser, drives it, and shows the screenshots and video it captured.
 
+### Eleven notebooks, eight domains
+
+The claim that this is a general model is only worth something if it works
+somewhere else. Each of these runs in seconds, installs nothing but the library,
+and touches no dataset or network. Every cell is executed and its output
+committed.
+
+| | Notebook | What it argues |
+|---|---|---|
+| 01 | [Express a problem as a graph](notebooks/01-build-a-graph.ipynb) | stages, ports, candidates, and the four checks |
+| 02 | [Search without enumerating](notebooks/02-search-and-learn.ipynb) | 3.8 trillion routes is 41.8 bits, not an obstacle |
+| 03 | [A domain that is not browsing](notebooks/03-a-new-domain.ipynb) | the same machinery on document work |
+| 04 | [A Kaggle pipeline is a graph](notebooks/04-tabular-pipeline.ipynb) | numeric ∥ categorical encoding is a join |
+| 05 | [Two readings of one document](notebooks/05-document-extraction.ipynb) | text and layout are independent extractions |
+| 06 | [A workflow with no data science](notebooks/06-service-workflow.ipynb) | effects, permissions, and one step that reaches outside |
+| 07 | [A gate that can say no](notebooks/07-data-quality-gate.ipynb) | schema and drift meeting at one decision |
+| 08 | [Build, verify, release](notebooks/08-release-pipeline.ipynb) | a gate with two inputs cannot be half-skipped |
+| 09 | [Retrieval is two searches](notebooks/09-retrieval-qa.ipynb) | dense and lexical recall, joined |
+| 10 | [The leak you cannot see in CV](notebooks/10-timeseries-forecast.ipynb) | the split as a node with two named outputs |
+| 11 | [The domain this started in](notebooks/11-web-harvest.ipynb) | completed ≠ worked |
+
+Regenerate and verify them with:
+
+```bash
+python notebooks/build_notebooks.py && python notebooks/build_domains.py
+python notebooks/build_workflows.py
+python notebooks/execute.py          # runs every cell, under a memory cap
+```
+
 ---
 
 ## Why this exists

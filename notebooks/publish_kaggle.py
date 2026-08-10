@@ -14,6 +14,18 @@ that eventually publishes something half-finished.
 A notebook is refused if any code cell has no output. Kaggle renders what you
 upload, so an unexecuted notebook publishes as a page of grey boxes claiming to
 demonstrate something.
+
+Two failure modes worth knowing before you debug the wrong thing:
+
+* **"Your kernel title does not resolve to the specified id."** The title must
+  slugify to the id exactly. That is why the id is derived here rather than
+  written down twice.
+* **A bare `400` from `KernelsApiService` on every call, including reads.** That
+  is rate limiting, not a bad payload. Pushing eleven kernels in a row triggers
+  it, and it then rejects `kernels list` too, which makes it look like an outage
+  or an auth failure. `datasets list` still working is the tell: the token is
+  fine and only this service is refusing. Wait, then push in smaller batches —
+  `python notebooks/publish_kaggle.py --push 04 05 06`.
 """
 from __future__ import annotations
 
@@ -28,43 +40,37 @@ HERE = pathlib.Path(__file__).resolve().parent
 STAGE = HERE.parent / ".kaggle-kernels"
 USER = "taylorsamarel"
 
-#: slug -> (kaggle id suffix, title). Titles carry the domain, because a reader
-#: browsing Kaggle sees the title and nothing else.
-KERNELS: dict[str, tuple[str, str]] = {
-    "01-build-a-graph": (
-        "graph-solutions-1-express-a-problem-as-a-graph",
-        "Graph Solutions 1 — Express a Problem as a Graph"),
-    "02-search-and-learn": (
-        "graph-solutions-2-search-without-enumerating",
-        "Graph Solutions 2 — Search Without Enumerating"),
-    "03-a-new-domain": (
-        "graph-solutions-3-a-domain-that-is-not-browsing",
-        "Graph Solutions 3 — A Domain That Is Not Browsing"),
-    "04-tabular-pipeline": (
-        "graph-solutions-4-a-kaggle-pipeline-is-a-graph",
-        "Graph Solutions 4 — A Kaggle Pipeline Is a Graph"),
-    "05-document-extraction": (
-        "graph-solutions-5-two-readings-of-one-document",
-        "Graph Solutions 5 — Two Readings of One Document"),
-    "06-service-workflow": (
-        "graph-solutions-6-a-system-with-no-data-science",
-        "Graph Solutions 6 — A System With No Data Science In It"),
-    "07-data-quality-gate": (
-        "graph-solutions-7-a-gate-that-can-say-no",
-        "Graph Solutions 7 — A Gate That Can Actually Say No"),
-    "08-release-pipeline": (
-        "graph-solutions-8-build-verify-release",
-        "Graph Solutions 8 — Build, Verify, Release"),
-    "09-retrieval-qa": (
-        "graph-solutions-9-retrieval-is-two-searches",
-        "Graph Solutions 9 — Retrieval Is Two Searches, Not One"),
-    "10-timeseries-forecast": (
-        "graph-solutions-10-the-leak-you-cannot-see",
-        "Graph Solutions 10 — The Leak You Cannot See in CV"),
-    "11-web-harvest": (
-        "graph-solutions-11-the-domain-this-started-in",
-        "Graph Solutions 11 — The Domain This Started In"),
+#: slug -> title. Titles carry the domain, because a reader browsing Kaggle sees
+#: the title and nothing else.
+#:
+#: The id is *derived* from the title rather than written alongside it. Kaggle
+#: rejects a push whose title does not slugify to its id — "does not resolve to
+#: the specified id" — and keeping two hand-maintained strings in agreement is
+#: a job for a function, not for whoever edits this next.
+#:
+#: Titles stay under 50 characters and avoid punctuation that slugifies away
+#: unevenly (an em dash becomes nothing, a colon becomes a separator).
+KERNELS: dict[str, str] = {
+    "01-build-a-graph": "Graph Solutions 1 Express a Problem as a Graph",
+    "02-search-and-learn": "Graph Solutions 2 Search Without Enumerating",
+    "03-a-new-domain": "Graph Solutions 3 A Domain That Is Not Browsing",
+    "04-tabular-pipeline": "Graph Solutions 4 A Kaggle Pipeline Is a Graph",
+    "05-document-extraction": "Graph Solutions 5 Two Readings of One Document",
+    "06-service-workflow": "Graph Solutions 6 A Workflow With No Data Science",
+    "07-data-quality-gate": "Graph Solutions 7 A Gate That Can Say No",
+    "08-release-pipeline": "Graph Solutions 8 Build Verify Release",
+    "09-retrieval-qa": "Graph Solutions 9 Retrieval Is Two Searches",
+    "10-timeseries-forecast": "Graph Solutions 10 The Leak You Cannot See",
+    "11-web-harvest": "Graph Solutions 11 The Domain This Started In",
 }
+
+
+def slugify(title: str) -> str:
+    """Kaggle's rule: lowercase, non-alphanumerics become hyphens, collapse."""
+    out = "".join(c.lower() if c.isalnum() else "-" for c in title)
+    while "--" in out:
+        out = out.replace("--", "-")
+    return out.strip("-")
 
 
 def unexecuted(path: pathlib.Path) -> list[int]:
@@ -79,7 +85,8 @@ def unexecuted(path: pathlib.Path) -> list[int]:
             if cell["cell_type"] == "code" and not cell.get("outputs")]
 
 
-def stage(slug: str, kernel_id: str, title: str) -> pathlib.Path:
+def stage(slug: str, title: str) -> pathlib.Path:
+    kernel_id = slugify(title)
     source = HERE / f"{slug}.ipynb"
     if not source.exists():
         raise FileNotFoundError(source)
@@ -122,16 +129,22 @@ def main() -> int:
     parser.add_argument("only", nargs="*", help="substrings of slugs to include")
     args = parser.parse_args()
 
-    chosen = {s: v for s, v in KERNELS.items()
+    chosen = {s: t for s, t in KERNELS.items()
               if not args.only or any(o in s for o in args.only)}
     if not chosen:
         print("nothing matched")
         return 1
 
     failures = 0
-    for slug, (kernel_id, title) in chosen.items():
+    for slug, title in chosen.items():
+        if len(title) > 50:
+            print(f"→ {slug}\n  SKIPPED — title is {len(title)} chars, "
+                  f"Kaggle allows 50")
+            failures += 1
+            continue
+        kernel_id = slugify(title)
         blank = unexecuted(HERE / f"{slug}.ipynb")
-        folder = stage(slug, kernel_id, title)
+        folder = stage(slug, title)
         note = f"{len(blank)} cell(s) with no output" if blank else "all cells have output"
         print(f"→ {slug}\n  staged {folder.relative_to(HERE.parent)}  ({note})")
 

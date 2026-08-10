@@ -10,3 +10,6 @@ dist/
 .artifacts/
 dist/
 .kaggle-nb/out/
+
+# Staged Kaggle kernels — regenerate with notebooks/publish_kaggle.py
+.kaggle-kernels/
