@@ -131,6 +131,28 @@ httpd = socketserver.TCPServer(('127.0.0.1', 0), handler)
 threading.Thread(target=httpd.serve_forever, daemon=True).start()
 BASE = f'http://127.0.0.1:{httpd.server_address[1]}'
 print('serving', BASE)
+
+# Everything this notebook produces is written here as well as displayed.
+# On Kaggle /kaggle/working is the one directory published as downloadable
+# output, so artifacts written to a temp dir vanish when the kernel stops —
+# which is why earlier versions showed pictures and saved nothing.
+OUT = pathlib.Path('/kaggle/working') if pathlib.Path('/kaggle/working').is_dir() else TMP / 'out'
+OUT.mkdir(parents=True, exist_ok=True)
+print('artifacts ->', OUT)
+
+def save_fig(name, dpi=200):
+    """Show a figure and save it at print resolution."""
+    path = OUT / f'{name}.png'
+    plt.savefig(path, dpi=dpi, bbox_inches='tight')
+    plt.show()
+    return path
+
+def save_html(name, html):
+    path = OUT / f'{name}.html'
+    path.write_text('<!doctype html><meta charset=utf-8>'
+                    '<body style="margin:0;padding:18px;background:#f6f8fa">' + html,
+                    encoding='utf-8')
+    return path
 ''')
 
 # --------------------------------------------------------------- the graph -
@@ -198,7 +220,7 @@ def draw_graph(g, ax=None, title=None):
               loc='upper right', fontsize=7, frameon=False)
     return ax
 
-draw_graph(graph); plt.tight_layout(); plt.show()
+draw_graph(graph); plt.tight_layout(); save_fig('01-graph')
 """)
 
 md("""
@@ -210,6 +232,7 @@ file, and offline.
 
 code("""
 from IPython.display import HTML
+save_html('graph', graph.to_html())
 HTML(graph.to_html())          # hover a node; click to trace what it reaches
 """)
 
@@ -347,7 +370,7 @@ shot_graph = (Graph('quote')
               .add(Click('#quote'))
               .add(WaitFor('#out', name='confirm'))       # <- verifies the click
               .add(Extract('#out', into='confirmation'))
-              .add(Screenshot(str(TMP / 'after.png'))))
+              .add(Screenshot(str(OUT / 'screenshot-after-click.png'))))
 
 if HAVE_BROWSER:
     spec = Spec(engine=Engine.PLAYWRIGHT, display=Display.HEADLESS)
@@ -387,7 +410,7 @@ from IPython.display import HTML
 video_html = None
 if HAVE_BROWSER:
     vspec = Spec(engine=Engine.PLAYWRIGHT, display=Display.HEADLESS,
-                 capture=Capture.VIDEO, artifact_dir=str(TMP / 'vid'))
+                 capture=Capture.VIDEO, artifact_dir=str(OUT))
     browser = build(vspec)
     vres = run(shot_graph, vspec, browser)
     path = getattr(browser, 'video_path', '')
@@ -431,7 +454,7 @@ candidates = [(Engine.PLAYWRIGHT, Binary.BUNDLED_CHROMIUM, 'chromium'),
 for engine, binary, label in candidates:
     if engine not in usable:
         continue
-    path = str(TMP / f'shot_{label}.png')
+    path = str(OUT / f'screenshot-{label}.png')
     gallery_graph.nodes['screenshot'].path = path
     try:
         sp = Spec(engine=engine, binary=binary, display=Display.HEADLESS)
@@ -455,7 +478,7 @@ if shots:
                      color='#1f8a4c' if confirmed else '#c0392b')
     fig.suptitle('one graph, different engines — each screenshot taken by that engine',
                  fontsize=12, y=1.02)
-    plt.tight_layout(); plt.show()
+    plt.tight_layout(); save_fig('02-engine-gallery')
 """)
 
 md("""
@@ -510,7 +533,7 @@ if len(timings) > 1:
     ax.set_xlabel('seconds — same graph, same result')
     ax.set_title(f'Browser-less is {max(vals)/min(vals):.1f}x faster here')
     ax.spines[['top','right']].set_visible(False)
-    plt.tight_layout(); plt.show()
+    plt.tight_layout(); save_fig('03-engine-timing')
     print(f'speedup: {max(vals)/min(vals):.1f}x')
 """)
 
@@ -582,7 +605,7 @@ ax.grid(which='minor', color='white', linewidth=2); ax.tick_params(which='minor'
 ax.set_title('engine x binary, measured in this kernel\\n'
              '✓ launched   ✕ would not launch   – package absent   · rejected by the validator',
              fontsize=10, loc='left')
-plt.tight_layout(); plt.show()
+plt.tight_layout(); save_fig('04-capability-matrix')
 """)
 
 md("""
@@ -673,14 +696,14 @@ if len(real_timings) > 1:
     ax.set_xlabel(f'seconds — {REAL_URL}, same graph, same result')
     ax.set_title(f'Live site: browser-less is {max(vals)/min(vals):.1f}x faster')
     ax.spines[['top','right']].set_visible(False)
-    plt.tight_layout(); plt.show()
+    plt.tight_layout(); save_fig('05-live-timing')
 """)
 
 md("### A screenshot of a real site")
 
 code("""
 if HAVE_BROWSER:
-    shot = TMP / 'live.png'
+    shot = OUT / 'screenshot-live-site.png'
     live_graph = (Graph('live-shot').add(Navigate(REAL_URL))
                   .add(WaitFor('body', name='loaded'))
                   .add(Screenshot(str(shot))))
@@ -831,7 +854,7 @@ for b, r in zip(bars, rows):
 ax.set_xlabel('characters sent to the model'); ax.set_xscale('log')
 ax.set_title('Same page, eight preprocessing strategies (log scale)')
 ax.spines[['top','right']].set_visible(False)
-plt.tight_layout(); plt.show()
+plt.tight_layout(); save_fig('06-preprocessing')
 """)
 
 # -------------------------------------------------------------- the linter -
@@ -852,7 +875,7 @@ risky = (Graph('risky').add(Navigate(f'{BASE}/index.html'))
 safe  = (Graph('safe').add(Navigate(f'{BASE}/index.html'))
          .add(WaitFor('#quote')).add(Click('#quote'))
          .add(WaitFor('#out', name='confirm'))
-         .add(Screenshot(str(TMP / 'safe.png'))))
+         .add(Screenshot(str(OUT / 'screenshot-safe-graph.png'))))
 
 print('RISKY\\n' + report(lint(risky)))
 print('\\nSAFE\\n'  + report(lint(safe)))
@@ -862,7 +885,7 @@ code("""
 fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
 draw_graph(risky, axes[0], 'risky — mutation never verified')
 draw_graph(safe,  axes[1], 'safe — click, then confirm')
-plt.tight_layout(); plt.show()
+plt.tight_layout(); save_fig('07-lint-risky-vs-safe')
 """)
 
 # ------------------------------------------------------------ combinations -
@@ -908,7 +931,7 @@ axes_[1].text(len(xs)*0.55, poss*0.94, f'{poss} pairs possible', fontsize=8, col
 axes_[1].set_xlabel('runs executed'); axes_[1].set_ylabel('value-pairs covered')
 axes_[1].set_title('Coverage rises fast, then saturates')
 axes_[1].spines[['top','right']].set_visible(False)
-plt.tight_layout(); plt.show()
+plt.tight_layout(); save_fig('08-pairwise-coverage')
 """)
 
 # ------------------------------------------------------------- learning ----
@@ -936,10 +959,11 @@ code("""
 # run: Kaggle's static view strips inline SVG and script, and the interactive
 # version degrades there into a wall of run-together words.
 from browsergraph.spacemap import to_figure
-to_figure(space); plt.tight_layout(); plt.show()
+to_figure(space); plt.tight_layout(); save_fig('09-dimension-space')
 """)
 
 code("""
+save_html('dimension-space', to_html(space))
 HTML(to_html(space))     # the same thing, live: hover a value, click to lock one
 """)
 
@@ -1013,12 +1037,14 @@ code("""
 from browsergraph.planmap import to_figure as planes_figure
 planes_figure(ps, before=naive, after=learned,
               title='one task, 3,024 candidate routes — chosen, then re-chosen')
-plt.tight_layout(); plt.show()
+plt.tight_layout(); save_fig('10-architecture-planes')
 """)
 
 code("""
-HTML(to_html(ps, before=naive, after=learned,
-             title='the same routes, live — hover and click'))
+_planes_html = to_html(ps, before=naive, after=learned,
+                       title='the same routes, live — hover and click')
+save_html('architecture-planes', _planes_html)
+HTML(_planes_html)
 """)
 
 md("""
@@ -1083,7 +1109,7 @@ ax.spines[['top']].set_visible(False); ax2.spines[['top']].set_visible(False)
 h1, l1 = ax.get_legend_handles_labels()          # one legend, both axes
 h2, l2 = ax2.get_legend_handles_labels()
 ax.legend(h1 + h2, l1 + l2, loc='lower right', fontsize=8, frameon=False)
-plt.tight_layout(); plt.show()
+plt.tight_layout(); save_fig('11-learning-curve')
 """)
 
 md("""
@@ -1147,7 +1173,7 @@ for (r, c), cell in tbl.get_celld().items():
     elif c == 3 and cell.get_text().get_text() == 'True':
         cell.set_facecolor('#fde2e2')
 ax.set_title('Same-looking failures, different correct responses', fontsize=11)
-plt.tight_layout(); plt.show()
+plt.tight_layout(); save_fig('12-error-classification')
 """)
 
 # -------------------------------------------------------------- throttle ---
@@ -1330,6 +1356,48 @@ How much the model decides is a property of the run, chosen deliberately.
 
 
 # ---------------------------------------------------------------- close ----
+md("""
+## 23. Everything this notebook produced
+
+Written to `/kaggle/working`, so it is downloadable from the **Output** tab rather than
+only visible inline: every figure at print resolution, every screenshot taken by the
+engine that took it, the recorded video, and the interactive diagrams as standalone HTML
+files that work offline.
+""")
+
+code("""
+import json
+
+rows = sorted(OUT.rglob('*'), key=lambda p: p.name)
+files = [p for p in rows if p.is_file()]
+total = sum(p.stat().st_size for p in files)
+
+print(f'{len(files)} artifacts, {total/1e6:.1f} MB in {OUT}\\n')
+for p in files:
+    kind = {'.png': 'image', '.html': 'interactive', '.webm': 'video',
+            '.json': 'data'}.get(p.suffix, p.suffix.lstrip('.') or 'file')
+    print(f'  {p.name:<38} {kind:<12} {p.stat().st_size/1024:>8.0f} KB')
+
+# A machine-readable summary alongside the pictures.
+(OUT / 'run-summary.json').write_text(json.dumps({
+    'browsergraph': browsergraph.__version__,
+    'browser_available': HAVE_BROWSER,
+    'usable_engines': [e.value for e in available_engines()],
+    'engines_in_gallery': [s[0] for s in shots],
+    'combinations_measured': int(np.isfinite(grid).sum()),
+    'live_sites': live,
+    'artifacts': [p.name for p in files],
+}, indent=2, default=str))
+print('\\n  run-summary.json written')
+""")
+
+code("""
+from IPython.display import FileLink, display as _d
+for name in ['dimension-space.html', 'architecture-planes.html', 'graph.html']:
+    if (OUT / name).exists():
+        _d(FileLink(str(OUT / name)))
+""")
+
 code("""
 httpd.shutdown(); httpd.server_close()
 print('done — server stopped')
