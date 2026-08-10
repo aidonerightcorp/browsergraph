@@ -10,3 +10,18 @@ ignore = [
 
 [lint.per-file-ignores]
 "tests/*" = ["E731"]
+
+# Notebooks are linted, but not for being notebooks. A cell imports what that
+# cell needs, imports arrive after prose and code, and a teaching cell repeats
+# an import so it can be read on its own — all deliberate, and all of it is what
+# these rules object to. What is left still catches the things that matter:
+# F821 undefined names, F632 bad comparisons, B006 mutable defaults, syntax.
+#
+# The alternative was to leave notebooks unlinted, which is how a generated
+# notebook ships with a name that does not exist and nobody finds out until
+# somebody runs it.
+"*.ipynb" = [
+    "E401", "E402", "E701", "E702", "E741", "E731",
+    "F401", "F402", "F541", "F811",
+    "I001", "B905",
+]

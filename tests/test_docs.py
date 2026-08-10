@@ -126,3 +126,26 @@ def test_every_documented_command_exists():
     missing = sorted(n for n in named if n not in real)
     assert not missing, (
         f"documented but not a command: {missing}\nreal: {sorted(real)}")
+
+
+def test_the_dockerfile_copies_every_package_the_build_declares():
+    """The image build fails at `pip install .` otherwise, and only on a tag.
+
+    `pyproject.toml` gained `solutiongraph` and the Dockerfile kept copying only
+    `browsergraph`, so every image build died with "package directory
+    'solutiongraph' does not exist" — invisible until a release was cut, because
+    that is the only time the image is built.
+    """
+    import re as _re
+
+    manifest = (ROOT / "pyproject.toml").read_text()
+    block = _re.search(r"packages\s*=\s*\[(.*?)\]", manifest, _re.DOTALL)
+    assert block, "pyproject no longer lists packages explicitly"
+    tops = {name.split(".")[0]
+            for name in _re.findall(r'"([\w.]+)"', block.group(1))}
+
+    dockerfile = (ROOT / "Dockerfile").read_text()
+    copied = set(_re.findall(r"^COPY\s+([\w-]+)\s+\./", dockerfile, _re.MULTILINE))
+    missing = sorted(tops - copied)
+    assert not missing, (
+        f"pyproject declares {missing} but the Dockerfile never copies them")

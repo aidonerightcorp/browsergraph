@@ -400,6 +400,11 @@ from IPython.display import Image, display
 if HAVE_BROWSER and result.context.artifacts:
     display(Image(filename=result.context.artifacts[-1], width=760))
     print('screenshot:', result.context.artifacts[-1])
+else:
+    # Say so. A cell that renders blank reads as "this did nothing", and the
+    # reader has no way to tell that from "this could not run here".
+    print('no browser on this machine, so there is no screenshot to show.')
+    print('everything above this point ran without one.')
 """)
 
 md("""
@@ -434,6 +439,8 @@ if HAVE_BROWSER:
         print(f'{size:.0f} KB')
         video_html = HTML(f'<video controls autoplay loop muted width="760" '
                           f'src="data:video/webm;base64,{b64}"></video>')
+else:
+    print('no browser on this machine, so there is no video to record.')
 video_html
 """)
 
@@ -565,6 +572,9 @@ if len(timings) > 1:
     ax.spines[['top','right']].set_visible(False)
     plt.tight_layout(); save_fig('03-engine-timing')
     print(f'speedup: {max(vals)/min(vals):.1f}x')
+else:
+    print(f'only one engine ran here ({list(timings) or "none"}), and a bar chart')
+    print('of one bar compares nothing. Install a browser to see both.')
 """)
 
 code("""
@@ -727,6 +737,9 @@ if len(real_timings) > 1:
     ax.set_title(f'Live site: browser-less is {max(vals)/min(vals):.1f}x faster')
     ax.spines[['top','right']].set_visible(False)
     plt.tight_layout(); save_fig('05-live-timing')
+else:
+    print(f'only one way to fetch was available here ({list(real_timings) or "none"}),')
+    print('and a bar chart of one bar is not a comparison.')
 """)
 
 md("### A screenshot of a real site")
@@ -745,6 +758,9 @@ if HAVE_BROWSER:
         SHARED.release(REAL_URL)
     print(lr.summary())
     display(Image(filename=str(shot), width=760))
+else:
+    print('no browser on this machine. The HTTP engine above fetched the same')
+    print('page and extracted the same title — it just cannot take a picture.')
 """)
 
 md("""

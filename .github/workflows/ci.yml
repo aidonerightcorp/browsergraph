@@ -60,4 +60,6 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - run: pip install ruff
-      - run: ruff check browsergraph tests
+      # examples and the notebook generators are real Python that ships and is
+      # tested; linting only the library let a stray import sit in an example.
+      - run: ruff check browsergraph tests examples notebooks

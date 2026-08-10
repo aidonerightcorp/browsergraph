@@ -26,7 +26,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 COPY pyproject.toml README.md ./
+# Both packages, because `pyproject.toml` declares both. Copying only
+# `browsergraph` made every image build fail with "package directory
+# 'solutiongraph' does not exist" from the moment the domain-neutral core was
+# split out — and nothing noticed, because the image is only built on a tag.
 COPY browsergraph ./browsergraph
+COPY solutiongraph ./solutiongraph
 RUN pip install ".[${EXTRAS}]"
 
 # Download browser binaries for the chosen engine family (no-op if not needed).

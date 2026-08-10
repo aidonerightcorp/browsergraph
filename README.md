@@ -38,6 +38,9 @@ browsergraph doctor           # what works here, and the command to fix what doe
 browsergraph bootstrap        # only if you want a browser; the core needs none
 ```
 
+To pin, add `@v0.4.0` — or take the wheel and its checksums from
+[the release](https://github.com/aidonerightcorp/browsergraph/releases/tag/v0.4.0).
+
 **v0.4.0 is the first release that matches this page.** The v0.3.0 wheel
 predates `execute`, `solve`, `viz`, `templates`, `explore`, `journal`, `bounded`
 and `quick` — most of what is described below — so following the old install
