@@ -312,7 +312,14 @@ def test_adjacent_stages_that_cannot_connect_are_rejected():
                    ).with_discovered_candidates(nodes, cands)
     problems = WorkbenchDefinition(nodes=nodes, candidates=cands,
                                    stages=(first, second)).validate()
-    assert any("insert an adapter stage rather than coercing" in p for p in problems)
+    # Reported per *edge* now rather than per adjacent pair, so a diamond's two
+    # branches are both checked instead of only whichever came first in the list.
+    # Asserted by substance rather than by sentence: the edge is named, both
+    # types appear, and a way out is offered. Pinning the exact prose only means
+    # the test fails when the message improves.
+    edge = [p for p in problems if "first -> second" in p]
+    assert edge, problems
+    assert all(x in edge[0] for x in ("'B'", "'C'", "adapter")), edge[0]
 
 
 def test_an_empty_stage_is_rejected():
@@ -624,3 +631,232 @@ def test_a_candidate_names_itself_from_its_bindings():
     cand = NodeCandidate(id="x", node_id="demo.llm_parser",
                          params={"model": "GLM", "strategy": "map-reduce"})
     assert "GLM" in cand.name and "llm parser" in cand.name
+
+
+# --- the graph, rather than the chain ---------------------------------------
+
+def diamond():
+    """parse -> (price || title) -> join: the shape a sequence cannot hold."""
+    from browsergraph.workbench import Edge
+
+    def node(node_id, ins, outs, capability):
+        return NodeManifest(
+            id=node_id, kind=node_id.split(".")[-1], description="x",
+            roles=("transform",), capabilities=(capability,),
+            inputs=tuple(PortSpec(n, t) for n, t in ins),
+            outputs=tuple(PortSpec(n, t) for n, t in outs)).assert_valid()
+
+    nodes = (node("d.parse", [("i", "Raw")], [("o", "Doc")], "parse"),
+             node("d.price", [("i", "Doc")], [("o", "Price")], "price"),
+             node("d.title", [("i", "Doc")], [("o", "Title")], "title"),
+             node("d.join", [("price", "Price"), ("title", "Title")],
+                  [("o", "Result")], "join"))
+    cands = expand_node_candidates(nodes)
+    stages = tuple(s.with_discovered_candidates(nodes, cands) for s in (
+        StageDefinition(id="parse", input_type="Raw", output_type="Doc",
+                        required_capabilities=("parse",)),
+        StageDefinition(id="price", input_type="Doc", output_type="Price",
+                        required_capabilities=("price",)),
+        StageDefinition(id="title", input_type="Doc", output_type="Title",
+                        required_capabilities=("title",)),
+        StageDefinition(id="join", required_capabilities=("join",),
+                        inputs=(PortSpec("price", "Price"),
+                                PortSpec("title", "Title")),
+                        outputs=(PortSpec("o", "Result"),)),
+    ))
+    edges = (Edge("parse", "price"), Edge("parse", "title"),
+             Edge("price", "join", to_port="price"),
+             Edge("title", "join", to_port="title"))
+    return nodes, cands, stages, edges
+
+
+def test_a_diamond_is_expressible():
+    """The finding that motivated all of this: the old model could not express
+    fan-out, and rejected it *correctly by its own rules* — the rules assumed a
+    chain."""
+    nodes, cands, stages, edges = diamond()
+    bench = WorkbenchDefinition(nodes=nodes, candidates=cands, stages=stages,
+                                edges=edges)
+    assert bench.validate() == []
+    assert not bench.is_chain
+    assert bench.layers() == [["parse"], ["price", "title"], ["join"]]
+    assert bench.sources() == ["parse"] and bench.sinks() == ["join"]
+
+
+def test_a_chain_still_works_with_no_edges_declared():
+    """Every workbench written before edges existed meant "a chain in declared
+    order", so that is what an empty edge list means."""
+    from browsergraph.demo import workbench
+    bench = workbench()
+    assert bench.is_chain
+    assert len(bench.wiring()) == len(bench.leaf_stages) - 1
+    assert bench.validate() == []
+
+
+def test_a_wrong_port_is_caught_even_when_the_types_exist_elsewhere():
+    """Both branches produce a type the join accepts — just not on that port."""
+    from browsergraph.workbench import Edge
+    nodes, cands, stages, _ = diamond()
+    crossed = (Edge("parse", "price"), Edge("parse", "title"),
+               Edge("price", "join", to_port="title"),
+               Edge("title", "join", to_port="price"))
+    problems = WorkbenchDefinition(nodes=nodes, candidates=cands, stages=stages,
+                                   edges=crossed).validate()
+    # Both crossings are reported, and each names the *port* it went into —
+    # without that, "Price is not a Title" is unactionable in a node with four
+    # inputs, because nothing says which one was wired wrongly.
+    assert any("price -> join.title" in p and "'Price'" in p and "'Title'" in p
+               for p in problems), problems
+    assert any("title -> join.price" in p and "'Title'" in p and "'Price'" in p
+               for p in problems), problems
+
+
+def test_a_cycle_is_refused():
+    """Invisible in a list of edges, and fatal: a plan with a cycle cannot be
+    ordered, so nothing can run."""
+    from browsergraph.workbench import Edge
+    nodes, cands, stages, _ = diamond()
+    looped = (Edge("parse", "price"), Edge("price", "title"),
+              Edge("title", "parse"))
+    problems = WorkbenchDefinition(nodes=nodes, candidates=cands, stages=stages,
+                                   edges=looped).validate()
+    assert any("cycle" in p for p in problems)
+
+
+def test_an_unfed_required_input_is_refused():
+    """A port nobody writes to is a stage that cannot start."""
+    from browsergraph.workbench import Edge
+    nodes, cands, stages, _ = diamond()
+    partial = (Edge("parse", "price"), Edge("parse", "title"),
+               Edge("price", "join", to_port="price"))     # title never joined
+    problems = WorkbenchDefinition(nodes=nodes, candidates=cands, stages=stages,
+                                   edges=partial).validate()
+    assert any("needs input 'title'" in p for p in problems)
+
+
+def test_an_edge_to_a_port_that_does_not_exist_says_which_do():
+    from browsergraph.workbench import Edge
+    nodes, cands, stages, _ = diamond()
+    problems = WorkbenchDefinition(
+        nodes=nodes, candidates=cands, stages=stages,
+        edges=(Edge("price", "join", to_port="nope"),)).validate()
+    assert any("has no input port" in p and "price" in p for p in problems)
+
+
+def test_transitions_are_counted_per_edge_not_per_adjacent_pair():
+    """In a diamond, both branches connect to the join; a sequential count
+    would miss one of them entirely."""
+    nodes, cands, stages, edges = diamond()
+    bench = WorkbenchDefinition(nodes=nodes, candidates=cands, stages=stages,
+                                edges=edges)
+    by_id = {s.id: s for s in bench.leaf_stages}
+    expected = sum(len(by_id[e.source].candidates) * len(by_id[e.target].candidates)
+                   for e in edges)
+    assert bench.transition_count() == expected
+
+
+def test_a_join_needs_a_node_that_accepts_both_inputs():
+    """Not one that happens to accept the first."""
+    nodes, cands, stages, _ = diamond()
+    join = next(s for s in stages if s.id == "join")
+    half = NodeManifest(id="d.half", kind="half", description="x",
+                        roles=("transform",), capabilities=("join",),
+                        inputs=(PortSpec("price", "Price"),),
+                        outputs=(PortSpec("o", "Result"),)).assert_valid()
+    assert not join.eligible(half), "a node missing an input port is not eligible"
+    assert join.eligible(next(n for n in nodes if n.id == "d.join"))
+
+
+def test_the_graph_shape_travels_in_the_wire_format():
+    nodes, cands, stages, edges = diamond()
+    original = WorkbenchDefinition(nodes=nodes, candidates=cands, stages=stages,
+                                   edges=edges)
+    again = WorkbenchDefinition.from_dict(json.loads(original.to_json()))
+    assert again.validate() == []
+    assert again.layers() == original.layers()
+    assert len(again.wiring()) == len(edges)
+
+
+# --- discovery and compilation must agree about types -----------------------
+
+def test_discovery_honours_a_declared_subtype_relation():
+    """Discovery used `==` on type names while the compiler used the lattice.
+
+    A loader producing `CsvRecords` for a stage asking for `Records` compiles
+    perfectly and was invisible to discovery, so the stage came back empty and
+    the workbench reported zero routes — which is what notebook 01 did, in
+    public, for its whole existence. A registry whose search is stricter than
+    its compiler hides exactly the nodes that were most carefully described.
+    """
+    from browsergraph.manifest import NodeManifest, PortSpec
+    from browsergraph.workbench import (
+        StageDefinition,
+        expand_node_candidates,
+    )
+
+    loader = NodeManifest(
+        id="probe.csv", kind="csv", description="Loads a CSV file.",
+        capabilities=("load",),
+        inputs=(PortSpec("path", "FilePath"),),
+        outputs=(PortSpec("records", "CsvRecords"),),
+        runtime={"is_a": {"CsvRecords": ["Records"]}},
+    ).assert_valid()
+
+    nodes = (loader,)
+    stage = StageDefinition(
+        id="load", input_type="FilePath", output_type="Records",
+        required_capabilities=("load",),
+    ).with_discovered_candidates(nodes, expand_node_candidates(nodes))
+
+    assert stage.candidates, "a declared subtype was not discovered"
+
+
+def test_discovery_still_refuses_a_type_that_is_not_related():
+    """The fix must widen discovery to the lattice, not switch it off."""
+    from browsergraph.manifest import NodeManifest, PortSpec
+    from browsergraph.workbench import (
+        StageDefinition,
+        expand_node_candidates,
+    )
+
+    loader = NodeManifest(
+        id="probe.csv", kind="csv", description="Loads a CSV file.",
+        capabilities=("load",),
+        inputs=(PortSpec("path", "FilePath"),),
+        outputs=(PortSpec("records", "CsvRecords"),),
+        runtime={"is_a": {"CsvRecords": ["Records"]}},
+    ).assert_valid()
+
+    nodes = (loader,)
+    stage = StageDefinition(
+        id="load", input_type="FilePath", output_type="Image",
+        required_capabilities=("load",),
+    ).with_discovered_candidates(nodes, expand_node_candidates(nodes))
+
+    assert stage.candidates == ()
+
+
+def test_a_supertype_is_not_accepted_where_a_subtype_is_required():
+    """Widening is safe in one direction only. A stage promising to hand over
+    `Records` cannot be served by a node that only accepts `CsvRecords`."""
+    from browsergraph.manifest import NodeManifest, PortSpec
+    from browsergraph.workbench import (
+        StageDefinition,
+        expand_node_candidates,
+    )
+
+    narrow = NodeManifest(
+        id="probe.narrow", kind="narrow", description="Only takes CSV records.",
+        capabilities=("count",),
+        inputs=(PortSpec("r", "CsvRecords"),),
+        outputs=(PortSpec("n", "Count"),),
+        runtime={"is_a": {"CsvRecords": ["Records"]}},
+    ).assert_valid()
+
+    nodes = (narrow,)
+    stage = StageDefinition(
+        id="count", input_type="Records", output_type="Count",
+        required_capabilities=("count",),
+    ).with_discovered_candidates(nodes, expand_node_candidates(nodes))
+
+    assert stage.candidates == ()

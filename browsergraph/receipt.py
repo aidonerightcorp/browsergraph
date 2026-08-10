@@ -158,6 +158,10 @@ class TaskReceipt:
     env: Mapping[str, Any] = field(default_factory=dict)
     verified_by: tuple[str, ...] = ()
     mutated_by: tuple[str, ...] = ()
+    #: The content hash of the compiled plan. Without it, "we learned this
+    #: route is good" is a statement about a *name*, and the thing behind the
+    #: name can be edited with nothing noticing.
+    plan: str = ""
     notes: Mapping[str, Any] = field(default_factory=dict)
 
     # --- the questions a receipt exists to answer ---------------------------
@@ -211,6 +215,7 @@ class TaskReceipt:
             "error": self.error, "log": list(self.log), "env": dict(self.env),
             "verified_by": list(self.verified_by),
             "mutated_by": list(self.mutated_by),
+            "plan": self.plan,
             "unverified_mutation": self.unverified_mutation,
             "replay": self.replay(),
             "notes": dict(self.notes),
@@ -244,6 +249,7 @@ class TaskReceipt:
             env=dict(data.get("env") or {}),
             verified_by=tuple(data.get("verified_by") or ()),
             mutated_by=tuple(data.get("mutated_by") or ()),
+            plan=data.get("plan", ""),
             notes=dict(data.get("notes") or {}))
 
     def text(self) -> str:
@@ -264,6 +270,8 @@ class TaskReceipt:
         if self.unverified_mutation:
             lines.append("  WARNING: this run changed remote state and nothing "
                          "verified the outcome")
+        if self.plan:
+            lines.append(f"  plan: {self.plan}")
         lines.append(f"  replay: {self.replay()}")
         return "\n".join(lines)
 
@@ -324,8 +332,8 @@ class Recorder:
 
 def of_run(result: Any, *, graph: Any = None, task: str = "",
            steps: Sequence[StepRecord] = (), seconds: float = 0.0,
-           started_at: float = 0.0, notes: Mapping[str, Any] | None = None
-           ) -> TaskReceipt:
+           started_at: float = 0.0, notes: Mapping[str, Any] | None = None,
+           plan: Any = None) -> TaskReceipt:
     """Build a receipt from a finished `RunResult`.
 
     Works without a `Recorder` — per-node timings are simply absent — because a
@@ -363,6 +371,7 @@ def of_run(result: Any, *, graph: Any = None, task: str = "",
         env=environment(),
         verified_by=tuple(s.name for s in steps if s.verifies and s.ok),
         mutated_by=tuple(s.name for s in steps if s.mutates and s.ok),
+        plan=getattr(plan, "digest", plan) or "",
         notes=dict(notes or {}))
 
 
@@ -378,6 +387,8 @@ def compare(before: TaskReceipt, after: TaskReceipt) -> list[str]:
     diff between the last good run and this one is the shortest path to why.
     """
     out = []
+    if before.plan and after.plan and before.plan != after.plan:
+        out.append(f"a different plan ran: {before.plan} -> {after.plan}")
     if before.spec.get("engine") != after.spec.get("engine"):
         out.append(f"engine {before.spec.get('engine')} -> {after.spec.get('engine')}")
     if before.ok != after.ok:

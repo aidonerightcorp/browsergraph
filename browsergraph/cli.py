@@ -17,6 +17,7 @@
     browsergraph route --compare              propose a route; show the search
     browsergraph check my-graph.json          is this a valid graph solution?
     browsergraph evidence --suggest           a route worth trying, from evidence
+    browsergraph compile learned --against cheapest   the plan, and what changed
     browsergraph capabilities                 what each engine can actually do
     browsergraph models                       which model for which job, and why
 """
@@ -310,6 +311,39 @@ def cmd_workbench(args) -> int:
 
     bench.write_html(args.out, view=args.view)
     print(f"wrote {args.out}  ({bench.summary()})")
+    return 0
+
+
+def cmd_compile(args) -> int:
+    """Resolve a route into an immutable, content-addressed plan."""
+    from browsergraph.compile import CompileError, compile_route
+    from browsergraph.demo import workbench as demo_workbench
+    from browsergraph.workbench import WorkbenchDefinition
+
+    bench = (WorkbenchDefinition.load(args.config) if args.config
+             else demo_workbench())
+    solutions = {s.id: s for s in bench.solutions}
+    if args.route not in solutions:
+        print(f"unknown route {args.route!r}; known: {', '.join(solutions)}")
+        return 1
+    try:
+        plan = compile_route(bench, solutions[args.route].route,
+                             source=args.route)
+    except CompileError as e:
+        print("cannot compile:")
+        for problem in e.problems:
+            print("  " + problem)
+        return 1
+    if args.json:
+        print(plan.to_json())
+    else:
+        print(plan.text())
+    if args.against and args.against in solutions:
+        from browsergraph.compile import diff
+        other = compile_route(bench, solutions[args.against].route)
+        print(f"\nversus {args.against}:")
+        for line in diff(other, plan):
+            print("  " + line)
     return 0
 
 
@@ -684,6 +718,13 @@ def main(argv: list[str] | None = None) -> int:
     bs.add_argument("--no-install", action="store_true", help="do not pip/download anything")
     bs.add_argument("--no-apt", action="store_true", help="do not install system libraries")
     bs.set_defaults(fn=cmd_bootstrap)
+
+    cm = sub.add_parser("compile", help="resolve a route into a hashed plan")
+    cm.add_argument("route", nargs="?", default="cheapest")
+    cm.add_argument("config", nargs="?", help="a workbench JSON file")
+    cm.add_argument("--against", help="diff against another named route")
+    cm.add_argument("--json", action="store_true")
+    cm.set_defaults(fn=cmd_compile)
 
     ev = sub.add_parser("evidence", help="what has been learned, in bits")
     ev.add_argument("config", nargs="?", help="a workbench JSON file")

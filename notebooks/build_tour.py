@@ -45,8 +45,14 @@ notebook shows the machinery that catches it.
 md("## 1. Install")
 
 code("""
-%pip install -q "browsergraph[http] @ git+https://github.com/aidonerightcorp/browsergraph.git"
-import browsergraph
+# Conditional, because an unconditional install replaces whatever is already
+# present — including a local editable checkout, which is how the notebooks in
+# this folder verify the working tree rather than the last published release.
+try:
+    import browsergraph
+except ImportError:
+    %pip install -q "browsergraph[http] @ git+https://github.com/aidonerightcorp/browsergraph.git"
+    import browsergraph
 print('browsergraph', browsergraph.__version__)
 """)
 

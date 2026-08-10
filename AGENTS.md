@@ -31,6 +31,98 @@ stage called "Use Playwright", stop: that is a candidate.
 
 ---
 
+## Start from a template, not a blank page
+
+Before inventing stages, check whether the shape of this problem is already
+known. `browsergraph.templates` holds skeletons — typed ports, edges, and no
+candidates — for supervised tabular modelling, document extraction, event
+notification, web harvesting, data-quality gating and software release.
+
+```python
+from browsergraph import templates as T
+
+print(T.catalog_text())               # what shapes exist
+template = T.get("tabular.supervised")
+print(template.unfilled({}))          # the slots you must fill
+bench = template.instantiate({"load": ["my.csv_reader"], ...})
+```
+
+Three reasons this is not optional politeness:
+
+1. A skeleton is **checkable**. Fill it wrongly and the compiler rejects it at a
+   port, immediately. Invent your own and you discover the mismatch three stages
+   later, or never.
+2. A skeleton is **shared**. Two harnesses starting from the same template
+   produce comparable graphs, so evidence from one is worth something to the
+   other. Two that each invented a pipeline produce two snowflakes.
+3. A skeleton **bounds the search**. Stages fix the shape, so the space is the
+   product over slots — large, but not the space of all graphs.
+
+Each template carries its own anti-patterns in `template.anti_patterns`. Read
+them. They are the mistakes people actually make in that shape, and they survive
+into `bench.metadata` so they are still there when you come back to it.
+
+If no template fits, write the stages yourself — and consider contributing the
+shape back, because the next harness to meet this problem should not have to.
+
+---
+
+## Types bind, facets rank
+
+Two kinds of description, and confusing them is the most expensive mistake
+available here.
+
+**Closed and load-bearing** — ports, types, capabilities, effects, permissions,
+parameters. Legality is decided on these. They are checked exactly, cheaply, and
+with no model involved.
+
+**Open and advisory** — everything in `manifest.facets`: purpose, prose, verbs,
+domain tags, method names, cost, quality priors, provenance, and whatever your
+pack invents next. The key space has no fixed vocabulary. A facet becomes
+searchable when a `FacetSpec` declares *how* — text, keyword, number, bool, or
+carried-but-not-indexed json.
+
+```python
+NodeManifest(..., facets={
+    "purpose.statement": "impute missing numeric values by column median",
+    "purpose.not_for":   ["categorical columns", "time series with gaps"],
+    "domain.tags":       ["tabular", "preprocessing"],
+    "cost.latency_ms":   4.0,
+})
+```
+
+The rule, and it is enforced by a test: **a facet may never change whether a
+node compiles into a position.** Search may return only legal candidates; an
+embedding that liked something illegal does not get a vote. This is also what
+makes a model-free tier possible — legality alone narrows most positions to a
+handful, and ranking the handful is a job a small local model can do.
+
+An unknown facet is carried, never rejected. A *declared* facet holding the
+wrong kind of value is a real error, because something downstream will compare
+it.
+
+---
+
+## Look at what you built
+
+`browsergraph.viz` draws any workbench — it knows nothing about any domain.
+
+```python
+from browsergraph import viz
+
+viz.dag(bench, route=chosen)      # layers, fan-out, joins, typed edges
+viz.route_space(bench, route=chosen, alternative=before)
+viz.funnel([("all routes", n), ("legal", m), ("evaluated", k), ("chosen", 1)])
+viz.evidence({"parse": 1.9, "locate": -1.1})     # signed bits per step
+viz.write_report(bench, "report.html", route=chosen)
+```
+
+Draw the graph before you believe it is a graph. A diamond rendered as one box
+per layer is a chain, whatever the stage list implies — and that is far easier
+to see than to reason about.
+
+---
+
 ## Hard rules
 
 1. **Every node declares typed input and output ports.** No untyped edges.
@@ -145,6 +237,12 @@ in the demonstration, and that is the wrong unit. A route is fourteen
 independent choices — 41.8 bits. Evidence from dozens of runs resolves most of
 them; `browsergraph route` samples per stage at *sum* cost, not product. Report
 the bits, not the routes.
+
+Also: nothing ever enumerates that space. `strategy="auto"` picks beam above the
+enumeration limit, and asking for `"exhaustive"` on a space that does not fit
+raises `SpaceTooLarge` naming the count — it does not try. If you catch yourself
+writing a loop over `itertools.product` of the candidates, you have reinvented
+the thing the searcher exists to avoid.
 
 **"This should just be a function."** If there is exactly one way to do every
 step and no step can fail in an interesting way, then yes — say so. This model

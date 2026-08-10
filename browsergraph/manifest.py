@@ -33,6 +33,8 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from browsergraph import facets
+
 #: Wire-format version. Bumped when the shape changes, not when content does.
 SCHEMA_VERSION = "2.0"
 
@@ -198,6 +200,16 @@ class NodeManifest:
     runtime: Mapping[str, Any] = field(default_factory=dict)
     metrics: Mapping[str, Any] = field(default_factory=dict)
 
+    #: Every *other* way this node can be described — purpose, prose, verbs,
+    #: domain tags, method names, cost, provenance, and whatever a pack invents
+    #: next. The key space is open on purpose; see `facets.py`.
+    #:
+    #: The fields above are closed because legality is decided on them. This one
+    #: is open because discovery is not. Nothing in here may change whether the
+    #: node compiles into a position — it changes only which legal node is
+    #: *preferred*. That asymmetry is the whole design: types bind, facets rank.
+    facets: Mapping[str, Any] = field(default_factory=dict)
+
     def __post_init__(self) -> None:
         for name in ("roles", "capabilities", "tags", "permissions", "effects",
                      "dependencies", "inputs", "outputs", "parameters"):
@@ -251,6 +263,12 @@ class NodeManifest:
             bad += [f"{self.id}: {msg}" for msg in param.validate()]
         for dupe in _dupes([p.name for p in self.parameters]):
             bad.append(f"{self.id}: two parameters named {dupe!r}")
+
+        # Descriptors are checked for *shape*, never for presence. A node with
+        # no facets is perfectly valid and merely harder to find; a node whose
+        # declared number holds "quite fast" is broken, because something
+        # downstream will try to compare it.
+        bad += [f"{self.id}: {msg}" for msg in facets.validate(self.facets)]
         return bad
 
     def assert_valid(self) -> NodeManifest:
@@ -309,7 +327,7 @@ class NodeManifest:
             out["outputs"] = [p.to_dict() for p in self.outputs]
         if self.parameters:
             out["parameters"] = [p.to_dict() for p in self.parameters]
-        for key in ("resources", "runtime", "metrics"):
+        for key in ("resources", "runtime", "metrics", "facets"):
             if getattr(self, key):
                 out[key] = dict(getattr(self, key))
         return out
@@ -334,7 +352,8 @@ class NodeManifest:
             dependencies=tuple(data.get("dependencies") or ()),
             resources=dict(data.get("resources") or {}),
             runtime=dict(data.get("runtime") or {}),
-            metrics=dict(data.get("metrics") or {}))
+            metrics=dict(data.get("metrics") or {}),
+            facets=dict(data.get("facets") or {}))
 
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_dict(), indent=indent, sort_keys=False)

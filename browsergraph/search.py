@@ -229,7 +229,8 @@ def propose(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
                            "quality compounds, so this is a baseline rather "
                            "than an optimum",)
     elif chosen == "exhaustive":
-        route, examined = _exhaustive(workbench, profile, stages, eligible)
+        route, examined = _exhaustive(workbench, profile, stages, eligible,
+                                      spans, limit)
     else:
         route, examined = _beam(workbench, profile, stages, eligible, beam, spans)
         proposal.notes += (f"beam width {beam}",)
@@ -358,16 +359,52 @@ def _greedy(workbench, profile, stages, eligible) -> tuple[dict[str, str], int]:
     return route, examined
 
 
-def _exhaustive(workbench, profile, stages, eligible) -> tuple[dict[str, str], int]:
+class SpaceTooLarge(ValueError):
+    """Raised when enumeration was asked for and is not physically possible."""
+
+
+def _exhaustive(workbench, profile, stages, eligible, spans,
+                limit: int = EXHAUSTIVE_LIMIT) -> tuple[dict[str, str], int]:
+    """Every eligible route, scored, streamed.
+
+    Two things here are load-bearing and were both wrong before.
+
+    **It refuses rather than tries.** `strategy="auto"` already checks the space
+    against `limit`; asking for `"exhaustive"` explicitly used to skip that check
+    and go straight to enumeration. On the demonstration workbench that is 3.8
+    trillion routes, and the process died taking 53GB of the machine with it.
+    Refusing with the number in the message is the only honest answer: the
+    caller asked for something that cannot be done, and quietly doing a
+    different search instead would report coverage it did not have.
+
+    **It streams.** Even at the limit, materialising the product as a list of
+    dicts costs hundreds of megabytes to hold routes that are looked at once.
+    `itertools.product` yields them; only the best is kept.
+
+    Scoring uses the same fixed `spans` as every other strategy, so a score from
+    here is comparable with one from beam or greedy. Scoring within the
+    enumerated set instead would make the exhaustive number incomparable with
+    the others, which defeats the point of running all three.
+    """
     keys = [stage.id for stage in stages]
+    space = 1
+    for key in keys:
+        space *= len(eligible[key])
+    if space > limit:
+        raise SpaceTooLarge(
+            f"exhaustive search over {space:,} eligible routes exceeds the "
+            f"{limit:,} enumeration limit. Use strategy='auto' (which picks "
+            f"beam above the limit), strategy='beam', or raise `limit` "
+            f"deliberately if you have the time and memory for it.")
+
     best: dict[str, str] = {}
     best_score, examined = float("-inf"), 0
-    combos = [dict(zip(keys, combo, strict=True))
-              for combo in itertools.product(*[eligible[k] for k in keys])]
-    for index, score in _score_routes(workbench, profile, combos):
+    for combo in itertools.product(*[eligible[k] for k in keys]):
+        route = dict(zip(keys, combo, strict=True))
+        score = profile.score_within(aggregate(workbench, route), spans)
         examined += 1
         if score > best_score or (score == best_score and not best):
-            best, best_score = combos[index], score
+            best, best_score = route, score
     return best, examined
 
 
@@ -403,7 +440,23 @@ def _beam(workbench, profile, stages, eligible, width, spans
 
 def compare_strategies(workbench: WorkbenchDefinition,
                        profile: OptimizationProfile, *,
-                       policy: Policy | None = None) -> dict[str, Proposal]:
-    """All three, so the cost of the cheap one is visible rather than assumed."""
-    return {name: propose(workbench, profile, policy=policy, strategy=name)
-            for name in ("greedy", "beam", "exhaustive")}
+                       policy: Policy | None = None,
+                       limit: int = EXHAUSTIVE_LIMIT) -> dict[str, Proposal]:
+    """All three, so the cost of the cheap one is visible rather than assumed.
+
+    Exhaustive is skipped — not attempted — when the space is too large to
+    enumerate, and its absence is reported in the surviving proposals' notes
+    rather than left for the caller to notice. Comparing greedy against beam is
+    still worth doing; comparing them against a search that could not run is
+    not, and silently returning two keys where three were expected is how a
+    caller ends up reporting a best-of-three that was a best-of-two.
+    """
+    out: dict[str, Proposal] = {}
+    for name in ("greedy", "beam", "exhaustive"):
+        try:
+            out[name] = propose(workbench, profile, policy=policy,
+                                strategy=name, limit=limit)
+        except SpaceTooLarge as exc:
+            for proposal in out.values():
+                proposal.notes += (f"exhaustive not run: {exc}",)
+    return out

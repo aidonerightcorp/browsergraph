@@ -458,3 +458,59 @@ def test_decisions_serialise_with_the_proposal(bench):
     data = search.propose(bench, BALANCED, policy=Policy.permissive(),
                           strategy="greedy").to_dict()
     assert data["decisions"] and "contributions" in data["decisions"][0]
+
+
+# --- enumeration has to be physically possible ------------------------------
+
+def test_explicit_exhaustive_refuses_a_space_it_cannot_enumerate():
+    """It used to try. On the demonstration workbench that is 3.8 trillion
+    routes; the process reached 53GB and the machine had to be rescued.
+
+    `strategy="auto"` always checked the limit — asking for exhaustive by name
+    skipped the check, which is the worst possible place for a guard to be
+    missing, because naming the strategy is what a person does when they want
+    to be careful.
+    """
+    from browsergraph import search
+    from browsergraph.demo import workbench
+    from browsergraph.policy import Policy
+
+    bench = workbench()
+    with pytest.raises(search.SpaceTooLarge) as caught:
+        search.propose(bench, bench.optimization_profiles[0],
+                       policy=Policy.permissive(), strategy="exhaustive")
+    message = str(caught.value)
+    assert "exceeds" in message and "limit" in message
+    assert "beam" in message, "a refusal should name the thing to do instead"
+
+
+def test_compare_strategies_skips_exhaustive_and_says_so():
+    """Silently returning two keys where three were expected is how a caller
+    reports a best-of-three that was a best-of-two."""
+    from browsergraph import search
+    from browsergraph.demo import workbench
+    from browsergraph.policy import Policy
+
+    bench = workbench()
+    got = search.compare_strategies(bench, bench.optimization_profiles[0],
+                                    policy=Policy.permissive())
+    assert set(got) == {"greedy", "beam"}
+    assert any("exhaustive not run" in note
+               for proposal in got.values() for note in proposal.notes)
+
+
+def test_exhaustive_still_runs_when_the_space_genuinely_fits(small_bench):
+    """The guard must not have turned enumeration off in general.
+
+    `small_bench` is 625 routes and exists for exactly this. An earlier draft of
+    this test raised the limit on the *demonstration* workbench instead, asking
+    a fixed guard to enumerate two billion routes — committing, inside the test
+    for the guard, the mistake the guard exists to prevent.
+    """
+    from browsergraph import search
+    from browsergraph.policy import Policy
+
+    got = search.propose(small_bench, BALANCED, policy=Policy.permissive(),
+                         strategy="exhaustive")
+    assert got.strategy == "exhaustive"
+    assert got.examined == small_bench.route_count() == 625

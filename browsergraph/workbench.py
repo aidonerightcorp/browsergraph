@@ -41,7 +41,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from browsergraph.manifest import SCHEMA_VERSION, NodeManifest
+from browsergraph import types as _types
+from browsergraph.manifest import SCHEMA_VERSION, NodeManifest, PortSpec
 
 DIRECTIONS = ("maximize", "minimize")
 
@@ -143,6 +144,40 @@ def expand_node_candidates(manifests: Sequence[NodeManifest]) -> tuple[NodeCandi
 
 
 @dataclass(frozen=True)
+class Edge:
+    """One typed connection between two stages.
+
+    The thing that turns a pipeline into a graph. A chain is the degenerate
+    case — `to_port` fed by the single output of the stage before it — and a
+    join is two edges into different ports of the same stage, which a sequence
+    of stages simply cannot express.
+    """
+    source: str
+    target: str
+    from_port: str = ""
+    to_port: str = ""
+
+    def to_dict(self) -> dict:
+        out = {"source": self.source, "target": self.target}
+        if self.from_port:
+            out["from_port"] = self.from_port
+        if self.to_port:
+            out["to_port"] = self.to_port
+        return out
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Edge:
+        return cls(source=data.get("source", ""), target=data.get("target", ""),
+                   from_port=data.get("from_port", ""),
+                   to_port=data.get("to_port", ""))
+
+    def __str__(self) -> str:
+        left = f"{self.source}.{self.from_port}" if self.from_port else self.source
+        right = f"{self.target}.{self.to_port}" if self.to_port else self.target
+        return f"{left} -> {right}"
+
+
+@dataclass(frozen=True)
 class StageDefinition:
     """One ordered requirement of the task. One column.
 
@@ -161,13 +196,30 @@ class StageDefinition:
     required_capabilities: tuple[str, ...] = ()
     candidates: tuple[str, ...] = ()
     substages: tuple[StageDefinition, ...] = ()
+    #: Named typed ports. A stage with two inputs is a join — the shape a
+    #: sequence of stages cannot express. `input_type`/`output_type` remain the
+    #: shorthand for the single-port case and are folded into these, so every
+    #: existing definition keeps working and nothing has to be rewritten to
+    #: gain a second port.
+    inputs: tuple[PortSpec, ...] = ()
+    outputs: tuple[PortSpec, ...] = ()
 
     def __post_init__(self) -> None:
         for name in ("variant_axes", "required_capabilities", "candidates",
-                     "substages"):
+                     "substages", "inputs", "outputs"):
             object.__setattr__(self, name, tuple(getattr(self, name)))
         if not self.name:
             object.__setattr__(self, "name", self.id.replace("_", " ").capitalize())
+        if not self.inputs and self.input_type:
+            object.__setattr__(self, "inputs", (PortSpec("in", self.input_type),))
+        if not self.outputs and self.output_type:
+            object.__setattr__(self, "outputs", (PortSpec("out", self.output_type),))
+
+    def port(self, name: str, outgoing: bool) -> PortSpec | None:
+        ports = self.outputs if outgoing else self.inputs
+        if not name:
+            return ports[0] if len(ports) == 1 else None
+        return next((p for p in ports if p.name == name), None)
 
     @property
     def is_composite(self) -> bool:
@@ -195,36 +247,74 @@ class StageDefinition:
     def depth(self) -> int:
         return 1 + max((sub.depth() for sub in self.substages), default=0)
 
-    def eligible(self, manifest: NodeManifest) -> bool:
+    def eligible(self, manifest: NodeManifest, lattice=None) -> bool:
         """Could this definition legally perform this stage?
 
         Capability and both port contracts — a node that can `verify` but cannot
         accept what the previous stage produces is not a candidate here, and
         finding that out at run time is finding it out too late.
+
+        `lattice` makes this agree with the compiler. Without it, discovery
+        compares type names with `==` while `compile_route` compares them
+        through the subtype lattice, and the two disagree about exactly the
+        nodes that declare an `is_a` relation: a loader producing `CsvRecords`
+        for a stage that asks for `Records` compiles perfectly and was invisible
+        to discovery, so the stage came back with zero candidates and the whole
+        workbench reported zero routes. A registry whose search is stricter than
+        its compiler hides the nodes that were most carefully described, which
+        is precisely backwards.
         """
         if not manifest.can(*self.required_capabilities):
             return False
-        if self.input_type and not manifest.accepts(self.input_type):
-            return False
-        if self.output_type and not manifest.produces(self.output_type):
-            return False
+        # Every port this stage declares must be served by a port on the node.
+        # The single-port case is unchanged; a two-input join now requires a
+        # node that genuinely accepts both, instead of one that happens to
+        # accept the first.
+        #
+        # Directions are not symmetric. For an input, the stage promises to hand
+        # over `port.type`, so the node must accept that or something wider. For
+        # an output, the stage promises to produce `port.type`, so the node must
+        # produce that or something narrower.
+        for port in self.inputs:
+            if manifest.accepts(port.type):
+                continue
+            if lattice is not None and not manifest.inputs:
+                continue                     # a source consumes nothing
+            if lattice is None or not any(
+                    lattice.is_a(port.type, p.type) for p in manifest.inputs):
+                return False
+        for port in self.outputs:
+            if manifest.produces(port.type):
+                continue
+            if lattice is None or not any(
+                    lattice.is_a(p.type, port.type) for p in manifest.outputs):
+                return False
         return True
 
     def with_discovered_candidates(
             self, manifests: Sequence[NodeManifest],
-            candidates: Sequence[NodeCandidate]) -> StageDefinition:
+            candidates: Sequence[NodeCandidate],
+            lattice=None) -> StageDefinition:
         """Every compatible candidate in the registry, not a chosen few.
 
         Recurses: a composite stage discovers nothing itself and asks each
         sub-step instead, because only leaves hold candidates.
+
+        The lattice is built from the manifests being searched unless one is
+        supplied, so subtype declarations are honoured by default rather than
+        only when the caller remembers to ask.
         """
+        if lattice is None:
+            from browsergraph import types as _types
+            lattice = _types.lattice_from(manifests)
         if self.substages:
             return replace(self, substages=tuple(
-                sub.with_discovered_candidates(manifests, candidates)
+                sub.with_discovered_candidates(manifests, candidates, lattice)
                 for sub in self.substages))
         by_id = {m.id: m for m in manifests}
         found = tuple(c.id for c in candidates
-                      if c.node_id in by_id and self.eligible(by_id[c.node_id]))
+                      if c.node_id in by_id
+                      and self.eligible(by_id[c.node_id], lattice))
         return replace(self, candidates=found)
 
     def to_dict(self) -> dict:
@@ -238,6 +328,11 @@ class StageDefinition:
         for key in ("variant_axes", "required_capabilities", "candidates"):
             if getattr(self, key):
                 out[key] = list(getattr(self, key))
+        # Only when they say more than input_type/output_type already do.
+        if len(self.inputs) > 1 or any(p.name != "in" for p in self.inputs):
+            out["inputs"] = [p.to_dict() for p in self.inputs]
+        if len(self.outputs) > 1 or any(p.name != "out" for p in self.outputs):
+            out["outputs"] = [p.to_dict() for p in self.outputs]
         if self.substages:
             out["substages"] = [s.to_dict() for s in self.substages]
         return out
@@ -253,6 +348,10 @@ class StageDefinition:
                    variant_axes=tuple(data.get("variant_axes") or ()),
                    required_capabilities=tuple(data.get("required_capabilities") or ()),
                    candidates=tuple(data.get("candidates") or ()),
+                   inputs=tuple(PortSpec.from_dict(p)
+                                for p in data.get("inputs") or ()),
+                   outputs=tuple(PortSpec.from_dict(p)
+                                 for p in data.get("outputs") or ()),
                    substages=tuple(cls.from_dict(s)
                                    for s in data.get("substages") or ()))
 
@@ -486,11 +585,16 @@ class WorkbenchDefinition:
     solutions: tuple[SolutionDefinition, ...] = ()
     feedback_channels: tuple[FeedbackDefinition, ...] = ()
     optimization_profiles: tuple[OptimizationProfile, ...] = ()
+    #: How the sub-steps connect. Empty means "a chain in declared order",
+    #: which is what every workbench written before edges existed meant — so
+    #: they keep working, and gain fan-out by naming edges rather than by being
+    #: rewritten.
+    edges: tuple[Edge, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         for name in ("nodes", "candidates", "stages", "solutions",
-                     "feedback_channels", "optimization_profiles"):
+                     "feedback_channels", "optimization_profiles", "edges"):
             object.__setattr__(self, name, tuple(getattr(self, name)))
 
     # --- lookups ------------------------------------------------------------
@@ -539,6 +643,97 @@ class WorkbenchDefinition:
 
     # --- the numbers --------------------------------------------------------
 
+    # --- the graph ----------------------------------------------------------
+
+    def wiring(self) -> tuple[Edge, ...]:
+        """The edges, inferred as a chain when none are declared.
+
+        A chain is a DAG with one edge per adjacent pair. Inferring it keeps
+        every existing workbench valid and means the general code path is the
+        only code path — there is no "linear mode" to drift out of step.
+        """
+        if self.edges:
+            return self.edges
+        leaves = self.leaf_stages
+        return tuple(Edge(source=a.id, target=b.id)
+                     for a, b in zip(leaves, leaves[1:], strict=False))
+
+    def successors(self) -> dict[str, list[str]]:
+        out: dict[str, list[str]] = {s.id: [] for s in self.leaf_stages}
+        for edge in self.wiring():
+            out.setdefault(edge.source, []).append(edge.target)
+        return out
+
+    def predecessors(self) -> dict[str, list[str]]:
+        out: dict[str, list[str]] = {s.id: [] for s in self.leaf_stages}
+        for edge in self.wiring():
+            out.setdefault(edge.target, []).append(edge.source)
+        return out
+
+    def sources(self) -> list[str]:
+        into = self.predecessors()
+        return [s.id for s in self.leaf_stages if not into.get(s.id)]
+
+    def sinks(self) -> list[str]:
+        out = self.successors()
+        return [s.id for s in self.leaf_stages if not out.get(s.id)]
+
+    def cycles(self) -> list[list[str]]:
+        """Any cycle, as the path that closes it.
+
+        A cycle is not a subtle problem — it means the plan cannot be ordered,
+        so nothing can run — but it is invisible in a list of edges, which is
+        why it is checked rather than assumed away by the drawing.
+        """
+        successors = self.successors()
+        state: dict[str, int] = {}
+        found: list[list[str]] = []
+
+        def walk(node: str, path: list[str]) -> None:
+            state[node] = 1
+            for nxt in successors.get(node, []):
+                if state.get(nxt) == 1:
+                    found.append([*path[path.index(nxt):], node, nxt]
+                                 if nxt in path else [node, nxt])
+                elif state.get(nxt, 0) == 0:
+                    walk(nxt, [*path, node])
+            state[node] = 2
+
+        for stage in self.leaf_stages:
+            if state.get(stage.id, 0) == 0:
+                walk(stage.id, [])
+        return found
+
+    def layers(self) -> list[list[str]]:
+        """Sub-steps grouped by longest path from a source.
+
+        This is what puts the columns back. Left-to-right was never the
+        invariant — it is a *rendering* of a DAG, and a topological layering
+        reproduces it for any shape, including the diamond a chain cannot hold.
+        """
+        depth: dict[str, int] = {s.id: 0 for s in self.leaf_stages}
+        into = self.predecessors()
+        for _ in range(len(depth)):
+            changed = False
+            for stage_id, parents in into.items():
+                if not parents:
+                    continue
+                deepest = max(depth.get(p, 0) for p in parents) + 1
+                if deepest > depth.get(stage_id, 0):
+                    depth[stage_id] = deepest
+                    changed = True
+            if not changed:
+                break
+        out: dict[int, list[str]] = {}
+        for stage in self.leaf_stages:       # declared order within a layer
+            out.setdefault(depth.get(stage.id, 0), []).append(stage.id)
+        return [out[k] for k in sorted(out)]
+
+    @property
+    def is_chain(self) -> bool:
+        """True when every layer holds exactly one sub-step."""
+        return all(len(layer) == 1 for layer in self.layers())
+
     def route_count(self) -> int:
         """Complete primary routes, over **leaves**. The product, not the sum.
 
@@ -568,10 +763,19 @@ class WorkbenchDefinition:
         return total if self.stages else 0
 
     def transition_count(self) -> int:
-        """Edges between adjacent sub-steps — what the network view can draw."""
-        leaves = self.leaf_stages
-        return sum(len(a.candidates) * len(b.candidates)
-                   for a, b in zip(leaves, leaves[1:], strict=False))
+        """Candidate-level connections across every edge in the graph.
+
+        Per edge rather than per adjacent pair: in a diamond the two branches
+        both connect to the join, and a sequential count would miss one of them
+        entirely.
+        """
+        by_id = {s.id: s for s in self.leaf_stages}
+        total = 0
+        for edge in self.wiring():
+            left, right = by_id.get(edge.source), by_id.get(edge.target)
+            if left and right:
+                total += len(left.candidates) * len(right.candidates)
+        return total
 
     def summary(self) -> str:
         leaves = self.leaf_stages
@@ -677,14 +881,60 @@ class WorkbenchDefinition:
                         bad.append(f"required stage {stage.id!r} admits the "
                                    f"pass-through candidate {cid!r}")
 
-        # --- adjacent contracts, across the flattened sub-steps
-        leaves = self.leaf_stages
-        for before, after in zip(leaves, leaves[1:], strict=False):
-            if before.output_type and after.input_type \
-                    and before.output_type != after.input_type:
-                bad.append(f"stage {before.id!r} produces {before.output_type!r} "
-                           f"but {after.id!r} consumes {after.input_type!r} — "
-                           f"insert an adapter stage rather than coercing")
+        # --- the graph: every edge, not every adjacent pair
+        lattice = _types.lattice_from(self.nodes)
+        by_id = {s.id: s for s in self.leaf_stages}
+        for edge in self.wiring():
+            left, right = by_id.get(edge.source), by_id.get(edge.target)
+            if left is None:
+                bad.append(f"edge {edge} starts at unknown sub-step "
+                           f"{edge.source!r}")
+                continue
+            if right is None:
+                bad.append(f"edge {edge} ends at unknown sub-step {edge.target!r}")
+                continue
+            produced = left.port(edge.from_port, outgoing=True)
+            consumed = right.port(edge.to_port, outgoing=False)
+            if produced is None:
+                bad.append(f"edge {edge}: {left.id!r} has no output port "
+                           f"{edge.from_port or '(single)'!r} — it declares "
+                           f"{[p.name for p in left.outputs] or 'none'}")
+                continue
+            if consumed is None:
+                bad.append(f"edge {edge}: {right.id!r} has no input port "
+                           f"{edge.to_port or '(single)'!r} — it declares "
+                           f"{[p.name for p in right.inputs] or 'none'}")
+                continue
+            mismatch = _types.check(produced, consumed, lattice)
+            if mismatch is not None:
+                bad.append(f"edge {edge}: {mismatch.reason} — "
+                           f"{mismatch.fix or 'insert an adapter rather than coercing'}")
+
+        for cycle in self.cycles():
+            bad.append("the graph has a cycle: " + " -> ".join(cycle)
+                       + " — a plan with a cycle cannot be ordered, so nothing "
+                         "can run")
+
+        # Every required input port must be fed by something, or the stage is a
+        # source. A port nobody writes to is a stage that cannot start, and it
+        # is invisible in a list of edges.
+        fed: dict[str, set[str]] = {s.id: set() for s in self.leaf_stages}
+        for edge in self.wiring():
+            right = by_id.get(edge.target)
+            if right is None:
+                continue
+            port = right.port(edge.to_port, outgoing=False)
+            if port is not None:
+                fed[edge.target].add(port.name)
+        entry = set(self.sources())
+        for stage in self.leaf_stages:
+            if stage.id in entry:
+                continue
+            for port in stage.inputs:
+                if port.required and port.name not in fed.get(stage.id, set()):
+                    bad.append(f"sub-step {stage.id!r} needs input "
+                               f"{port.name!r} ({port.type}) and no edge "
+                               f"supplies it")
 
         # --- routes: one choice per leaf, not per top-level stage
         stage_ids = [s.id for s in self.leaf_stages]
@@ -776,13 +1026,16 @@ class WorkbenchDefinition:
             "candidates": [c.to_dict() for c in self.candidates],
             "stages": [s.to_dict() for s in self.stages],
             "solutions": [s.to_dict() for s in self.solutions],
+            "edges": [e.to_dict() for e in self.wiring()],
             "feedback_channels": [f.to_dict() for f in self.feedback_channels],
             "optimization_profiles": [p.to_dict() for p in self.optimization_profiles],
             "metadata": {**dict(self.metadata),
                          "route_count": self.route_count(),
                          "transition_count": self.transition_count(),
                          "stage_count": len(self.stages),
-                         "leaf_count": len(self.leaf_stages)},
+                         "leaf_count": len(self.leaf_stages),
+                         "layers": len(self.layers()),
+                         "is_chain": self.is_chain},
         }
 
     @classmethod
@@ -801,6 +1054,7 @@ class WorkbenchDefinition:
             stages=tuple(StageDefinition.from_dict(s) for s in stages),
             solutions=tuple(SolutionDefinition.from_dict(s)
                             for s in data.get("solutions") or ()),
+            edges=tuple(Edge.from_dict(e) for e in data.get("edges") or ()),
             feedback_channels=tuple(FeedbackDefinition.from_dict(f)
                                     for f in data.get("feedback_channels") or ()),
             optimization_profiles=tuple(OptimizationProfile.from_dict(p)
