@@ -25,6 +25,7 @@ from browsergraph.dimensions import (
 from browsergraph.evidence import Evidence, Observation, Posterior
 from browsergraph.execute import ExecutionError, Run, Runtime, dry_run
 from browsergraph.execute import run as run_plan
+from browsergraph.explore import Suggestion, guided, ollama_proposer
 
 # Facets are exported under `facet_*` names. Their module-level names are
 # deliberately plain (`validate`, `fields`, `merge`) because inside `facets.py`
@@ -95,6 +96,8 @@ __all__ = [
     # open description: types bind, facets rank
     "FacetSpec", "WELL_KNOWN_FACETS", "facet_fields", "facet_keywords",
     "facet_specs_for", "merge_facets", "normalize_facet", "validate_facets",
+    # a model may suggest; the compiler still decides
+    "guided", "Suggestion", "ollama_proposer",
     # pictures of any workbench — `import browsergraph.viz` for the rest
     "VizFigure", "viz_report",
 ]

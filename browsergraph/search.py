@@ -84,6 +84,10 @@ class Proposal:
     problems: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
     decisions: tuple[Decision, ...] = ()
+    #: What a model proposed, if one was asked. Kept so its contribution is
+    #: auditable: a model quietly ignored looks identical to one quietly
+    #: followed unless somebody writes down which happened.
+    suggestions: tuple = ()
 
     @property
     def ok(self) -> bool:
