@@ -47,9 +47,9 @@ PLANE_RULES: list[tuple[str, str, Callable[[Contract], bool]]] = [
     ("act", "change something",
      lambda c: c.mutates or c.kind == "scroll"),
     ("verify", "confirm it happened",
-     lambda c: c.verifies or c.kind == "screenshot"),
+     lambda c: c.verifies or c.kind in ("screenshot", "ocr_verify")),
     ("extract", "take the data away",
-     lambda c: c.kind in ("extract", "for_each", "frontier")),
+     lambda c: c.kind in ("extract", "for_each", "frontier", "ocr_extract")),
 ]
 
 #: Candidates that are real answers but not node classes.
@@ -113,7 +113,10 @@ class Route:
 COST = {"css": 0.3, "dwell": 0.4, "http": 0.2, "playwright": 1.0, "patchright": 1.3, "selenium": 1.4,
         "selenium_uc": 2.0, "zendriver": 1.5, "camoufox": 2.4,
         "llm_selector": 3.0, "llm_verify": 3.0, "vision_locate": 4.0,
-        "vision_verify": 4.0, "screenshot": 0.6, "healing": 1.2}
+        "vision_verify": 4.0, "screenshot": 0.6, "healing": 1.2,
+        # Reading pixels is a last resort: worse than the DOM in every way
+        # that matters, and only right when the DOM cannot answer.
+        "ocr_extract": 5.0, "ocr_verify": 5.0}
 
 
 def planes(registry: dict | None = None) -> list[Plane]:

@@ -100,6 +100,9 @@ def test_only_a_wrapper_is_an_honest_failure(tmp_path, monkeypatch):
     monkeypatch.setitem(mod.CANDIDATES, Binary.FIREFOX, ())
     monkeypatch.setattr(mod.shutil, "which",
                         lambda n: str(wrapper) if n.startswith("firefox") else None)
+    # No Playwright download either, or the fallback would rescue this and the
+    # wrapper-only case would never be exercised.
+    monkeypatch.setattr(mod, "find_bundled", lambda b: "")
     got = resolve(Binary.FIREFOX)
     assert not got.ok
     assert "wrapper" in got.explain() and "executable_path" in got.explain()
@@ -111,9 +114,42 @@ def test_every_candidate_path_is_absolute():
             assert os.path.isabs(p), p
 
 
-def test_report_covers_the_installable_binaries():
+def test_report_covers_every_binary_a_user_might_ask_for():
     assert {r.binary for r in report()} == {
-        "system_chrome", "chrome_for_testing", "firefox", "brave"}
+        "system_chrome", "chrome_for_testing", "firefox", "webkit", "brave",
+        "bundled_chromium"}
+
+
+def test_a_playwright_download_counts_as_available(monkeypatch, tmp_path):
+    """Reporting a browser missing because it is not in /usr/bin is a lie.
+
+    `doctor` said `binary:webkit` was missing on a run that drove WebKit three
+    sections later.
+    """
+    import browsergraph.binaries as mod
+    fake = tmp_path / "webkit-9999" / "pw_run.sh"
+    fake.parent.mkdir(parents=True)
+    fake.write_text("#!/bin/sh\nexec webkit\n")
+    fake.chmod(0o755)
+    monkeypatch.setattr(mod, "playwright_cache", lambda: str(tmp_path))
+    monkeypatch.setattr(mod.shutil, "which", lambda n: None)
+    monkeypatch.setitem(mod.CANDIDATES, Binary.WEBKIT, ())
+
+    got = resolve(Binary.WEBKIT)
+    assert got.ok and got.bundled
+    assert "playwright-managed" in got.explain()
+
+
+def test_a_system_binary_still_wins_over_a_download(monkeypatch, tmp_path):
+    """A driver that can be handed a real system binary should get one."""
+    import browsergraph.binaries as mod
+    real = tmp_path / "real-firefox"
+    real.write_bytes(b"\x7fELF" + b"\x00" * 32)
+    real.chmod(0o755)
+    monkeypatch.setitem(mod.CANDIDATES, Binary.FIREFOX, (str(real),))
+    monkeypatch.setattr(mod, "find_bundled", lambda b: "/should/not/be/used")
+    got = resolve(Binary.FIREFOX)
+    assert got.path == str(real) and not got.bundled
 
 
 # --- live: every binary this machine has ------------------------------------

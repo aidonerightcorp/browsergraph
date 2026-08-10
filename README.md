@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Core deps: none](https://img.shields.io/badge/core%20deps-stdlib--only-brightgreen)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-618%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-643%20passing-brightgreen)](tests/)
 [![Kaggle](https://img.shields.io/badge/Kaggle-run%20it%20now-20BEFF?logo=kaggle)](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 
 **Write a browser automation once. Run it on any engine — or on none.**
@@ -137,6 +137,7 @@ chromedriver/snap version skew, a dependency that ships broken source.
 | **Politeness** | per-domain, process-wide rate limiting that honours robots `Crawl-delay` |
 | **Isolation** | conflicting engines in per-engine virtualenvs, over a worker protocol |
 | **Notebooks** | Jupyter/Kaggle/Colab run cells inside an asyncio loop; the sync API is driven from a worker thread so it just works |
+| **OCR (optional)** | read a page from its pixels when the DOM cannot answer — canvas text, baked-in images, and "does this screenshot contain any text at all" |
 | **LLM (optional)** | Ollama-compatible; the model is resolved from the host by *capability*, never hardcoded |
 
 ## Documentation
@@ -166,7 +167,7 @@ breaks something.
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                  # 618 tests; browser suites skip when absent
+pytest -q                                  # 643 tests; browser suites skip when absent
 mypy browsergraph --ignore-missing-imports
 ruff check browsergraph tests
 ```

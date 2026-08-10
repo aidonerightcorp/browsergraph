@@ -13,6 +13,10 @@ keywords = ["browser", "automation", "playwright", "selenium", "graph", "nodes",
 dependencies = []
 
 [project.optional-dependencies]
+# Interchangeable OCR backends; rapidocr needs no system packages.
+ocr = ["rapidocr-onnxruntime", "pillow"]
+ocr-tesseract = ["pytesseract", "pillow"]
+ocr-easy = ["easyocr", "pillow"]
 playwright = ["playwright>=1.40"]
 playwright_stealth = ["playwright>=1.40", "playwright-stealth>=1.0"]
 patchright = ["patchright>=1.40"]
