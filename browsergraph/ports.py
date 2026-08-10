@@ -55,6 +55,32 @@ class BrowserPort(Protocol):
     def eval_js(self, script: str) -> Any: ...
 
 
+@runtime_checkable
+class ExtendedPort(Protocol):
+    """Abilities beyond the core twelve — **optional**, and declared.
+
+    Keeping these out of `BrowserPort` is deliberate. Widening the required
+    surface would force every adapter to implement a keyboard, and an engine
+    with no browser would grow methods that raise. Instead an adapter
+    implements what it can, `browsergraph.capabilities` declares what each
+    engine promises, and a graph is checked against that *before* a browser
+    exists.
+
+    Nothing type-checks against this protocol at run time; it documents the
+    shape an adapter should implement, and `capabilities.METHOD` maps each
+    ability to the method that provides it.
+    """
+
+    def press(self, key: str, selector: str = "") -> None: ...
+    def select_option(self, selector: str, value: str) -> None: ...
+    def upload(self, selector: str, paths: list[str]) -> None: ...
+    def download(self, selector: str, dest: str) -> str: ...
+    def use_frame(self, selector: str | None) -> bool: ...
+    def cookies(self, set_to: list[dict] | None = None) -> list[dict]: ...
+    def set_viewport(self, width: int, height: int) -> None: ...
+    def pdf(self, path: str) -> str: ...
+
+
 @dataclass
 class Context:
     """Everything flowing through a graph run.

@@ -7,6 +7,7 @@ combinations comparable to each other.
 """
 from __future__ import annotations
 
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -387,7 +388,7 @@ def _concurrent_group(graph: Graph, keys: list[str]) -> list[str]:
 
 
 def run(graph: Graph, spec: Spec, browser, strict: bool = True,
-        parallel: int = 1) -> RunResult:
+        parallel: int = 1, recorder=None) -> RunResult:
     """Execute a graph against an already-constructed BrowserPort.
 
     `strict` stops at the first failure, which is almost always what you want:
@@ -396,6 +397,12 @@ def run(graph: Graph, spec: Spec, browser, strict: bool = True,
     `parallel` > 1 runs independent **read-only** nodes in one topological
     level concurrently. Mutating nodes are never parallelised — a page is
     shared mutable state, and two clicks racing is not an optimisation.
+
+    `recorder` is an optional `receipt.Recorder`. Timing has to happen in this
+    loop to be real: a caller that times nodes from outside can only time the
+    whole run, and "which step was slow" is the first thing anyone asks. It
+    stays optional because a caller who does not want a receipt should not pay
+    for one.
     """
     problems = graph.check(spec)
     if problems:
@@ -426,7 +433,14 @@ def run(graph: Graph, spec: Spec, browser, strict: bool = True,
                 if node.needs_browser and ctx.browser is None:
                     ctx.fail(f"{key} needs a browser but none was supplied")
                     break
+                started = time.monotonic()
+                before = ctx.failed
                 ctx = node.run(ctx)
+                if recorder is not None:
+                    recorder.step(node, ok=not (ctx.failed and not before),
+                                  seconds=time.monotonic() - started,
+                                  error=ctx.error if ctx.failed and not before else "",
+                                  key=key)
                 executed.append(key)
                 if ctx.failed and strict:
                     break

@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Core deps: none](https://img.shields.io/badge/core%20deps-stdlib--only-brightgreen)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-770%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-859%20passing-brightgreen)](tests/)
 [![Kaggle](https://img.shields.io/badge/Kaggle-run%20it%20now-20BEFF?logo=kaggle)](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 
 **Write a browser automation once. Run it on any engine — or on none.**
@@ -62,6 +62,17 @@ print(report(lint(graph)))
 # [WARN] BG003 click: graph changes remote state but never verifies the outcome
 #        — a silent failure will look like success
 ```
+
+## New here? Read this first
+
+**[HOW_IT_WORKS.md](HOW_IT_WORKS.md)** — the whole architecture in plain
+English: what a stage is, how settings expand into a matrix of concrete
+options, how four trillion routes get narrowed to one, and what actually
+happens when a step fails. No jargon, no prior context.
+
+> Don't write the steps. Write down what has to be true, list everything that
+> could make it true, and let the program pick — from evidence, with reasons it
+> can show you.
 
 ## Sub-steps: the combinatorics a coarse diagram hides
 
@@ -210,6 +221,9 @@ chromedriver/snap version skew, a dependency that ships broken source.
 | **Notebooks** | Jupyter/Kaggle/Colab run cells inside an asyncio loop; the sync API is driven from a worker thread so it just works |
 | **Universal graph** | portable node manifests, atomic candidates, stage/route validation and a five-view studio — [UNIVERSAL_GRAPH_SYSTEM.md](UNIVERSAL_GRAPH_SYSTEM.md) |
 | **Route search** | policy gates first, then greedy / beam / exhaustive over the eligible space, reporting how much of it was actually examined |
+| **Capabilities** | each engine declares what it can do — press, select, upload, download, frames, cookies, viewport, PDF — checked against a graph *before* a browser launches, with the engines that could run it |
+| **Receipts** | every run writes durable evidence: route, engine, per-step timing, artifacts with content hashes, which steps verified, and a pasteable replay line — for failures too |
+| **Model router** | ten jobs (extract, verify, locate, read-image, classify, embed, rerank, code, plan) routed to the right model with a recorded reason, instead of one default for everything |
 | **Binaries** | fetches a browser or a driver *matched to the browser it will drive* — the fix for "cannot connect to chrome" |
 | **OCR (optional)** | read a page from its pixels when the DOM cannot answer — canvas text, baked-in images, and "does this screenshot contain any text at all" |
 | **LLM (optional)** | Ollama-compatible; the model is resolved from the host by *capability*, never hardcoded |
@@ -218,6 +232,7 @@ chromedriver/snap version skew, a dependency that ships broken source.
 
 | | |
 |---|---|
+| [HOW_IT_WORKS.md](HOW_IT_WORKS.md) | **start here** — the architecture in plain English |
 | [QUICKSTART.md](QUICKSTART.md) | first graph, first real browser, first task |
 | [UNIVERSAL_GRAPH_SYSTEM.md](UNIVERSAL_GRAPH_SYSTEM.md) | stages, candidates, routes, contracts, feedback, optimization |
 | [docs/ROUTE_SEARCH_REPORT.md](docs/ROUTE_SEARCH_REPORT.md) | policy gating and route search, measured end to end |
@@ -243,7 +258,7 @@ breaks something.
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                  # 770 tests; browser suites skip when absent
+pytest -q                                  # 859 tests; browser suites skip when absent
 mypy browsergraph --ignore-missing-imports
 ruff check browsergraph tests
 ```

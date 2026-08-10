@@ -302,6 +302,54 @@ class SeleniumBrowser:
         self._driver.save_screenshot(path)
         return path
 
+    # --- extended capabilities (see browsergraph.capabilities) --------------
+
+    def press(self, key: str, selector: str = "") -> None:
+        from selenium.webdriver.common.by import By  # type: ignore
+        from selenium.webdriver.common.keys import Keys  # type: ignore
+        # Selenium names keys as constants; a caller writing "Enter" should not
+        # have to know that. Fall back to the literal for ordinary characters.
+        value = getattr(Keys, key.upper(), key)
+        if selector:
+            self._driver.find_element(By.CSS_SELECTOR, selector).send_keys(value)
+        else:
+            from selenium.webdriver import ActionChains  # type: ignore
+            ActionChains(self._driver).send_keys(value).perform()
+
+    def select_option(self, selector: str, value: str) -> None:
+        from selenium.webdriver.common.by import By  # type: ignore
+        from selenium.webdriver.support.ui import Select  # type: ignore
+        element = self._driver.find_element(By.CSS_SELECTOR, selector)
+        Select(element).select_by_value(value)
+
+    def upload(self, selector: str, paths: list[str]) -> None:
+        from selenium.webdriver.common.by import By  # type: ignore
+        # An <input type=file> takes newline-separated paths through send_keys;
+        # there is no other way in the WebDriver protocol.
+        self._driver.find_element(By.CSS_SELECTOR, selector).send_keys(
+            "\n".join(paths))
+
+    def use_frame(self, selector: str | None) -> bool:
+        from selenium.webdriver.common.by import By  # type: ignore
+        if selector is None:
+            self._driver.switch_to.default_content()
+            return True
+        try:
+            element = self._driver.find_element(By.CSS_SELECTOR, selector)
+        except Exception:
+            return False
+        self._driver.switch_to.frame(element)
+        return True
+
+    def cookies(self, set_to: list[dict] | None = None) -> list[dict]:
+        if set_to is not None:
+            for cookie in set_to:
+                self._driver.add_cookie(cookie)
+        return list(self._driver.get_cookies())
+
+    def set_viewport(self, width: int, height: int) -> None:
+        self._driver.set_window_size(width, height)
+
     def eval_js(self, script: str):
         """Evaluate and return a value, matching the Playwright adapter.
 

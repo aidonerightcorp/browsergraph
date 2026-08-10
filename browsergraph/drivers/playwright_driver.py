@@ -74,6 +74,8 @@ class PlaywrightBrowser:
         self._pw: Any = None
         self._browser: Any = None
         self._ctx: Any = None
+        #: The iframe element lookups currently resolve through, if any.
+        self._frame: Any = None
         self._page: Any = None
         self.video_path = ""
         self.trace_path = ""
@@ -223,6 +225,7 @@ class PlaywrightBrowser:
         # start() calls stop() on failure, and the caller will usually call it
         # again from its own finally.
         self._pw = self._browser = self._ctx = self._page = None
+        self._frame = None
 
     # navigation
     def goto(self, url: str) -> PageState:
@@ -235,17 +238,17 @@ class PlaywrightBrowser:
 
     # elements
     def find(self, selector: str) -> Element | None:
-        loc = self._page.locator(selector)
+        loc = self._target().locator(selector)
         if loc.count() == 0:
             return None
         return Element(selector=selector, handle=loc.first,
                        text=loc.first.inner_text() if loc.count() else "")
 
     def click(self, selector: str) -> None:
-        self._page.locator(selector).first.click()
+        self._target().locator(selector).first.click()
 
     def type(self, selector: str, text: str, cps: float = 0.0) -> None:
-        loc = self._page.locator(selector).first
+        loc = self._target().locator(selector).first
         if cps <= 0:
             loc.fill(text)
             return
@@ -261,13 +264,13 @@ class PlaywrightBrowser:
 
     def wait_for(self, selector: str, timeout: float = 10.0) -> bool:
         try:
-            self._page.locator(selector).first.wait_for(timeout=timeout * 1000)
+            self._target().locator(selector).first.wait_for(timeout=timeout * 1000)
             return True
         except Exception:
             return False
 
     def text_of(self, selector: str) -> str:
-        loc = self._page.locator(selector)
+        loc = self._target().locator(selector)
         return loc.first.inner_text() if loc.count() else ""
 
     def html(self) -> str:
@@ -279,3 +282,67 @@ class PlaywrightBrowser:
 
     def eval_js(self, script: str):
         return self._page.evaluate(script)
+
+    # --- extended capabilities (see browsergraph.capabilities) --------------
+
+    def press(self, key: str, selector: str = "") -> None:
+        if selector:
+            self._target().locator(selector).first.press(key)
+        else:
+            self._page.keyboard.press(key)
+
+    def select_option(self, selector: str, value: str) -> None:
+        self._target().locator(selector).first.select_option(value)
+
+    def upload(self, selector: str, paths: list[str]) -> None:
+        self._target().locator(selector).first.set_input_files(paths)
+
+    def download(self, selector: str, dest: str) -> str:
+        """Click something and keep whatever file it hands back.
+
+        The click and the wait have to be armed together: a download that
+        starts before anything is listening is simply lost, and the symptom is
+        an empty directory rather than an error.
+        """
+        with self._page.expect_download() as caught:
+            self._target().locator(selector).first.click()
+        caught.value.save_as(dest)
+        return dest
+
+    def _target(self):
+        """Where element lookups go: the current frame, or the page.
+
+        Playwright has no modal frame switch — a FrameLocator is a separate
+        handle — so the adapter holds it as state and every element lookup
+        resolves through here. Selenium *is* modal, and a node written once has
+        to mean the same thing on both engines or the port is a fiction.
+        """
+        return self._frame if self._frame is not None else self._page
+
+    def use_frame(self, selector: str | None) -> bool:
+        if selector is None:
+            self._frame = None
+            return True
+        # frame_locator is lazy, so it always returns a handle. Resolve it now:
+        # reporting success for an iframe that is not there would put every
+        # later lookup into a frame that does not exist, and the failure would
+        # surface as "element not found" several nodes later.
+        try:
+            if self._page.locator(selector).count() == 0:
+                return False
+        except Exception:
+            return False
+        self._frame = self._page.frame_locator(selector)
+        return True
+
+    def cookies(self, set_to: list[dict] | None = None) -> list[dict]:
+        if set_to is not None:
+            self._ctx.add_cookies(set_to)
+        return list(self._ctx.cookies())
+
+    def set_viewport(self, width: int, height: int) -> None:
+        self._page.set_viewport_size({"width": width, "height": height})
+
+    def pdf(self, path: str) -> str:
+        self._page.pdf(path=path)
+        return path

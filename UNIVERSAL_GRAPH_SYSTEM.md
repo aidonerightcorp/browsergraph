@@ -4,6 +4,9 @@
 interchangeable atomic candidates, validated through typed contracts, evaluated
 from execution evidence, and improved by selecting better routes.**
 
+*For the plain-English version of everything below, read
+[HOW_IT_WORKS.md](HOW_IT_WORKS.md) first.*
+
 browsergraph is the proof of concept, but nothing in this model is about
 browsers. The same primitives describe document ingestion, image processing,
 data cleaning, machine learning, API orchestration and business workflows —

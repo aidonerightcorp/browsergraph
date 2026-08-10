@@ -80,3 +80,37 @@ class MockBrowser:
     def eval_js(self, script: str):
         self.calls.append("eval_js")
         return None
+
+    # --- extended capabilities -------------------------------------------
+    # The mock implements all of them so a graph using any capability can be
+    # exercised, linted and unit-tested without a browser anywhere near it.
+
+    def press(self, key: str, selector: str = "") -> None:
+        self.calls.append(f"press:{key}:{selector}")
+
+    def select_option(self, selector: str, value: str) -> None:
+        self.calls.append(f"select:{selector}={value}")
+
+    def upload(self, selector: str, paths: list[str]) -> None:
+        self.calls.append(f"upload:{selector}:{len(paths)}")
+
+    def download(self, selector: str, dest: str) -> str:
+        self.calls.append(f"download:{selector}->{dest}")
+        return dest
+
+    def use_frame(self, selector: str | None) -> bool:
+        self.calls.append(f"frame:{selector}")
+        return True
+
+    def cookies(self, set_to: list[dict] | None = None) -> list[dict]:
+        self.calls.append("cookies")
+        if set_to is not None:
+            self._cookies = list(set_to)
+        return list(getattr(self, "_cookies", []))
+
+    def set_viewport(self, width: int, height: int) -> None:
+        self.calls.append(f"viewport:{width}x{height}")
+
+    def pdf(self, path: str) -> str:
+        self.calls.append(f"pdf:{path}")
+        return path

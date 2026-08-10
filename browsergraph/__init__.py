@@ -30,7 +30,9 @@ from browsergraph.manifest import (
     described_node,
     manifest_of,
 )
-from browsergraph.ports import BrowserPort, Context, Element, PageState
+from browsergraph.ports import BrowserPort, Context, Element, ExtendedPort, PageState
+from browsergraph.receipt import Recorder, TaskReceipt
+from browsergraph.router import Role, Router
 from browsergraph.workbench import (
     FeedbackDefinition,
     NodeCandidate,
@@ -56,4 +58,6 @@ __all__ = [
     "NodeCandidate", "StageDefinition", "SolutionDefinition", "FeedbackDefinition",
     "OptimizationObjective", "OptimizationProfile", "WorkbenchDefinition",
     "candidate_id", "expand_node_candidates",
+    # evidence, capability and model routing
+    "ExtendedPort", "TaskReceipt", "Recorder", "Router", "Role",
 ]

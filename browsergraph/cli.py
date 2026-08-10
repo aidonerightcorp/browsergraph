@@ -15,6 +15,8 @@
     browsergraph workbench -o studio.html     stages, candidates, routes, feedback
     browsergraph fetch chromedriver           download a browser or driver
     browsergraph route --compare              propose a route; show the search
+    browsergraph capabilities                 what each engine can actually do
+    browsergraph models                       which model for which job, and why
 """
 from __future__ import annotations
 
@@ -309,6 +311,41 @@ def cmd_workbench(args) -> int:
     return 0
 
 
+def cmd_capabilities(args) -> int:
+    """Which engines can do what, and which could run a given graph."""
+    from browsergraph import capabilities as caps
+    nodes: tuple = ()
+    if args.config:
+        from browsergraph.config import load_graph
+        graph, _ = load_graph(args.config)
+        nodes = tuple(graph.nodes.values())
+    print(caps.report(nodes))
+    if nodes:
+        for engine in Engine:
+            gaps = caps.missing(engine, nodes)
+            if gaps and args.verbose:
+                print(f"\n  {engine.value} cannot run:")
+                for gap in gaps:
+                    print(f"      {gap}")
+    return 0
+
+
+def cmd_models(args) -> int:
+    """Which model this host would use for each job, and why."""
+    from browsergraph.router import Router, describe_roles
+
+    if args.roles:
+        print(describe_roles())
+        return 0
+    router = Router.load(args.host, os.environ.get("OLLAMA_API_KEY", ""))
+    print(router.report())
+    unfilled = router.unfilled()
+    if unfilled:
+        print(f"\n{len(unfilled)} role(s) unfilled — pull a model, or accept "
+              f"that those jobs cannot run here.")
+    return 1 if unfilled and args.strict else 0
+
+
 def cmd_route(args) -> int:
     """Propose a complete route under a policy and an objective profile."""
     from browsergraph import search
@@ -544,6 +581,17 @@ def main(argv: list[str] | None = None) -> int:
     bs.add_argument("--no-install", action="store_true", help="do not pip/download anything")
     bs.add_argument("--no-apt", action="store_true", help="do not install system libraries")
     bs.set_defaults(fn=cmd_bootstrap)
+
+    cp = sub.add_parser("capabilities", help="what each engine can do")
+    cp.add_argument("config", nargs="?", help="a graph config, to check against")
+    cp.add_argument("-v", "--verbose", action="store_true")
+    cp.set_defaults(fn=cmd_capabilities)
+
+    md = sub.add_parser("models", help="which model for which job, and why")
+    md.add_argument("--host", default="", help="model host (default: OLLAMA_HOST)")
+    md.add_argument("--roles", action="store_true", help="describe the roles only")
+    md.add_argument("--strict", action="store_true", help="exit 1 if a role is unfilled")
+    md.set_defaults(fn=cmd_models)
 
     rt = sub.add_parser("route", help="propose a route under a policy and profile")
     rt.add_argument("config", nargs="?", help="a workbench JSON file (default: the demo)")
