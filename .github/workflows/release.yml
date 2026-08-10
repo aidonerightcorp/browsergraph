@@ -10,6 +10,13 @@ jobs:
   pypi:
     runs-on: ubuntu-latest
     environment: release
+    # `secrets` cannot be used in a step-level `if` — referencing it there makes
+    # GitHub reject the entire workflow file, and the run fails in zero seconds
+    # with "workflow file issue" rather than at the step that mentions it. The
+    # documented way is to surface it as an env var at job level and branch on
+    # whether that is empty.
+    env:
+      HAS_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -47,11 +54,11 @@ jobs:
       # failing the release. A tag should never make a healthy project look
       # broken because of a credential nobody has created yet.
       - id: publish-trusted
-        if: ${{ !secrets.PYPI_API_TOKEN }}
+        if: env.HAS_PYPI_TOKEN != 'true'
         continue-on-error: true
         uses: pypa/gh-action-pypi-publish@release/v1
       - id: publish-token
-        if: ${{ secrets.PYPI_API_TOKEN }}
+        if: env.HAS_PYPI_TOKEN == 'true'
         continue-on-error: true
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
