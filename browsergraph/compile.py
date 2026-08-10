@@ -201,9 +201,11 @@ def compile_route(workbench: WorkbenchDefinition, route: Mapping[str, str],
         # A map stage's ports are collections; the node inside it handles one
         # item. Compare against the element type or every map step would be
         # rejected for the difference that makes it a map.
-        def _wanted(type_name: str) -> str:
-            return (_types.element_of(type_name) if stage.kind == "map"
-                    else type_name)
+        #
+        # Bound per iteration rather than closed over `stage`: this is defined
+        # inside a loop, and a closure that reads the loop variable is one
+        # refactor away from checking every stage against the last one.
+        _wanted = (_types.element_of if stage.kind == "map" else (lambda t: t))
 
         for port in stage.inputs:
             if manifest.inputs and not (

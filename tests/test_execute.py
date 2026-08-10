@@ -452,7 +452,8 @@ def test_independent_steps_can_run_at_the_same_time(diamond):
 
     def slow(**kw):
         with lock:
-            live.append(1); peak.append(len(live))
+            live.append(1)
+            peak.append(len(live))
         time.sleep(0.05)
         with lock:
             live.pop()
