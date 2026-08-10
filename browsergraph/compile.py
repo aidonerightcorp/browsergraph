@@ -54,9 +54,14 @@ class Step:
     permissions: tuple[str, ...] = ()
     effects: tuple[str, ...] = ()
     deterministic: bool = True
+    #: atomic, map or branch. In the digest because a plan that maps over its
+    #: input is a different computation from one that runs once, even with the
+    #: same nodes in the same order.
+    kind: str = "atomic"
 
     def to_dict(self) -> dict:
         return {"stage": self.stage, "candidate": self.candidate,
+                "kind": self.kind,
                 "node": self.node, "name": self.name,
                 "params": dict(self.params),
                 "inputs": [list(p) for p in self.inputs],
@@ -193,22 +198,29 @@ def compile_route(workbench: WorkbenchDefinition, route: Mapping[str, str],
         # did not, so a plan with a content hash was obtainable for a graph the
         # validator rejected. A digest that can certify an invalid plan is worse
         # than no digest.
+        # A map stage's ports are collections; the node inside it handles one
+        # item. Compare against the element type or every map step would be
+        # rejected for the difference that makes it a map.
+        def _wanted(type_name: str) -> str:
+            return (_types.element_of(type_name) if stage.kind == "map"
+                    else type_name)
+
         for port in stage.inputs:
             if manifest.inputs and not (
-                    manifest.accepts(port.type)
-                    or any(lattice.is_a(port.type, p.type)
+                    manifest.accepts(_wanted(port.type))
+                    or any(lattice.is_a(_wanted(port.type), p.type)
                            for p in manifest.inputs)):
                 problems.append(
-                    f"{stage.id}: {chosen!r} does not accept {port.type!r} on "
-                    f"port {port.name!r} — it takes "
+                    f"{stage.id}: {chosen!r} does not accept {_wanted(port.type)!r} "
+                    f"on port {port.name!r} — it takes "
                     f"{[p.type for p in manifest.inputs]}")
         for port in stage.outputs:
-            if not (manifest.produces(port.type)
-                    or any(lattice.is_a(p.type, port.type)
+            if not (manifest.produces(_wanted(port.type))
+                    or any(lattice.is_a(p.type, _wanted(port.type))
                            for p in manifest.outputs)):
                 problems.append(
-                    f"{stage.id}: {chosen!r} does not produce {port.type!r} on "
-                    f"port {port.name!r} — it gives "
+                    f"{stage.id}: {chosen!r} does not produce {_wanted(port.type)!r} "
+                    f"on port {port.name!r} — it gives "
                     f"{[p.type for p in manifest.outputs]}")
         steps.append(Step(
             stage=stage.id, candidate=chosen, node=manifest.id,
@@ -217,7 +229,8 @@ def compile_route(workbench: WorkbenchDefinition, route: Mapping[str, str],
             outputs=tuple((p.name, p.type) for p in stage.outputs),
             permissions=tuple(manifest.permissions),
             effects=tuple(manifest.effects),
-            deterministic=manifest.runtime.get("deterministic") is not False))
+            deterministic=manifest.runtime.get("deterministic") is not False,
+            kind=stage.kind))
 
     # Edges are checked against the *chosen* candidates, which is stricter than
     # checking the stage declarations: a stage may declare a general type while

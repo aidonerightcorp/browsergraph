@@ -144,6 +144,21 @@ def check(produced, expected, lattice: Lattice | None = None) -> Mismatch | None
     return None
 
 
+def element_of(type_name: str) -> str:
+    """`List[Row]` -> `Row`. Anything else comes back unchanged.
+
+    A map stage and the node inside it talk about different things. The stage
+    consumes and produces *collections*; the node handles one item. Writing the
+    stage as `List[Row]` and the node as `Row` says that exactly, and this is
+    the one line that connects them.
+    """
+    text = (type_name or "").strip()
+    for prefix in ("List[", "list[", "Sequence[", "Iterable["):
+        if text.startswith(prefix) and text.endswith("]"):
+            return text[len(prefix):-1].strip()
+    return text
+
+
 def lattice_from(manifests: Iterable, extra: Mapping[str, Iterable[str]] | None = None
                  ) -> Lattice:
     """Build a lattice from `is_a` declarations carried on node manifests.

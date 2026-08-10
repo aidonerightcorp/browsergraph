@@ -7,6 +7,7 @@ by a node come back as artifacts.
 """
 from __future__ import annotations
 
+import time
 from dataclasses import replace
 
 import pytest
@@ -88,8 +89,10 @@ def test_a_node_that_returns_nothing_is_caught_where_it_happened(diamond):
     got = execute.run(diamond, runtime, {"profile": None})
     assert not got.ok
     assert got.stopped_at == "schema"
-    assert "p.schema" in got.steps[-1].error
-    assert "Findings" in got.steps[-1].error
+    # Steps in one layer all run, so the failure is not necessarily last.
+    failed = next(s for s in got.steps if s.stage == "schema")
+    assert "p.schema" in failed.error
+    assert "Findings" in failed.error
 
 
 def test_a_missing_function_says_what_to_do(diamond):
@@ -97,7 +100,8 @@ def test_a_missing_function_says_what_to_do(diamond):
     runtime._functions.pop("p.adjudicate")
     got = execute.run(diamond, runtime, {"profile": None})
     assert not got.ok
-    assert "runtime.register" in got.steps[-1].error
+    failed = next(s for s in got.steps if s.stage == "adjudicate")
+    assert "runtime.register" in failed.error
 
 
 def test_missing_lists_every_gap_before_you_start(diamond):
@@ -247,3 +251,280 @@ def test_the_run_summary_reads_like_a_report(diamond):
     text = execute.run(diamond, _working(), {"profile": None}).text()
     assert "4 steps" in text and "ok" in text
     assert "adjudicate" in text
+
+
+# --- map: do it to every item -------------------------------------------------
+
+def _map_bench():
+    """load -> process(map) -> count."""
+    from browsergraph.workbench import (
+        Edge,
+        NodeCandidate,
+        StageDefinition,
+        WorkbenchDefinition,
+    )
+
+    def n(nid, cap, takes, gives, **kw):
+        return NodeManifest(id=nid, kind="fn", description=f"{cap}",
+                            capabilities=(cap,),
+                            inputs=tuple(PortSpec(a, b) for a, b in takes),
+                            outputs=tuple(PortSpec(a, b) for a, b in gives), **kw)
+
+    nodes = [n("load.list", "read", [], [("out", "List[Item]")]),
+             n("upper.one", "process", [("in", "Item")], [("out", "Item")]),
+             n("count.all", "count", [("in", "List[Item]")], [("out", "Number")])]
+    stages = (
+        StageDefinition(id="load", output_type="List[Item]",
+                        required_capabilities=("read",), candidates=("load.list",)),
+        StageDefinition(id="process", kind="map", input_type="List[Item]",
+                        output_type="List[Item]", required_capabilities=("process",),
+                        candidates=("upper.one",)),
+        StageDefinition(id="count", input_type="List[Item]", output_type="Number",
+                        required_capabilities=("count",), candidates=("count.all",)))
+    bench = WorkbenchDefinition(
+        title="map", stages=stages, nodes=tuple(nodes),
+        edges=(Edge("load", "process"), Edge("process", "count")),
+        candidates=tuple(NodeCandidate(id=x.id, node_id=x.id) for x in nodes))
+    return compile_route(bench, {"load": "load.list", "process": "upper.one",
+                                 "count": "count.all"})
+
+
+def test_a_map_step_runs_once_per_item():
+    """The thing a workbench could not say at all: do it to all of them."""
+    plan = _map_bench()
+    seen = []
+
+    def upper(**kw):
+        seen.append(kw["in"])
+        return kw["in"].upper()
+
+    runtime = execute.Runtime({
+        "load.list": lambda: ["a", "b", "c"],
+        "upper.one": upper,
+        "count.all": lambda **kw: len(kw["in"]),
+    })
+    got = execute.run(plan, runtime)
+    assert got.ok
+    assert seen == ["a", "b", "c"]
+    assert got.output("process") == ["A", "B", "C"]
+    assert got.output("count") == 3
+
+
+def test_a_map_step_names_the_item_that_broke():
+    """"Something in the batch failed" is not actionable. The index is."""
+    plan = _map_bench()
+    runtime = execute.Runtime({
+        "load.list": lambda: ["a", "b", "c"],
+        "upper.one": lambda **kw: kw["in"].upper() if kw["in"] != "b" else 1 / 0,
+        "count.all": lambda **kw: len(kw["in"]),
+    })
+    got = execute.run(plan, runtime)
+    assert not got.ok
+    assert "item 1" in next(s for s in got.steps if s.stage == "process").error
+
+
+def test_a_map_step_over_something_that_is_not_a_collection_says_so():
+    """Tested on the step directly. Run through a whole plan the output guard
+    catches a scalar first, earlier and with a better message — which is the
+    right order, and leaves this rule untested unless it is checked here."""
+    from browsergraph.compile import Step
+
+    step = Step(stage="process", candidate="upper.one", node="upper.one",
+                kind="map", inputs=(("in", "List[Item]"),),
+                outputs=(("out", "List[Item]"),))
+    with pytest.raises(TypeError) as caught:
+        execute._run_one(step, lambda **kw: kw["in"], {"in": 5}, None)
+    assert "needs a collection" in str(caught.value)
+
+
+def test_a_map_step_does_not_walk_through_a_string():
+    """A string is iterable, and mapping over one silently processes it letter
+    by letter — which looks like it worked."""
+    from browsergraph.compile import Step
+
+    step = Step(stage="process", candidate="upper.one", node="upper.one",
+                kind="map", inputs=(("in", "List[Item]"),),
+                outputs=(("out", "List[Item]"),))
+    with pytest.raises(TypeError):
+        execute._run_one(step, lambda **kw: kw["in"], {"in": "abc"}, None)
+
+
+def test_a_map_plan_is_a_different_computation_from_an_atomic_one():
+    """Same nodes, same order — but mapping is not running once, so the digest
+    must differ or evidence from the two would be pooled."""
+    from dataclasses import replace as dc_replace
+    mapped = _map_bench()
+    atomic = dc_replace(mapped, steps=tuple(
+        dc_replace(s, kind="atomic") if s.stage == "process" else s
+        for s in mapped.steps))
+    assert mapped.digest != atomic.digest
+
+
+# --- branch: take one path ----------------------------------------------------
+
+def _branch_bench():
+    """check(branch) -> {small, large} -> report."""
+    from browsergraph.workbench import (
+        Edge,
+        NodeCandidate,
+        StageDefinition,
+        WorkbenchDefinition,
+    )
+
+    def n(nid, cap, takes, gives):
+        return NodeManifest(id=nid, kind="fn", description=cap,
+                            capabilities=(cap,),
+                            inputs=tuple(PortSpec(a, b) for a, b in takes),
+                            outputs=tuple(PortSpec(a, b) for a, b in gives))
+
+    nodes = [n("check.size", "decide", [("in", "Number")],
+               [("small", "Number"), ("large", "Number")]),
+             n("handle.small", "small", [("in", "Number")], [("out", "Text")]),
+             n("handle.large", "large", [("in", "Number")], [("out", "Text")])]
+    stages = (
+        StageDefinition(id="check", kind="branch", required_capabilities=("decide",),
+                        inputs=(PortSpec("in", "Number"),),
+                        outputs=(PortSpec("small", "Number"),
+                                 PortSpec("large", "Number")),
+                        candidates=("check.size",)),
+        StageDefinition(id="small", input_type="Number", output_type="Text",
+                        required_capabilities=("small",), candidates=("handle.small",)),
+        StageDefinition(id="large", input_type="Number", output_type="Text",
+                        required_capabilities=("large",), candidates=("handle.large",)))
+    bench = WorkbenchDefinition(
+        title="branch", stages=stages, nodes=tuple(nodes),
+        edges=(Edge("check", "small", from_port="small"),
+               Edge("check", "large", from_port="large")),
+        candidates=tuple(NodeCandidate(id=x.id, node_id=x.id) for x in nodes))
+    return compile_route(bench, {"check": "check.size", "small": "handle.small",
+                                 "large": "handle.large"})
+
+
+def test_a_branch_runs_only_the_path_it_chose():
+    plan = _branch_bench()
+    ran = []
+    runtime = execute.Runtime({
+        "check.size": lambda **kw: ("large", kw["in"]) if kw["in"] > 10 else ("small", kw["in"]),
+        "handle.small": lambda **kw: ran.append("small") or "it was small",
+        "handle.large": lambda **kw: ran.append("large") or "it was large",
+    })
+    got = execute.run(plan, runtime, {"check": 99})
+    assert got.ok
+    assert ran == ["large"]
+    assert got.output("large") == "it was large"
+    assert next(s for s in got.steps if s.stage == "small").skipped
+
+
+def test_the_other_path_is_skipped_not_failed():
+    """A path not taken is a correct outcome. Recording it as a failure would
+    make every branching run look broken."""
+    plan = _branch_bench()
+    runtime = execute.Runtime({
+        "check.size": lambda **kw: ("small", kw["in"]),
+        "handle.small": lambda **kw: "small",
+        "handle.large": lambda **kw: "large",
+    })
+    got = execute.run(plan, runtime, {"check": 1})
+    skipped = next(s for s in got.steps if s.stage == "large")
+    assert skipped.skipped and skipped.ok
+    assert "not taken" in skipped.error
+
+
+def test_a_branch_that_names_no_port_or_two_is_refused():
+    plan = _branch_bench()
+    runtime = execute.Runtime({
+        "check.size": lambda **kw: {"small": 1, "large": 2},
+        "handle.small": lambda **kw: "s", "handle.large": lambda **kw: "l"})
+    got = execute.run(plan, runtime, {"check": 1})
+    assert not got.ok
+    assert "exactly one output port" in next(
+        s for s in got.steps if s.stage == "check").error
+
+
+# --- parallel, fallbacks, cache, receipt --------------------------------------
+
+def test_independent_steps_can_run_at_the_same_time(diamond):
+    """They share a layer because nothing connects them, so this is safe by
+    construction rather than by hope."""
+    import threading
+    live, peak = [], []
+    lock = threading.Lock()
+
+    def slow(**kw):
+        with lock:
+            live.append(1); peak.append(len(live))
+        time.sleep(0.05)
+        with lock:
+            live.pop()
+        return ["finding"]
+
+    runtime = _working().register("p.schema", slow).register("p.distribution", slow)
+    got = execute.run(diamond, runtime, {"profile": None}, workers=4)
+    assert got.ok
+    assert max(peak) == 2, "the two independent steps did not overlap"
+
+
+def test_a_fallback_takes_over_when_the_chosen_candidate_fails(diamond):
+    """Routes have carried fallbacks all along and nothing ever used them."""
+    def broken(**kw):
+        raise RuntimeError("the good one is down")
+
+    runtime = _working().register("p.schema", broken)
+    runtime.register("p.schema.backup", lambda **kw: ["from the backup"])
+
+    got = execute.run(diamond, runtime, {"profile": None},
+                      fallbacks={"schema": ["p.schema.backup"]})
+    assert got.ok
+    row = next(s for s in got.steps if s.stage == "schema")
+    assert row.fell_back and row.candidate == "p.schema.backup"
+    assert got.output("schema") == ["from the backup"]
+
+
+def test_a_run_says_when_every_fallback_also_failed(diamond):
+    def broken(**kw):
+        raise RuntimeError("down")
+
+    runtime = _working().register("p.schema", broken).register("p.schema.backup", broken)
+    got = execute.run(diamond, runtime, {"profile": None},
+                      fallbacks={"schema": ["p.schema.backup"]})
+    assert not got.ok
+    error = next(s for s in got.steps if s.stage == "schema").error
+    assert "p.schema:" in error and "p.schema.backup:" in error
+
+
+def test_a_cached_step_is_not_run_twice(diamond):
+    calls = []
+    runtime = _working().register(
+        "p.schema", lambda **kw: calls.append(1) or ["finding"])
+    cache: dict = {}
+
+    first = execute.run(diamond, runtime, {"profile": None}, cache=cache)
+    second = execute.run(diamond, runtime, {"profile": None}, cache=cache)
+
+    assert first.ok and second.ok
+    assert len(calls) == 1, "the second run recomputed a cached step"
+    assert next(s for s in second.steps if s.stage == "schema").cached
+
+
+def test_a_step_with_effects_is_never_cached():
+    """Caching a step that touches the world would serve a stale answer."""
+    from browsergraph.compile import Step
+    step = Step(stage="s", candidate="c", node="n", effects=("network.write",))
+    assert execute._cache_key("plan:x", step, {"in": 1}) is None
+
+
+def test_a_non_deterministic_step_is_never_cached():
+    """Caching it would hide the variation you kept it for."""
+    from browsergraph.compile import Step
+    step = Step(stage="s", candidate="c", node="n", deterministic=False)
+    assert execute._cache_key("plan:x", step, {"in": 1}) is None
+
+
+def test_a_run_can_produce_a_receipt(diamond):
+    got = execute.run(diamond, _working(), {"profile": None})
+    receipt = got.receipt(task="quality gate")
+    assert receipt.plan == got.plan_digest
+    assert receipt.ok
+    assert len(receipt.steps) == len(got.steps)
+    assert "quality gate" == receipt.task
+    assert receipt.to_json().startswith("{")

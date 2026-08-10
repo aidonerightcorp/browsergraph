@@ -177,6 +177,11 @@ class Edge:
         return f"{left} -> {right}"
 
 
+#: The only three shapes a stage can have. Kept closed on purpose: each is a
+#: real difference in how the executor runs the step, not a label.
+STAGE_KINDS = ("atomic", "map", "branch")
+
+
 @dataclass(frozen=True)
 class StageDefinition:
     """One ordered requirement of the task. One column.
@@ -192,6 +197,19 @@ class StageDefinition:
     output_type: str = ""
     success: str = ""
     optional: bool = False
+    #: How this stage runs. Three shapes, and only three, because each one is a
+    #: real difference in execution rather than a label:
+    #:
+    #: * ``atomic`` — runs once. What every stage was until now.
+    #: * ``map``    — runs once per item of its input, and gives back a list.
+    #:                This is how "do it to all ten thousand files" gets said.
+    #: * ``branch`` — runs once and names which of its output ports gets the
+    #:                value. The other ports stay empty and whatever they feed
+    #:                is skipped, which is how a condition gets said.
+    #:
+    #: Loops are deliberately absent. A loop needs a termination argument, and
+    #: a graph that can loop without one is a graph that can hang.
+    kind: str = "atomic"
     variant_axes: tuple[str, ...] = ()
     required_capabilities: tuple[str, ...] = ()
     candidates: tuple[str, ...] = ()
@@ -275,19 +293,21 @@ class StageDefinition:
         # over `port.type`, so the node must accept that or something wider. For
         # an output, the stage promises to produce `port.type`, so the node must
         # produce that or something narrower.
+        want = ((lambda t: _types.element_of(t)) if self.kind == "map"
+                else (lambda t: t))
         for port in self.inputs:
-            if manifest.accepts(port.type):
+            if manifest.accepts(want(port.type)):
                 continue
             if lattice is not None and not manifest.inputs:
                 continue                     # a source consumes nothing
             if lattice is None or not any(
-                    lattice.is_a(port.type, p.type) for p in manifest.inputs):
+                    lattice.is_a(want(port.type), p.type) for p in manifest.inputs):
                 return False
         for port in self.outputs:
-            if manifest.produces(port.type):
+            if manifest.produces(want(port.type)):
                 continue
             if lattice is None or not any(
-                    lattice.is_a(p.type, port.type) for p in manifest.outputs):
+                    lattice.is_a(p.type, want(port.type)) for p in manifest.outputs):
                 return False
         return True
 
@@ -325,6 +345,8 @@ class StageDefinition:
                                "success": self.success}
         if self.optional:
             out["optional"] = True
+        if self.kind != "atomic":
+            out["kind"] = self.kind
         for key in ("variant_axes", "required_capabilities", "candidates"):
             if getattr(self, key):
                 out[key] = list(getattr(self, key))
@@ -345,6 +367,7 @@ class StageDefinition:
                    output_type=data.get("output_type", ""),
                    success=data.get("success", ""),
                    optional=bool(data.get("optional", False)),
+                   kind=data.get("kind", "atomic"),
                    variant_axes=tuple(data.get("variant_axes") or ()),
                    required_capabilities=tuple(data.get("required_capabilities") or ()),
                    candidates=tuple(data.get("candidates") or ()),
@@ -1006,6 +1029,19 @@ class WorkbenchDefinition:
                 if objective.weight <= 0:
                     bad.append(f"profile {profile.id!r}: objective "
                                f"{objective.metric!r} has non-positive weight")
+        for stage in self.leaf_stages:
+            if stage.kind not in STAGE_KINDS:
+                bad.append(f"stage {stage.id!r} has unknown kind {stage.kind!r} "
+                           f"(known: {', '.join(STAGE_KINDS)})")
+            if stage.kind == "branch" and len(stage.outputs) < 2:
+                bad.append(f"stage {stage.id!r} is a branch with "
+                           f"{len(stage.outputs)} output port(s) — a branch that "
+                           f"can only go one way is not a branch")
+            if stage.kind == "map" and len(stage.inputs) != 1:
+                bad.append(f"stage {stage.id!r} is a map with "
+                           f"{len(stage.inputs)} input port(s) — a map runs over "
+                           f"exactly one collection")
+
         return bad
 
     def assert_valid(self) -> WorkbenchDefinition:

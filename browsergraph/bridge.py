@@ -153,13 +153,18 @@ def node_spec(manifest: NodeManifest) -> NodeSpec:
 
 
 def _slot_kind(stage: StageDefinition) -> SlotKind:
-    """Composite when it has sub-steps, atomic otherwise.
+    """The workbench kind, as the strict model's kind.
 
-    A workbench has no way to say branch, map, reduce or loop, so we never
-    return those. Claiming a shape the source could not express would make the
-    strict model less trustworthy, not more capable.
+    This used to always answer atomic-or-composite, because a workbench had no
+    way to say anything else. It does now, so map and branch cross over as
+    themselves. Reduce and loop are still never returned — a workbench cannot
+    express them, and claiming a shape the source could not say would make the
+    strict model less trustworthy rather than more capable.
     """
-    return SlotKind.COMPOSITE if stage.substages else SlotKind.ATOMIC
+    if stage.substages:
+        return SlotKind.COMPOSITE
+    return {"map": SlotKind.MAP,
+            "branch": SlotKind.BRANCH}.get(stage.kind, SlotKind.ATOMIC)
 
 
 def semantic_slot(stage: StageDefinition) -> SemanticSlot:
