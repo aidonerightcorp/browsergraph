@@ -433,6 +433,43 @@ class Evidence:
         return "\n".join(lines)
 
 
+def measured_metrics(evidence: Evidence, candidates: Sequence[str],
+                     context: Sequence[str] = ("global",),
+                     prior_quality: Mapping[str, float] | None = None
+                     ) -> dict[str, dict[str, float]]:
+    """Per-candidate metrics with the prior pulled toward what was measured.
+
+    This is the step that was missing, and the search was quietly wrong without
+    it. Evidence was used to *start* the search while scoring still ran on the
+    numbers somebody wrote down when the graph was drawn — so the search walked
+    straight back to whatever the priors liked, and two hundred real runs
+    changed the answer not at all.
+
+    Shrinkage, not replacement. One observation should nudge a prior; fifty
+    should overrule it. `Posterior.confidence` is exactly that weight and says
+    so in its own docstring — it is deliberately not a p-value, it is how much
+    to trust the measurement against the guess.
+
+        effective = (1 - confidence) * prior + confidence * measured
+
+    Latency is taken straight from the measurement when there is one, because a
+    stopwatch is not a belief.
+    """
+    out: dict[str, dict[str, float]] = {}
+    priors = dict(prior_quality or {})
+    for candidate in candidates:
+        posterior = evidence.posterior(candidate, context)
+        if not posterior.runs:
+            continue
+        weight = posterior.confidence
+        prior = priors.get(candidate, posterior.rate)
+        metrics = {"quality": (1.0 - weight) * prior + weight * posterior.rate}
+        if posterior.measured and posterior.latency_ms:
+            metrics["latency_ms"] = posterior.latency_ms
+        out[candidate] = metrics
+    return out
+
+
 def stages_of(workbench: Any, policy: Any = None) -> dict[str, list[str]]:
     """The eligible candidates per sub-step, as `suggest` wants them."""
     if policy is None:

@@ -243,9 +243,16 @@ def check_route(workbench: WorkbenchDefinition, route: Mapping[str, str],
     return problems
 
 
-def aggregate(workbench: WorkbenchDefinition, route: Mapping[str, str]
+def aggregate(workbench: WorkbenchDefinition, route: Mapping[str, str],
+              overrides: Mapping[str, Mapping[str, float]] | None = None
               ) -> dict[str, float]:
     """What a whole route costs, from its parts.
+
+    `overrides` replaces a candidate's metrics with measured ones. Metrics live
+    on the *node*, and several candidates share a node — one per parameter
+    binding — so a route cannot be scored on evidence without saying which
+    candidate the numbers belong to. That is what this argument is for, and it
+    is why evidence could not simply be written back onto the workbench.
 
     Latency and cost **add** along a chain. Quality **compounds** — it is the
     product, not the mean, because a route is only as good as the joint
@@ -263,6 +270,8 @@ def aggregate(workbench: WorkbenchDefinition, route: Mapping[str, str]
         if manifest is None:
             continue
         metrics = manifest.metrics or {}
+        if overrides and candidate.id in overrides:
+            metrics = {**metrics, **overrides[candidate.id]}
         seen = True
         quality *= float(metrics.get("quality", 1.0))
         latency += float(metrics.get("latency_ms", 0.0))

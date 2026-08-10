@@ -144,8 +144,8 @@ class Proposal:
 REFERENCE = 513
 
 
-def _reference_sample(workbench: WorkbenchDefinition, stages, eligible
-                      ) -> list[dict[str, float]]:
+def _reference_sample(workbench: WorkbenchDefinition, stages, eligible,
+                      overrides=None) -> list[dict[str, float]]:
     """A deterministic spread of the eligible space, for scale.
 
     Seeded rather than random: a score that moves between runs because the
@@ -155,7 +155,7 @@ def _reference_sample(workbench: WorkbenchDefinition, stages, eligible
     out = []
     for _ in range(REFERENCE - 1):
         route = {stage.id: rng.choice(eligible[stage.id]) for stage in stages}
-        out.append(aggregate(workbench, route))
+        out.append(aggregate(workbench, route, overrides))
     return out
 
 
@@ -168,13 +168,14 @@ def _eligible_by_stage(workbench: WorkbenchDefinition, policy: Policy
 
 
 def _score_routes(workbench: WorkbenchDefinition, profile: OptimizationProfile,
-                  routes: Sequence[Mapping[str, str]]) -> list[tuple[int, float]]:
+                  routes: Sequence[Mapping[str, str]], overrides=None
+                  ) -> list[tuple[int, float]]:
     """Score whole routes against each other, never in isolation.
 
     The comparison set is the routes under consideration, which is what makes
     the weights mean anything — see OptimizationProfile.score.
     """
-    metrics = [aggregate(workbench, route) for route in routes]
+    metrics = [aggregate(workbench, route, overrides) for route in routes]
     spans = profile.ranges(metrics)          # once, not once per route
     return [(index, profile.score_within(m, spans))
             for index, m in enumerate(metrics)]
@@ -184,7 +185,8 @@ def propose(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
             policy: Policy | None = None, strategy: str = "auto",
             beam: int = 8, limit: int = EXHAUSTIVE_LIMIT,
             budget: int = DEFAULT_BUDGET, seed: int = 0,
-            around: Mapping[str, str] | None = None) -> Proposal:
+            around: Mapping[str, str] | None = None,
+            overrides=None) -> Proposal:
     """The best route this profile can find, under this policy.
 
     Policy first, always: candidates are gated before a single score is
@@ -226,7 +228,8 @@ def propose(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
 
     # Stable ranges for every strategy that scores partial routes, computed
     # once from the reference sample.
-    spans = profile.ranges(_reference_sample(workbench, stages, eligible))
+    spans = profile.ranges(_reference_sample(workbench, stages, eligible,
+                                             overrides))
 
     if chosen == "greedy":
         route, examined = _greedy(workbench, profile, stages, eligible)
@@ -235,7 +238,7 @@ def propose(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
                            "than an optimum",)
     elif chosen == "sprouts":
         route, examined = _sprouts(workbench, profile, stages, eligible, spans,
-                                   budget, seed, around)
+                                   budget, seed, around, overrides)
         proposal.notes += (f"sampled {examined:,} routes of {space:,} under a "
                            f"budget of {budget:,} — a good score here is the "
                            f"best seen, not a proven best",)
@@ -253,7 +256,7 @@ def propose(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
 
     proposal.route = route
     proposal.examined = examined
-    proposal.metrics = aggregate(workbench, route)
+    proposal.metrics = aggregate(workbench, route, overrides)
 
     # Score the winner against a fixed reference sample rather than against
     # whatever each strategy happened to look at. Greedy examines 56 routes and
@@ -266,7 +269,7 @@ def propose(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
     # scale, and a good search finds routes better than anything sampled. That
     # is informative but reads like a bug, so the headline number is a
     # percentile against the same sample, which cannot.
-    reference = _reference_sample(workbench, stages, eligible)
+    reference = _reference_sample(workbench, stages, eligible, overrides)
     beaten = sum(1 for m in reference
                  if profile.score_within(m, spans) < proposal.score)
     proposal.percentile = beaten / len(reference) if reference else 0.0
@@ -380,7 +383,8 @@ class SpaceTooLarge(ValueError):
 
 
 def _exhaustive(workbench, profile, stages, eligible, spans,
-                limit: int = EXHAUSTIVE_LIMIT) -> tuple[dict[str, str], int]:
+                limit: int = EXHAUSTIVE_LIMIT, overrides=None
+                ) -> tuple[dict[str, str], int]:
     """Every eligible route, scored, streamed.
 
     Two things here are load-bearing and were both wrong before.
@@ -417,15 +421,15 @@ def _exhaustive(workbench, profile, stages, eligible, spans,
     best_score, examined = float("-inf"), 0
     for combo in itertools.product(*[eligible[k] for k in keys]):
         route = dict(zip(keys, combo, strict=True))
-        score = profile.score_within(aggregate(workbench, route), spans)
+        score = profile.score_within(aggregate(workbench, route, overrides), spans)
         examined += 1
         if score > best_score or (score == best_score and not best):
             best, best_score = route, score
     return best, examined
 
 
-def _beam(workbench, profile, stages, eligible, width, spans
-          ) -> tuple[dict[str, str], int]:
+def _beam(workbench, profile, stages, eligible, width, spans,
+          overrides=None) -> tuple[dict[str, str], int]:
     """Keep the best `width` partial routes at each stage.
 
     Partial routes are scored against **fixed** ranges, and that detail is the
@@ -446,7 +450,7 @@ def _beam(workbench, profile, stages, eligible, width, spans
         grown = [dict(partial, **{stage.id: cid})
                  for partial in partials for cid in eligible[stage.id]]
         examined += len(grown)
-        metrics = [aggregate(workbench, route) for route in grown]
+        metrics = [aggregate(workbench, route, overrides) for route in grown]
         scored = [(index, profile.score_within(m, spans))
                   for index, m in enumerate(metrics)]
         scored.sort(key=lambda pair: (-pair[1], grown[pair[0]].get(stage.id, "")))
@@ -455,8 +459,8 @@ def _beam(workbench, profile, stages, eligible, width, spans
 
 
 def _sprouts(workbench, profile, stages, eligible, spans, budget: int,
-             seed: int = 0, around: Mapping[str, str] | None = None
-             ) -> tuple[dict[str, str], int]:
+             seed: int = 0, around: Mapping[str, str] | None = None,
+             overrides=None) -> tuple[dict[str, str], int]:
     """Sample routes instead of enumerating them, and stay inside a budget.
 
     Beam is good but its shape is fixed: it commits stage by stage, so a route
@@ -478,7 +482,7 @@ def _sprouts(workbench, profile, stages, eligible, spans, budget: int,
     pools = {key: list(eligible[key]) for key in keys}
 
     def score_of(route: Mapping[str, str]) -> float:
-        return profile.score_within(aggregate(workbench, route), spans)
+        return profile.score_within(aggregate(workbench, route, overrides), spans)
 
     best = dict(around) if around else {k: pools[k][0] for k in keys}
     best_score, examined = score_of(best), 1
@@ -500,7 +504,7 @@ def _sprouts(workbench, profile, stages, eligible, spans, budget: int,
 
 
 def _halving(workbench, profile, stages, eligible, spans, budget: int,
-             seed: int = 0) -> tuple[dict[str, str], int]:
+             seed: int = 0, overrides=None) -> tuple[dict[str, str], int]:
     """Look at many routes cheaply, then spend what is left on the survivors.
 
     Successive halving. Draw a wide field, score it, keep the better half, and
@@ -517,7 +521,7 @@ def _halving(workbench, profile, stages, eligible, spans, budget: int,
     pools = {key: list(eligible[key]) for key in keys}
 
     def score_of(route):
-        return profile.score_within(aggregate(workbench, route), spans)
+        return profile.score_within(aggregate(workbench, route, overrides), spans)
 
     field = [{k: rng.choice(pools[k]) for k in keys}
              for _ in range(max(2, budget // 2))]
@@ -547,7 +551,8 @@ def _halving(workbench, profile, stages, eligible, spans, budget: int,
 
 def within(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
            evaluations: int = DEFAULT_BUDGET, policy: Policy | None = None,
-           seed: int = 0) -> Proposal:
+           seed: int = 0, evidence=None,
+           context: Sequence[str] = ("global",)) -> Proposal:
     """The best route findable in this many evaluations. Budget first.
 
     Every other entry point asks *how* to search. This one asks *how much*,
@@ -557,17 +562,24 @@ def within(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
 
     1. Enumerate, if the whole eligible space fits inside the budget. Then
        "best" means best.
-    2. Otherwise run greedy first. It costs about one evaluation per candidate —
-       tens, not thousands — and it exploits the per-stage structure, which on
-       real workbenches gets remarkably close.
-    3. Spend everything left sampling *around* that route.
+    2. Otherwise pick a starting route. With `evidence` from real runs that is
+       a Thompson draw over the posteriors — cost is the *sum* of the candidate
+       counts, not their product. Without it, greedy, which costs about one
+       look per candidate and exploits the per-stage structure.
+    3. Spend everything left sampling around that route.
 
     Step 3 starting from step 2 is the whole point, and it was worth measuring
     rather than assuming. Sampling from scratch under the same budget scored
     0.911 on the demonstration workbench where greedy alone scored 1.0875 — the
     random search spent its whole allowance rediscovering what greedy knew for
-    free. Anchored to the greedy route it can only improve on it, because the
-    starting point is already in the running.
+    free. Anchored to a real starting point it can only improve on it, because
+    that point is already in the running.
+
+    `evidence` is what closes the loop this library exists to argue for: a run
+    produces a receipt, `Evidence.from_receipt` folds it in, and the next search
+    starts from what actually happened rather than from the metrics somebody
+    guessed when the graph was drawn. Priors do not become measurements by
+    being searched over.
     """
     eligible, _blocked = _eligible_by_stage(workbench, policy or Policy.permissive())
     stages = list(workbench.leaf_stages)
@@ -579,25 +591,67 @@ def within(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
         return propose(workbench, profile, policy=policy, strategy="exhaustive",
                        limit=max(evaluations, space))
 
-    cheap = propose(workbench, profile, policy=policy, strategy="greedy")
-    remaining = max(0, evaluations - cheap.examined)
-    if remaining < 2 or not cheap.route:
-        cheap.notes += (f"budget of {evaluations:,} covered the greedy pass "
-                        f"only; nothing left to refine with",)
-        return cheap
+    # Metrics first: evidence has to reach the *score*, not just the starting
+    # point, or the search walks back to whatever the priors preferred.
+    overrides = None
+    if evidence is not None:
+        from browsergraph.evidence import measured_metrics
+        nodes = workbench.nodes_by_id
+        by_id = workbench.candidates_by_id
+        priors = {cid: float((nodes[by_id[cid].node_id].metrics or {}).get("quality", 1.0))
+                  for pool in eligible.values() for cid in pool
+                  if cid in by_id and by_id[cid].node_id in nodes}
+        overrides = measured_metrics(
+            evidence, [c for pool in eligible.values() for c in pool],
+            context, priors) or None
+
+    learned = None
+    if evidence is not None:
+        pools = {stage.id: eligible[stage.id] for stage in stages
+                 if eligible[stage.id]}
+        drawn = evidence.suggest(pools, context, seed=seed)
+        if drawn and len(drawn) == len(pools):
+            learned = drawn
+
+    if learned is not None:
+        start_route, start_examined = learned, len(
+            [c for pool in eligible.values() for c in pool])
+        start_score = profile.score_within(
+            aggregate(workbench, learned, overrides),
+            profile.ranges(_reference_sample(workbench, stages, eligible,
+                                             overrides)))
+        origin = "evidence"
+    else:
+        cheap = propose(workbench, profile, policy=policy, strategy="greedy")
+        start_route, start_examined = cheap.route, cheap.examined
+        start_score, origin = cheap.score, "greedy"
+
+    remaining = max(0, evaluations - start_examined)
+    if remaining < 2 or not start_route:
+        fallback = propose(workbench, profile, policy=policy, strategy="greedy")
+        fallback.notes += (f"budget of {evaluations:,} covered the {origin} pass "
+                           f"only; nothing left to refine with",)
+        return fallback
 
     refined = propose(workbench, profile, policy=policy, strategy="sprouts",
-                      budget=remaining, seed=seed, around=cheap.route)
-    best = refined if refined.score >= cheap.score else cheap
-    best.examined = cheap.examined + refined.examined
-    best.strategy = "greedy+sprouts"
+                      budget=remaining, seed=seed, around=start_route,
+                      overrides=overrides)
+
+    if refined.score >= start_score:
+        best = refined
+    else:
+        best = propose(workbench, profile, policy=policy, strategy="greedy")
+        best.route, best.score = dict(start_route), start_score
+
+    best.examined = start_examined + refined.examined
+    best.strategy = f"{origin}+sprouts"
     best.notes += (
-        f"greedy first ({cheap.examined:,} looks), then {refined.examined:,} "
-        f"samples around it. Greedy scored {cheap.score:.4f}; refining "
-        + (f"improved it to {refined.score:.4f}"
-           if refined.score > cheap.score else "did not beat it")
-        + f". {best.examined:,} of {space:,} routes seen — a good score here is "
-          f"the best found, never a proven best.",)
+        f"started from the {origin} route ({start_examined:,} looks, scoring "
+        f"{start_score:.4f}), then {refined.examined:,} samples around it — "
+        + (f"improved to {refined.score:.4f}" if refined.score > start_score
+           else "no improvement found")
+        + f". {best.examined:,} of {space:,} routes seen, so a good score here "
+          f"is the best found and never a proven best.",)
     return best
 
 

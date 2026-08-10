@@ -607,3 +607,128 @@ def test_sprouts_and_halving_stay_inside_their_budget(bench):
                              policy=policy, strategy=strategy, budget=250)
         assert got.examined <= 250, strategy
         assert got.ok, strategy
+
+
+# --- evidence has to reach the score, not just the starting point ------------
+
+def _rigged(bench, policy, seed=11):
+    """A hidden truth: one candidate per stage genuinely works better.
+
+    Deliberately unrelated to the declared metrics, which are illustrative
+    priors. That gap is the point — evidence is only worth keeping if it can
+    overrule a guess.
+    """
+    import random
+
+    from browsergraph.evidence import stages_of
+
+    stages = stages_of(bench, policy)
+    rng = random.Random(seed)
+    truth = {c: rng.betavariate(2, 3) for cs in stages.values() for c in cs}
+    return stages, truth
+
+
+def _mean_true_quality(route, truth):
+    return sum(truth[c] for c in route.values()) / len(route)
+
+
+def test_evidence_changes_which_route_is_chosen(bench, locked):
+    """It did not, and that was the bug.
+
+    Evidence was used to pick a starting point while scoring still ran on the
+    declared priors, so the search walked straight back to whatever the priors
+    liked. Two hundred simulated runs moved the answer not at all — 7% of
+    stages on the truly-best candidate before and after.
+    """
+    import random
+
+    from browsergraph import search
+    from browsergraph.evidence import Evidence, Observation
+
+    stages, truth = _rigged(bench, locked)
+    rng = random.Random(3)
+    store = Evidence()
+
+    cold = search.within(bench, bench.optimization_profiles[0], policy=locked,
+                         evaluations=300, evidence=store)
+
+    for run in range(400):
+        route = store.suggest(stages, ("global",), seed=run)
+        for candidate in route.values():
+            store.observe(Observation(candidate=candidate, context="global",
+                                      ok=rng.random() < truth[candidate]))
+
+    warm = search.within(bench, bench.optimization_profiles[0], policy=locked,
+                         evaluations=300, evidence=store)
+
+    assert warm.route != cold.route, "evidence made no difference at all"
+    assert _mean_true_quality(warm.route, truth) > \
+        _mean_true_quality(cold.route, truth)
+
+
+def test_more_evidence_keeps_moving_the_answer_the_right_way(bench, locked):
+    """Monotone in the thing that matters, not in an exact-match count.
+
+    "How many stages picked the single best candidate" is noisy — it can dip
+    while the route genuinely improves. Mean true quality is the honest measure.
+    """
+    import random
+
+    from browsergraph import search
+    from browsergraph.evidence import Evidence, Observation
+
+    stages, truth = _rigged(bench, locked)
+    rng = random.Random(3)
+    store = Evidence()
+    scores = []
+
+    for target in (0, 120, 600):
+        while len(store.routes) < target:
+            route = store.suggest(stages, ("global",), seed=len(store.routes))
+            for candidate in route.values():
+                store.observe(Observation(candidate=candidate, context="global",
+                                          ok=rng.random() < truth[candidate]))
+            store.routes.append((tuple(route.values()), "global", 1.0))
+        got = search.within(bench, bench.optimization_profiles[0], policy=locked,
+                            evaluations=300, evidence=store)
+        scores.append(_mean_true_quality(got.route, truth))
+
+    assert scores[-1] > scores[0], f"no improvement across evidence: {scores}"
+
+
+def test_one_observation_nudges_a_prior_and_fifty_overrule_it():
+    """Shrinkage, not replacement. The weight is `Posterior.confidence`, which
+    exists for exactly this and says so in its own docstring."""
+    from browsergraph.evidence import Evidence, Observation, measured_metrics
+
+    store = Evidence()
+    store.observe(Observation(candidate="c.one", context="global", ok=False))
+    barely = measured_metrics(store, ["c.one"], ("global",), {"c.one": 0.95})
+
+    for _ in range(60):
+        store.observe(Observation(candidate="c.one", context="global", ok=False))
+    firmly = measured_metrics(store, ["c.one"], ("global",), {"c.one": 0.95})
+
+    assert barely["c.one"]["quality"] > firmly["c.one"]["quality"]
+    assert barely["c.one"]["quality"] > 0.5, "one failure should not erase a prior"
+    assert firmly["c.one"]["quality"] < 0.3, "sixty failures should overrule it"
+
+
+def test_a_candidate_with_no_evidence_keeps_its_prior():
+    """Silence is not a measurement of zero."""
+    from browsergraph.evidence import Evidence, measured_metrics
+
+    assert measured_metrics(Evidence(), ["c.unseen"], ("global",),
+                            {"c.unseen": 0.9}) == {}
+
+
+def test_metrics_can_be_overridden_per_candidate_not_only_per_node(bench):
+    """Metrics live on the node and several candidates share one, so a route
+    cannot be scored on evidence unless the override is per candidate."""
+    from browsergraph.policy import aggregate
+
+    route = {s.id: s.candidates[0] for s in bench.leaf_stages if s.candidates}
+    plain = aggregate(bench, route)
+    nudged = aggregate(bench, route,
+                       {next(iter(route.values())): {"quality": 0.01}})
+    assert nudged["quality"] < plain["quality"]
