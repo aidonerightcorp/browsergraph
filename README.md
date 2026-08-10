@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Core deps: none](https://img.shields.io/badge/core%20deps-stdlib--only-brightgreen)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-728%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-759%20passing-brightgreen)](tests/)
 [![Kaggle](https://img.shields.io/badge/Kaggle-run%20it%20now-20BEFF?logo=kaggle)](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 
 **Write a browser automation once. Run it on any engine — or on none.**
@@ -62,6 +62,43 @@ print(report(lint(graph)))
 # [WARN] BG003 click: graph changes remote state but never verifies the outcome
 #        — a silent failure will look like success
 ```
+
+## Every candidate, every route, in one picture
+
+Six ordered stages. Every atomic candidate stacked inside its stage. A route is
+exactly one choice per column — and three of them are traced here.
+
+[![the candidate path network](docs/route-network.png)](https://aidonerightcorp.github.io/browsergraph/)
+
+**76 × 27 × 13 × 14 × 11 × 8 = 32,864,832 complete routes.** Routes multiply,
+which is why a search is needed rather than a table of recommendations.
+
+```bash
+browsergraph workbench -o studio.html   # five interactive views, one offline file
+browsergraph route --compare            # greedy vs beam vs exhaustive, measured
+browsergraph route --gates              # what a policy blocks, and why
+```
+
+Policy is a **hard gate that runs before scoring**: under a locked-down policy
+(no browser, no network, no LLM, no external effects, deterministic only) the
+space drops from 32,864,832 to **122,472** routes — 99.63% removed before a
+single score is computed, every removal stating its reason. Blocked candidates
+stay *visible*; filtering them out silently would answer "what could perform
+this step" with "what the policy left".
+
+Measured, not asserted — [the full report](docs/ROUTE_SEARCH_REPORT.md) includes
+the profile-ranking bug this found (all four objective profiles were secretly
+identical) and the beam-search bug that made width buy nothing:
+
+| profile | greedy | beam(8) | exhaustive | greedy optimal? |
+|---|---:|---:|---:|---|
+| Balanced | 0.7355 | **0.7502** | **0.7502** | **no — loses 0.0147** |
+| Quality first | 0.9426 | 0.9426 | 0.9426 | yes |
+| Speed first | 0.9838 | 0.9838 | 0.9838 | yes |
+| Cost first | 0.3242 | 0.3242 | 0.3242 | yes |
+
+*Beam reaches the optimum for 385 evaluations instead of 122,472 — 0.3% of the
+work for the same answer.*
 
 ## The architecture
 
@@ -154,6 +191,7 @@ chromedriver/snap version skew, a dependency that ships broken source.
 | **Isolation** | conflicting engines in per-engine virtualenvs, over a worker protocol |
 | **Notebooks** | Jupyter/Kaggle/Colab run cells inside an asyncio loop; the sync API is driven from a worker thread so it just works |
 | **Universal graph** | portable node manifests, atomic candidates, stage/route validation and a five-view studio — [UNIVERSAL_GRAPH_SYSTEM.md](UNIVERSAL_GRAPH_SYSTEM.md) |
+| **Route search** | policy gates first, then greedy / beam / exhaustive over the eligible space, reporting how much of it was actually examined |
 | **Binaries** | fetches a browser or a driver *matched to the browser it will drive* — the fix for "cannot connect to chrome" |
 | **OCR (optional)** | read a page from its pixels when the DOM cannot answer — canvas text, baked-in images, and "does this screenshot contain any text at all" |
 | **LLM (optional)** | Ollama-compatible; the model is resolved from the host by *capability*, never hardcoded |
@@ -164,6 +202,7 @@ chromedriver/snap version skew, a dependency that ships broken source.
 |---|---|
 | [QUICKSTART.md](QUICKSTART.md) | first graph, first real browser, first task |
 | [UNIVERSAL_GRAPH_SYSTEM.md](UNIVERSAL_GRAPH_SYSTEM.md) | stages, candidates, routes, contracts, feedback, optimization |
+| [docs/ROUTE_SEARCH_REPORT.md](docs/ROUTE_SEARCH_REPORT.md) | policy gating and route search, measured end to end |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | the Protocol-vs-base-class seam |
 | [CONTRACTS.md](CONTRACTS.md) | what a node promises, and the three moments it is checked |
 | [ENGINES.md](ENGINES.md) | every engine, what it is for, and what does not work |
@@ -186,7 +225,7 @@ breaks something.
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                  # 728 tests; browser suites skip when absent
+pytest -q                                  # 759 tests; browser suites skip when absent
 mypy browsergraph --ignore-missing-imports
 ruff check browsergraph tests
 ```

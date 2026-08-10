@@ -337,23 +337,74 @@ class OptimizationProfile:
         if not self.name:
             object.__setattr__(self, "name", self.id.rsplit(".", 1)[-1].capitalize())
 
-    def score(self, metrics: Mapping[str, float]) -> float:
-        """A weighted score, with an unmeasured metric left out rather than
-        counted as zero.
+    def score(self, metrics: Mapping[str, float],
+              *, among: Sequence[Mapping[str, float]] = ()) -> float:
+        """A weighted score, normalized within the set being compared.
 
-        Scoring a missing measurement as zero silently punishes anything new for
-        being new, which is how a system stops exploring without anyone deciding
-        that it should.
+        **Scoring is inherently comparative, and the first version of this was
+        wrong.** It combined raw values directly, so a quality of 0.97 was
+        weighed against a latency of 1420 — three orders of magnitude apart. The
+        latency term swamped everything, and all four profiles produced the same
+        ranking: "balanced", "quality first" and "speed first" were secretly all
+        speed-only. Nothing failed; the numbers just meant nothing.
+
+        Min-max within `among` puts every objective on the same 0..1 footing, so
+        a weight of 0.5 actually buys half the decision. `among` defaults to the
+        single item, which is degenerate — every present metric scores 1.0 —
+        because one thing compared against itself has no ranking. Use `rank`.
+
+        An unmeasured metric is skipped rather than scored zero: scoring it zero
+        punishes anything new for being new, which is how a system stops
+        exploring without anyone deciding that it should.
         """
+        return self.score_within(metrics, self.ranges(list(among) or [metrics]))
+
+    def ranges(self, pool: Sequence[Mapping[str, float]]
+               ) -> dict[str, tuple[float, float]]:
+        """The min and max of each objective across the comparison set.
+
+        Computed once and reused. The first version recomputed them inside
+        `score`, which made ranking O(n²): an exhaustive search over 122,472
+        routes did fifteen billion comparisons and never finished. Nothing was
+        *wrong* with the answer — it just could not be reached, which for a
+        search strategy is the same thing.
+        """
+        spans: dict[str, tuple[float, float]] = {}
+        for objective in self.objectives:
+            values = [float(m[objective.metric]) for m in pool
+                      if objective.metric in m]
+            if values:
+                spans[objective.metric] = (min(values), max(values))
+        return spans
+
+    def score_within(self, metrics: Mapping[str, float],
+                     ranges: Mapping[str, tuple[float, float]]) -> float:
+        """Score one item against precomputed ranges."""
         total, weight = 0.0, 0.0
         for objective in self.objectives:
-            if objective.metric not in metrics:
+            if objective.metric not in metrics or objective.metric not in ranges:
                 continue
-            value = float(metrics[objective.metric])
-            total += objective.weight * (value if objective.direction == "maximize"
-                                         else -value)
+            low, high = ranges[objective.metric]
+            span = high - low
+            unit = 1.0 if span == 0 else (float(metrics[objective.metric]) - low) / span
+            if objective.direction == "minimize":
+                unit = 1.0 - unit
+            total += objective.weight * unit
             weight += objective.weight
         return total / weight if weight else 0.0
+
+    def rank(self, items: Mapping[str, Mapping[str, float]]
+             ) -> list[tuple[str, float]]:
+        """Every item scored against the others, best first.
+
+        Ties break on the key so the order is stable — an optimizer that
+        reshuffles equal candidates between runs makes its own evidence
+        unattributable.
+        """
+        spans = self.ranges(list(items.values()))
+        scored = [(key, self.score_within(metrics, spans))
+                  for key, metrics in items.items()]
+        return sorted(scored, key=lambda pair: (-pair[1], pair[0]))
 
     def to_dict(self) -> dict:
         return {"id": self.id, "name": self.name, "strategy": self.strategy,

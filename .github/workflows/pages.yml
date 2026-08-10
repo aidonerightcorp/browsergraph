@@ -1,0 +1,57 @@
+# Publish the studio to GitHub Pages.
+#
+# The studio is one self-contained file, so "deploy" is genuinely just copying
+# docs/ — no build step, no bundler, nothing to go stale. It is regenerated from
+# the demo registry on every push so the published page can never drift from the
+# code that produced it.
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Regenerate the studio, the data and the static graphic
+        run: |
+          browsergraph workbench -o docs/index.html --export-data docs/workbench.json
+          browsergraph workbench --view network -o docs/path-network.html
+          browsergraph workbench --view compare -o docs/compare-routes.html
+          browsergraph workbench --view builder -o docs/build-route.html
+          browsergraph workbench --view feedback -o docs/feedback-loop.html
+          python -c "
+          from browsergraph.demo import workbench
+          from browsergraph.routegraph import write_svg
+          write_svg(workbench(), 'docs/route-network.svg',
+                    routes=('cheapest','learned','accuracy_first'), samples=90)
+          "
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

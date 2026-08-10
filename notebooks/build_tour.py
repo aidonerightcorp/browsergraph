@@ -1379,7 +1379,156 @@ How much the model decides is a property of the run, chosen deliberately.
 """)
 
 
+# ------------------------------------------------- universal graph / routes -
+md("""
+## 22b. Every candidate, every route: the universal graph
+
+The rest of this notebook is about *browsers*. This section is about the shape
+underneath: a task decomposes into **ordered stages**, each stage holds every
+candidate that could perform it, and a route is exactly one choice per stage.
+Nothing here is browser-specific — the same primitives describe document
+ingestion, image processing and machine learning.
+
+The arithmetic is the argument. Six stages with 76, 27, 13, 14, 11 and 8
+candidates is **32,864,832 complete routes**. Routes multiply, so a search is
+needed rather than a table of recommendations.
+""")
+
+code("""
+from browsergraph.demo import workbench
+
+wb = workbench()
+print(wb.summary())
+print()
+for i, stage in enumerate(wb.stages, 1):
+    print(f'{i}. {stage.name:<30} {len(stage.candidates):>3} candidates   '
+          f'{stage.input_type} -> {stage.output_type}')
+print()
+print('Browser adapter alone expands to',
+      sum(1 for c in wb.candidates if c.node_id.endswith('browser_adapter')),
+      'atomic candidates (5 controllers x 6 binaries x 2 display modes).')
+""")
+
+md("""
+### The picture
+
+One static SVG, rendered from the same data — every colour inlined as an
+attribute, because Kaggle strips `<style>` blocks and GitHub strips scripts.
+Three named routes are traced through the columns.
+""")
+
+code("""
+from browsergraph.routegraph import write_svg
+from IPython.display import SVG, display
+
+path = OUT / 'universal-graph-network.svg'
+write_svg(wb, str(path), routes=('cheapest', 'learned', 'accuracy_first'), samples=90)
+print(f'wrote {path}  ({path.stat().st_size/1000:.0f} KB)')
+display(SVG(filename=str(path)))
+""")
+
+md("""
+### Policy is a hard gate, and it runs before scoring
+
+A candidate that lacks a required permission is not a low-scoring candidate; it
+is an unavailable one, and no objective weighting may promote it. Watch what a
+locked-down policy does to the space — and note that every removal states its
+reason rather than quietly shortening a list.
+""")
+
+code("""
+from browsergraph.policy import Policy, review
+
+locked = Policy(
+    permissions=frozenset({'filesystem', 'filesystem:read', 'filesystem:write',
+                           'database', 'database:read'}),
+    allow_external_effects=False, deterministic_only=True, name='locked-down')
+
+report = review(wb, locked)
+print(report.text())
+print()
+print(f'{wb.route_count():,} routes before policy')
+print(f'{report.reachable_routes:,} routes after  '
+      f'({100 * (1 - report.reachable_routes / wb.route_count()):.2f}% removed)')
+""")
+
+md("""
+### Three search strategies, and where the cheap one loses
+
+**greedy** picks the best candidate per stage independently. **beam** keeps the
+best partial routes. **exhaustive** enumerates, so "best" means best rather than
+best-found.
+
+Greedy is optimal in three of the four profiles and loses in the fourth —
+exactly what you would predict, because route metrics do not decompose. Quality
+*compounds* along a route (it is the product, not the mean: a route is only as
+good as the joint probability that every step did its job), so a stage's real
+contribution depends on what the rest of the route already spent.
+""")
+
+code("""
+from browsergraph import search
+
+rows = []
+for profile in wb.optimization_profiles:
+    got = search.compare_strategies(wb, profile, policy=locked)
+    best = got['exhaustive'].score
+    rows.append((profile.name, got['greedy'].score, got['beam'].score, best,
+                 abs(got['greedy'].score - best) < 1e-9))
+
+print(f"{'profile':<16}{'greedy':>9}{'beam(8)':>10}{'exhaustive':>12}   greedy optimal?")
+for name, g, b, e, same in rows:
+    print(f'{name:<16}{g:>9.4f}{b:>10.4f}{e:>12.4f}   '
+          + ('yes' if same else f'NO - loses {e - g:.4f}'))
+
+one = search.compare_strategies(wb, wb.optimization_profiles[0], policy=locked)
+print()
+for name in ('greedy', 'beam', 'exhaustive'):
+    p = one[name]
+    print(f'{name:<11} examined {p.examined:>8,} of {p.eligible_total:,} '
+          f'({p.coverage:.2%})')
+""")
+
+md("""
+### What a proposal actually reports
+
+Three details in this output are deliberate: how much of the space was
+**examined** (a search that looks at 660 routes and says "the best route" is
+making a claim it did not earn), the **union of authority** the whole route
+needs, and the whole-route metrics — because a route assembled from
+individually affordable candidates can still break a whole-route budget.
+""")
+
+code("""
+proposal = search.propose(wb, wb.optimization_profiles[1], policy=Policy.permissive())
+print(proposal.text(wb))
+
+import json
+(OUT / 'proposal.json').write_text(json.dumps(proposal.to_dict(), indent=2))
+print(f'\nwrote {OUT}/proposal.json')
+""")
+
+md("""
+### The interactive studio
+
+Five synchronized views over the same data — all candidates, the path network,
+route comparison, a step-by-step builder that keeps ineligible candidates
+visible with their blocking reason, and the typed feedback control plane. One
+self-contained offline file, saved to the output so it is downloadable.
+""")
+
+code("""
+studio = OUT / 'universal-graph-studio.html'
+wb.write_html(str(studio))
+print(f'wrote {studio}  ({studio.stat().st_size/1000:.0f} KB, self-contained)')
+
+from IPython.display import IFrame, display
+display(IFrame(src=str(studio.relative_to(OUT.parent)) if OUT.name != 'working'
+               else studio.name, width='100%', height=620))
+""")
+
 # ---------------------------------------------------------------- close ----
+
 md("""
 ## 23. Everything this notebook produced
 

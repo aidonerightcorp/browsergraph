@@ -14,6 +14,7 @@
     browsergraph graph graph.yaml --mermaid   draw a graph, audit its contracts
     browsergraph workbench -o studio.html     stages, candidates, routes, feedback
     browsergraph fetch chromedriver           download a browser or driver
+    browsergraph route --compare              propose a route; show the search
 """
 from __future__ import annotations
 
@@ -308,6 +309,49 @@ def cmd_workbench(args) -> int:
     return 0
 
 
+def cmd_route(args) -> int:
+    """Propose a complete route under a policy and an objective profile."""
+    from browsergraph import search
+    from browsergraph.demo import workbench as demo_workbench
+    from browsergraph.policy import Policy, review
+    from browsergraph.workbench import WorkbenchDefinition
+
+    bench = (WorkbenchDefinition.load(args.config) if args.config
+             else demo_workbench())
+    profiles = {p.id: p for p in bench.optimization_profiles}
+    if not profiles:
+        print("this workbench declares no optimization profiles")
+        return 1
+    profile = profiles.get(args.profile) or next(iter(profiles.values()))
+
+    granted = set(args.allow or []) or set(Policy.permissive().permissions)
+    policy = Policy(permissions=frozenset(granted),
+                    allow_external_effects=not args.no_effects,
+                    deterministic_only=args.deterministic,
+                    max_cost_usd=args.max_cost, max_latency_ms=args.max_latency,
+                    name=args.policy_name)
+
+    if args.gates:
+        print(review(bench, policy).text())
+        return 0
+
+    if args.compare:
+        for name, proposal in search.compare_strategies(
+                bench, profile, policy=policy).items():
+            print(f"--- {name} ---")
+            print(proposal.text(bench))
+            print()
+        return 0
+
+    proposal = search.propose(bench, profile, policy=policy,
+                              strategy=args.strategy, beam=args.beam)
+    if args.json:
+        print(json.dumps(proposal.to_dict(), indent=2))
+        return 0 if proposal.ok else 1
+    print(proposal.text(bench))
+    return 0 if proposal.ok else 1
+
+
 def cmd_fetch(args) -> int:
     """Download a browser or driver into the user cache."""
     from browsergraph import fetch as f
@@ -500,6 +544,28 @@ def main(argv: list[str] | None = None) -> int:
     bs.add_argument("--no-install", action="store_true", help="do not pip/download anything")
     bs.add_argument("--no-apt", action="store_true", help="do not install system libraries")
     bs.set_defaults(fn=cmd_bootstrap)
+
+    rt = sub.add_parser("route", help="propose a route under a policy and profile")
+    rt.add_argument("config", nargs="?", help="a workbench JSON file (default: the demo)")
+    rt.add_argument("--profile", default="profile.balanced")
+    rt.add_argument("--strategy", default="auto",
+                    choices=("auto", "exhaustive", "beam", "greedy"))
+    rt.add_argument("--beam", type=int, default=8)
+    rt.add_argument("--allow", action="append",
+                    help="grant a permission (repeatable); default grants all")
+    rt.add_argument("--no-effects", action="store_true",
+                    help="forbid candidates that change external state")
+    rt.add_argument("--deterministic", action="store_true",
+                    help="only deterministic candidates")
+    rt.add_argument("--max-cost", type=float, help="per-candidate cost ceiling")
+    rt.add_argument("--max-latency", type=float, help="per-candidate latency ceiling")
+    rt.add_argument("--policy-name", default="cli")
+    rt.add_argument("--gates", action="store_true",
+                    help="show what the policy blocks, and why")
+    rt.add_argument("--compare", action="store_true",
+                    help="run greedy, beam and exhaustive side by side")
+    rt.add_argument("--json", action="store_true")
+    rt.set_defaults(fn=cmd_route)
 
     ft = sub.add_parser("fetch", help="download a browser or driver into the cache")
     ft.add_argument("what", nargs="?", help="chrome, chromedriver, geckodriver, ... "

@@ -352,11 +352,19 @@ def test_exploration_outside_zero_to_one_is_rejected():
 
 def test_an_unmeasured_metric_is_skipped_rather_than_scored_zero():
     """Scoring a missing measurement as zero punishes anything new for being new,
-    and the system stops exploring without anyone deciding that it should."""
+    and the system stops exploring without anyone deciding that it should.
+
+    Checked through `rank`, because scoring is comparative: this test used to
+    assert `score({"quality": 0.9}) == 0.9`, which held only because the scorer
+    passed raw values straight through — the very bug that made every objective
+    profile produce an identical ranking.
+    """
     profile = OptimizationProfile(id="p.x", objectives=(
         OptimizationObjective("quality", "maximize", 1.0),
         OptimizationObjective("unmeasured", "maximize", 1.0)))
-    assert profile.score({"quality": 0.9}) == pytest.approx(0.9)
+    ranked = profile.rank({"good": {"quality": 0.9}, "poor": {"quality": 0.1}})
+    assert [key for key, _ in ranked] == ["good", "poor"]
+    assert ranked[0][1] == pytest.approx(1.0)
 
 
 def test_a_profile_with_nothing_measured_scores_zero_not_a_crash():
