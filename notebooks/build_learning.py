@@ -190,6 +190,33 @@ print(f"{'picking at random':<18}"
 ''')
 
 learn.md("""
+The same numbers as a picture, which is where the shape of it shows.
+
+The two dashed lines are what make it readable. A rising line on its own proves
+nothing — it could be rising towards mediocre. Against a ceiling and a floor it
+says something: *how far it got, and how much was left*.
+""")
+
+learn.code('''
+random_pick = (sum(TRUTH[c] for c in SOURCES) / 3
+               * sum(TRUTH[c] for c in TIDIERS) / 3
+               * sum(TRUTH[c] for c in CHECKS) / 3)
+
+viz.trend([h["true"] for h in history], smooth=10,
+          title="true quality of the route it chose, run by run",
+          label="the loop never sees this number — it only sees pass or fail",
+          reference={"best possible": true_quality(best_route),
+                     "picking at random": random_pick})
+''')
+
+learn.md("""
+Read the faint line as well as the solid one. The raw series stays jumpy to the
+end, and that is not noise to be smoothed away — it is the search still trying
+things. A loop whose picks stop varying has stopped exploring, which looks like
+confidence and is indistinguishable from being stuck.
+""")
+
+learn.md("""
 ## What it learned about each candidate
 
 The posterior is what the system believes, from outcomes only. Next to it, the

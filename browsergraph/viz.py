@@ -11,7 +11,7 @@ So everything here takes a `WorkbenchDefinition` and nothing else. If a domain
 can be expressed as stages, typed ports, edges and candidates — the only things
 the compiler knows about — it can be drawn, and no drawing code changes.
 
-Six pictures, each answering a question the others cannot:
+Seven pictures, each answering a question the others cannot:
 
 * `dag` — *what shape is this?* Layers, fan-out, joins. The picture that would
   have caught "this is a pipeline, not a graph" on sight, because a diamond
@@ -27,6 +27,8 @@ Six pictures, each answering a question the others cannot:
   `dag` says which steps *may* overlap; only this says whether they did.
 * `scoreboard` — *what did the champion beat?* Every route `solve` tried,
   ranked, with the failures left in.
+* `trend` — *is this getting better?* A series over time against the lines it
+  should be judged by, because a rising line could be rising towards mediocre.
 
 Implementation notes, both learned the hard way and both non-obvious:
 
@@ -570,7 +572,103 @@ def timeline(run, *, width: int = 1000, title: str = "",
                   width, height)
 
 
-# --- 6. what the solver tried -----------------------------------------------
+# --- 6. did it get better ---------------------------------------------------
+
+def trend(points: Sequence[float], *, width: int = 940, height: int = 300,
+          title: str = "", note: str = "", label: str = "",
+          reference: Mapping[str, float] | None = None,
+          smooth: int = 0) -> Figure:
+    """A series over time, with the lines it should be judged against.
+
+    The question the whole evidence loop exists to answer is "is this getting
+    better", and there was no way to draw the answer — so every notebook that
+    learned something reported it as a table of block averages and left the
+    reader to do the comparing.
+
+    `reference` draws horizontal lines with names: the best achievable, what
+    picking at random would give, whatever the claim is being measured against.
+    A rising line on its own proves nothing — it could be rising towards
+    mediocre — and a ceiling drawn next to it is the difference between "it
+    improved" and "it improved to *this*".
+
+    `smooth` averages over a trailing window and draws the raw series faintly
+    underneath. Both are shown, because a smoothed line with the noise hidden is
+    a claim about how steady the improvement was, and that claim is usually the
+    first thing to be wrong.
+    """
+    series = [float(p) for p in points]
+    if not series:
+        return Figure('<svg width="10" height="10"></svg>', title or "trend")
+
+    left, right, top, bottom = 62, 150, 46, 44
+    plot_w, plot_h = width - left - right, height - top - bottom
+    refs = dict(reference or {})
+    lo = min([*series, *refs.values()])
+    hi = max([*series, *refs.values()])
+    span = (hi - lo) or 1.0
+    lo, hi = lo - span * 0.08, hi + span * 0.08
+    span = hi - lo
+
+    def x_at(i: int) -> float:
+        return left + (i / max(len(series) - 1, 1)) * plot_w
+
+    def y_at(v: float) -> float:
+        return top + plot_h - ((v - lo) / span) * plot_h
+
+    parts = [f'<line x1="{left}" y1="{top}" x2="{left}" y2="{top + plot_h}" '
+             f'stroke="{LINE}" stroke-width="1"/>',
+             f'<line x1="{left}" y1="{top + plot_h}" x2="{left + plot_w}" '
+             f'y2="{top + plot_h}" stroke="{LINE}" stroke-width="1"/>']
+    for value in (lo + span * 0.08, hi - span * 0.08):
+        parts.append(f'<text x="{left - 8}" y="{y_at(value) + 4}" '
+                     f'text-anchor="end" font-size="10" fill="{MUTED}">'
+                     f'{value:.3g}</text>')
+    parts.append(f'<text x="{left}" y="{top + plot_h + 24}" font-size="10" '
+                 f'fill="{MUTED}">1</text>'
+                 f'<text x="{left + plot_w}" y="{top + plot_h + 24}" '
+                 f'text-anchor="end" font-size="10" fill="{MUTED}">'
+                 f'{len(series)}</text>')
+
+    for index, (name, value) in enumerate(refs.items()):
+        y = y_at(float(value))
+        colour = GOOD if index == 0 else ALT
+        parts.append(
+            f'<line x1="{left}" y1="{y:.1f}" x2="{left + plot_w}" y2="{y:.1f}" '
+            f'stroke="{colour}" stroke-width="1.2" stroke-dasharray="5 4" '
+            f'opacity=".75"/>'
+            f'<text x="{left + plot_w + 8}" y="{y + 4:.1f}" font-size="10" '
+            f'fill="{colour}">{_esc(name)}</text>')
+
+    raw = " ".join(f"{x_at(i):.1f},{y_at(v):.1f}" for i, v in enumerate(series))
+    faint = ".35" if smooth > 1 else ".95"
+    parts.append(f'<polyline points="{raw}" fill="none" stroke="{COLD}" '
+                 f'stroke-width="{1.2 if smooth > 1 else 2.2}" opacity="{faint}"/>')
+
+    if smooth > 1:
+        rolled = [sum(series[max(0, i - smooth + 1):i + 1])
+                  / len(series[max(0, i - smooth + 1):i + 1])
+                  for i in range(len(series))]
+        line = " ".join(f"{x_at(i):.1f},{y_at(v):.1f}"
+                        for i, v in enumerate(rolled))
+        parts.append(f'<polyline points="{line}" fill="none" stroke="{CHOSEN}" '
+                     f'stroke-width="2.4"/>')
+        parts.append(f'<text x="{left + plot_w + 8}" y="{y_at(rolled[-1]) + 4:.1f}" '
+                     f'font-size="10" fill="{CHOSEN}">'
+                     f'mean of {smooth}</text>')
+    if label:
+        parts.append(f'<text x="{left}" y="{top - 14}" font-size="10.5" '
+                     f'fill="{MUTED}">{_esc(label)}</text>')
+
+    tail = (f"  Faint line is every value; solid is the trailing mean of "
+            f"{smooth}." if smooth > 1 else "")
+    return Figure(Figure._svg("".join(parts), width, height),
+                  title or "over time",
+                  note or ("A rising line proves nothing on its own — read it "
+                           "against the dashed references." + tail),
+                  width, height)
+
+
+# --- 7. what the solver tried -----------------------------------------------
 
 def scoreboard(solution, *, width: int = 1000, title: str = "",
                note: str = "") -> Figure:

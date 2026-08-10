@@ -393,3 +393,45 @@ def test_a_report_omits_the_charts_it_was_given_no_data_for(diamond):
     full = viz.report(diamond, run=_run_of(_ran("a", "a1", 0.0, 0.1)),
                       solution=_solution())
     assert full.count("<svg") == bare.count("<svg") + 2
+
+
+# --- is it getting better ---------------------------------------------------
+
+def test_a_trend_draws_its_reference_lines_with_names():
+    """A rising line proves nothing on its own — it could be rising towards
+    mediocre. The ceiling next to it is what makes it a claim."""
+    figure = viz.trend([0.3, 0.4, 0.6],
+                       reference={"best possible": 0.65, "at random": 0.32})
+    assert "best possible" in figure.svg
+    assert "at random" in figure.svg
+    assert figure.svg.count("stroke-dasharray") == 2
+
+
+def test_a_trend_shows_the_raw_series_under_the_smoothed_one():
+    """A smoothed line with the noise hidden is a claim about how steady the
+    improvement was, and that claim is usually the first one to be wrong."""
+    figure = viz.trend([0.1, 0.9] * 10, smooth=5)
+    assert figure.svg.count("<polyline") == 2
+    assert "mean of 5" in figure.svg
+    assert "Faint line is every value" in figure.note
+
+
+def test_a_trend_without_smoothing_draws_one_line():
+    assert viz.trend([1.0, 2.0, 3.0]).svg.count("<polyline") == 1
+
+
+def test_a_flat_trend_does_not_divide_by_a_zero_range():
+    assert viz.trend([0.5] * 5).svg.startswith("<svg")
+
+
+def test_an_empty_trend_returns_a_figure_rather_than_raising():
+    assert viz.trend([]).svg.startswith("<svg")
+
+
+def test_a_trend_scales_to_include_its_references():
+    """A reference above every observation must still be on the canvas —
+    clipping the ceiling is how a chart implies the ceiling was reached."""
+    figure = viz.trend([0.1, 0.2], reference={"target": 0.9})
+    ys = [float(chunk.split('"')[0])
+          for chunk in figure.svg.split('y1="')[1:]]
+    assert min(ys) >= 0 and max(ys) <= figure.height

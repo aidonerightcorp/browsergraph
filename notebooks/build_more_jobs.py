@@ -341,6 +341,25 @@ The fast source was tried every single time. When it failed the slow one took
 over, and the run still succeeded. Nothing in the graph changed — only which
 candidate did the work, and the run says which one that was.
 
+Here is one of those runs as a picture. The amber bar is the step that fell
+back, and it is amber rather than green on purpose: a run that succeeded on its
+second choice and a run that succeeded outright are not the same run, and a
+green tick for both is how a source that has quietly stopped working stays
+invisible for a month.
+""")
+
+retry.code('''
+# Keep running until one falls back, so the picture has something to show.
+fell_back_run = None
+while fell_back_run is None:
+    got = execute.run(plan, runtime, fallbacks=FALLBACKS)
+    if any(s.fell_back for s in got.steps):
+        fell_back_run = got
+
+viz.timeline(fell_back_run, title="a run that succeeded on its second choice")
+''')
+
+retry.md("""
 ## What happens with no fallbacks
 """)
 
@@ -365,10 +384,19 @@ print("skipped:    ", [s.stage for s in forced.steps if s.skipped])
 print("result:     ", forced.output("warn"))
 ''')
 
+retry.code('''
+viz.timeline(forced, title="the cache path — one step skipped, not failed")
+''')
+
 retry.md("""
-The `use` step never ran, and it is recorded as **skipped** rather than failed.
-A path not taken is a correct outcome. If it were logged as a failure every
-branching run would look broken and nobody would read the logs.
+The `use` step never ran, and it is recorded as **skipped** rather than failed —
+grey in the picture, not red. A path not taken is a correct outcome. If it were
+logged as a failure every branching run would look broken and nobody would read
+the logs.
+
+Three colours, three meanings, all of which finish without raising: green ran,
+amber fell back to another candidate, grey was skipped by a branch. Collapsing
+them into "ok" throws away the only information worth having.
 """)
 
 
@@ -811,13 +839,27 @@ runtime = execute.Runtime({
 plan = compile_route(bench, {s.id: s.candidates[0] for s in bench.leaf_stages})
 
 print(f"{'run':<8}{'reading':<32}{'path taken':<12}alerted")
+runs = {}
 for label, reading in WATCHED.items():
     current["value"] = reading
     got = execute.run(plan, runtime, workspace=WORK)
+    runs[label] = got
     taken = "alert" if not next(s for s in got.steps if s.stage == "alert").skipped else "quiet"
     alerted = got.values.get(("alert", "out"), {}).get("alerted", [])
     print(f"{label:<8}{str(reading):<32}{taken:<12}{alerted}")
 ''')
+
+text_of_quiet = '''
+# The two runs side by side. Same plan, same graph — the data chose the path.
+quiet = next(r for r in runs.values()
+             if next(s for s in r.steps if s.stage == "alert").skipped)
+noisy = next(r for r in runs.values()
+             if not next(s for s in r.steps if s.stage == "alert").skipped)
+
+display(viz.timeline(quiet, title="nothing moved — the alert step is skipped, grey"))
+display(viz.timeline(noisy, title="something moved — the alert step runs, green"))
+'''
+watch.code(text_of_quiet)
 
 watch.md("""
 Four runs, two alerts. Runs 2 and 4 read the same thing as the run before them
@@ -990,6 +1032,14 @@ plan = compile_route(bench, {s.id: s.candidates[0] for s in bench.leaf_stages})
 run = execute.run(plan, runtime, workers=2)
 print(run.text())
 ''')
+
+text.md("""
+`workers=2` because the two feature steps do not need each other. Here is the
+proof that they really did overlap — the graph says they *may*, and only a
+picture of the run says they *did*.
+""")
+
+text.code(show_timeline("counting words and measuring shape, at the same time"))
 
 text.code('''
 got = run.output("score")
