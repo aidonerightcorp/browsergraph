@@ -65,7 +65,11 @@ from browsergraph.bootstrap import ensure_browser
 from browsergraph.dimensions import Binary, Display, Stealth
 from browsergraph.drivers import build
 
-boot = ensure_browser(verbose=True)
+# Three rendering engines, not one. Firefox and WebKit are separate downloads,
+# and WebKit needs 79 system packages Chromium does not — `ensure_browser`
+# installs those too when it can, which is why the gallery further down can show
+# the same graph on Blink, Gecko and WebKit rather than just Chromium.
+boot = ensure_browser(verbose=True, browsers=('chromium', 'firefox', 'webkit'))
 print()
 print(boot.text())
 HAVE_BROWSER = boot.ok
