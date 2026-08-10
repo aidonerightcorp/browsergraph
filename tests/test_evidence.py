@@ -147,16 +147,38 @@ def test_ranked_gives_the_fallback_order():
 
 def test_interaction_is_measured_not_assumed():
     """Independence is what makes cheap search work, so where it breaks should
-    be detected rather than believed."""
+    be detected rather than believed.
+
+    The rig needs routes where the pair appears *apart*, and that is a real
+    requirement rather than test scaffolding. If a1 and b1 only ever run
+    together, their joint outcome cannot distinguish "the pair is bad" from
+    "one of them is bad" — there is nothing to compare against. An earlier
+    version appeared to manage it by comparing the route outcome to
+    `rate(a) * rate(b)`, which is not a comparison of like with like and
+    reported eleven clashes on data containing none.
+    """
     store = Evidence()
     for _ in range(12):                      # each is fine on its own
         store.observe(Observation(candidate="a1", ok=True))
         store.observe(Observation(candidate="b1", ok=True))
-    for _ in range(6):                       # together they are not
+    for _ in range(8):                       # apart, they do well
+        store.routes.append((("a1", "c1"), "global", 0.9))
+        store.routes.append((("b1", "c1"), "global", 0.9))
+    for _ in range(8):                       # together they do not
         store.routes.append((("a1", "b1"), "global", 0.1))
+
     clash = store.interactions(minimum=3)
     assert clash and clash[0][:2] == ("a1", "b1")
     assert clash[0][2] < 0
+
+
+def test_a_pair_that_never_appears_apart_cannot_be_blamed():
+    """No contrast, no attribution. Saying otherwise would be inventing
+    evidence, and the pair may be innocent while one member is not."""
+    store = Evidence()
+    for _ in range(20):
+        store.routes.append((("a1", "b1"), "global", 0.1))
+    assert store.interactions(minimum=3) == []
 
 
 def test_two_observations_of_anything_prove_nothing():
@@ -236,3 +258,72 @@ def test_per_step_outcomes_teach_far_better_than_route_level_ones():
                    if store.ranked(cs)[0][0] == best[s])
 
     assert learn(per_step=True) > learn(per_step=False)
+
+
+# --- what counts as an interaction -------------------------------------------
+
+def _rig(interaction: bool, n: int = 500, seed: int = 2):
+    """Three steps, three equal candidates each. Optionally one planted clash."""
+    import random
+
+    from browsergraph.evidence import Evidence, Observation
+
+    rng = random.Random(seed)
+    truth = {f"s{i}.{c}": 0.8 for i in range(3) for c in "abc"}
+    store = Evidence()
+    for _ in range(n):
+        route = tuple(f"s{i}.{rng.choice('abc')}" for i in range(3))
+        clash = interaction and "s0.a" in route and "s2.c" in route
+        quality = 1.0
+        for candidate in route:
+            ok = rng.random() < (0.15 if clash else truth[candidate])
+            store.observe(Observation(candidate=candidate, context="global", ok=ok))
+            quality *= 1.0 if ok else 0.0
+        store.routes.append((route, "global", quality))
+    return store
+
+
+def test_no_interaction_in_the_data_means_none_reported():
+    """It used to report eleven.
+
+    The comparison was `rate(a) * rate(b)`, and that is a category error rather
+    than a tuning problem: a route outcome is the product over *every* step, so
+    on a three-step route the observed quality sits near 0.8³ = 0.51 while the
+    expectation was 0.8² = 0.64. Every pair looked like it clashed, and the
+    longer the route the worse it got.
+    """
+    assert _rig(interaction=False).interactions(minimum=10) == []
+
+
+def test_a_planted_interaction_is_still_found():
+    """Fixing the false positives is worthless if it also stopped detecting."""
+    found = _rig(interaction=True).interactions(minimum=10)
+    assert found, "the planted clash was not detected"
+    worst = found[0]
+    assert {worst[0], worst[1]} == {"s0.a", "s2.c"}
+    assert worst[2] < -0.3
+
+
+def test_a_pair_seen_too_few_times_together_is_not_reported():
+    """Two observations of anything prove nothing."""
+    from browsergraph.evidence import Evidence
+
+    store = Evidence()
+    store.routes = [(("a", "b"), "global", 0.0), (("a", "c"), "global", 1.0)]
+    assert store.interactions(minimum=10) == []
+
+
+def test_both_sides_of_the_comparison_are_whole_routes():
+    """Routes with the pair are compared against routes with exactly one of
+    them — same shape, differing only in whether the pair co-occurs. Comparing
+    a route outcome against a product of two candidate rates cannot be read as
+    evidence about the pair."""
+    from browsergraph.evidence import Evidence
+
+    store = Evidence()
+    # Long routes, so a two-candidate product would be badly wrong.
+    for _ in range(40):
+        store.routes.append((("a", "b", "x", "y", "z"), "global", 0.5))
+        store.routes.append((("a", "c", "x", "y", "z"), "global", 0.5))
+    assert store.interactions(minimum=10) == [], \
+        "equal outcomes must not register as a clash however long the route"

@@ -232,7 +232,8 @@ def propose(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
                                              overrides))
 
     if chosen == "greedy":
-        route, examined = _greedy(workbench, profile, stages, eligible)
+        route, examined = _greedy(workbench, profile, stages, eligible,
+                                  overrides)
         proposal.notes += ("greedy scores each stage independently; route "
                            "quality compounds, so this is a baseline rather "
                            "than an optimum",)
@@ -244,14 +245,15 @@ def propose(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
                            f"best seen, not a proven best",)
     elif chosen == "halving":
         route, examined = _halving(workbench, profile, stages, eligible, spans,
-                                   budget, seed)
+                                   budget, seed, overrides)
         proposal.notes += (f"successive halving inside a budget of {budget:,}; "
                            f"{examined:,} routes of {space:,} were scored",)
     elif chosen == "exhaustive":
         route, examined = _exhaustive(workbench, profile, stages, eligible,
-                                      spans, limit)
+                                      spans, limit, overrides)
     else:
-        route, examined = _beam(workbench, profile, stages, eligible, beam, spans)
+        route, examined = _beam(workbench, profile, stages, eligible, beam,
+                                spans, overrides)
         proposal.notes += (f"beam width {beam}",)
 
     proposal.route = route
@@ -364,7 +366,8 @@ def _route_problems(workbench: WorkbenchDefinition, proposal: Proposal,
     return problems
 
 
-def _greedy(workbench, profile, stages, eligible) -> tuple[dict[str, str], int]:
+def _greedy(workbench, profile, stages, eligible, overrides=None
+            ) -> tuple[dict[str, str], int]:
     nodes = workbench.nodes_by_id
     candidates = workbench.candidates_by_id
     route, examined = {}, 0
@@ -373,6 +376,8 @@ def _greedy(workbench, profile, stages, eligible) -> tuple[dict[str, str], int]:
         for cid in eligible[stage.id]:
             manifest = nodes.get(candidates[cid].node_id)
             pool[cid] = dict(manifest.metrics or {}) if manifest else {}
+            if overrides and cid in overrides:
+                pool[cid].update(overrides[cid])
             examined += 1
         route[stage.id] = profile.rank(pool)[0][0]
     return route, examined
@@ -587,12 +592,12 @@ def within(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
     for stage in stages:
         space *= max(1, len(eligible[stage.id]))
 
-    if space <= evaluations:
-        return propose(workbench, profile, policy=policy, strategy="exhaustive",
-                       limit=max(evaluations, space))
-
-    # Metrics first: evidence has to reach the *score*, not just the starting
-    # point, or the search walks back to whatever the priors preferred.
+    # Metrics first, and *before* the small-space shortcut below. Computing
+    # them after it meant the enumerate path returned without them, so on any
+    # space small enough to enumerate — which is most teaching examples and
+    # plenty of real graphs — evidence was collected, stored, and then ignored
+    # completely. Fifty runs of a nine-route job picked the same route every
+    # time and never tried the other six candidates.
     overrides = None
     if evidence is not None:
         from browsergraph.evidence import measured_metrics
@@ -605,6 +610,12 @@ def within(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
             evidence, [c for pool in eligible.values() for c in pool],
             context, priors) or None
 
+    if space <= evaluations:
+        # Enumerating scores every route on measured metrics where they exist,
+        # so this is the *best* case for evidence, not an excuse to skip it.
+        return propose(workbench, profile, policy=policy, strategy="exhaustive",
+                       limit=max(evaluations, space), overrides=overrides)
+
     learned = None
     if evidence is not None:
         pools = {stage.id: eligible[stage.id] for stage in stages
@@ -614,7 +625,7 @@ def within(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
             learned = drawn
 
     if learned is not None:
-        start_route, start_examined = learned, len(
+        start_route, start_examined = dict(learned), len(
             [c for pool in eligible.values() for c in pool])
         start_score = profile.score_within(
             aggregate(workbench, learned, overrides),
@@ -623,7 +634,7 @@ def within(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
         origin = "evidence"
     else:
         cheap = propose(workbench, profile, policy=policy, strategy="greedy")
-        start_route, start_examined = cheap.route, cheap.examined
+        start_route, start_examined = dict(cheap.route), cheap.examined
         start_score, origin = cheap.score, "greedy"
 
     remaining = max(0, evaluations - start_examined)
@@ -632,6 +643,35 @@ def within(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
         fallback.notes += (f"budget of {evaluations:,} covered the {origin} pass "
                            f"only; nothing left to refine with",)
         return fallback
+
+    # Pairs that measurably do worse together than apart. `suggest()` samples
+    # each sub-step on its own, which is only right while the choices are
+    # independent — its own docstring says so and points at this check. Running
+    # the check and ignoring it was the gap: a known-bad pair could be proposed
+    # every time and nothing would stop it.
+    clashing: set[tuple[str, str]] = set()
+    if evidence is not None:
+        clashing = {(a, b) for a, b, _gap, _runs in evidence.interactions()}
+        if clashing and start_route:
+            chosen = set(start_route.values())
+            hit = [(a, b) for a, b in clashing
+                   if a in chosen and b in chosen]
+            if hit:
+                # Break the pair by re-drawing one side, rather than abandoning
+                # a start that is otherwise good.
+                import random as _random
+
+                breaker = _random.Random(seed)
+                for a, _b in hit:
+                    for sid, cid in list(start_route.items()):
+                        if cid == a and len(eligible.get(sid, ())) > 1:
+                            options = [c for c in eligible[sid] if c != a]
+                            start_route[sid] = breaker.choice(options)
+                            break
+                start_score = profile.score_within(
+                    aggregate(workbench, start_route, overrides),
+                    profile.ranges(_reference_sample(workbench, stages,
+                                                     eligible, overrides)))
 
     refined = propose(workbench, profile, policy=policy, strategy="sprouts",
                       budget=remaining, seed=seed, around=start_route,
@@ -645,6 +685,10 @@ def within(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
 
     best.examined = start_examined + refined.examined
     best.strategy = f"{origin}+sprouts"
+    if clashing:
+        best.notes += (f"{len(clashing)} candidate pair(s) measurably do worse "
+                       f"together than apart; the starting route was adjusted "
+                       f"to avoid them",)
     best.notes += (
         f"started from the {origin} route ({start_examined:,} looks, scoring "
         f"{start_score:.4f}), then {refined.examined:,} samples around it — "

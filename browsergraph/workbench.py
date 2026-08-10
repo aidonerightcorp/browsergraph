@@ -37,7 +37,7 @@ import itertools
 import json
 import pathlib
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -769,6 +769,47 @@ class WorkbenchDefinition:
         """True when every layer holds exactly one sub-step."""
         return all(len(layer) == 1 for layer in self.layers())
 
+    def exclusive_paths(self) -> dict[str, dict[str, tuple[str, ...]]]:
+        """For each branch, the stages only that path can reach.
+
+        A branch names one output port and the others are not taken, so the
+        stages behind an untaken port never run. Which stages those are is a
+        reachability question: everything downstream of one port and of no
+        other. Anything reachable from two ports is a re-join and runs either
+        way, so it belongs to neither path.
+        """
+        successors = self.successors()
+        branches = [s.id for s in self.leaf_stages if s.kind == "branch"]
+        if not branches:
+            return {}
+
+        edges_by_port: dict[tuple[str, str], list[str]] = {}
+        for edge in self.wiring():
+            edges_by_port.setdefault((edge.source, edge.from_port), []).append(edge.target)
+
+        def downstream(start: Iterable[str]) -> set[str]:
+            seen, queue = set(), list(start)
+            while queue:
+                node = queue.pop()
+                if node in seen:
+                    continue
+                seen.add(node)
+                queue.extend(successors.get(node, ()))
+            return seen
+
+        out: dict[str, dict[str, tuple[str, ...]]] = {}
+        for branch in branches:
+            stage = self.stage(branch)
+            ports = [p.name for p in (stage.outputs if stage else ())]
+            reach = {port: downstream(edges_by_port.get((branch, port), []))
+                     for port in ports}
+            out[branch] = {}
+            for port, reachable in reach.items():
+                others = set().union(*(r for p, r in reach.items() if p != port)) \
+                    if len(reach) > 1 else set()
+                out[branch][port] = tuple(sorted(reachable - others))
+        return out
+
     def route_count(self) -> int:
         """Complete primary routes, over **leaves**. The product, not the sum.
 
@@ -777,12 +818,37 @@ class WorkbenchDefinition:
         reads as 32,864,832 routes across six stages and 4.2 trillion across the
         fifteen sub-steps those stages are actually made of. Same task, same
         registry — the coarse view was hiding almost all of the choices.
+
+        Branches are counted as a **sum over paths**, not a product. Only one
+        path can run, so two routes that differ solely in the candidates behind
+        an untaken port are the same computation and counting both is a lie —
+        the kind this repository spends its time objecting to elsewhere. With no
+        branch present this is the plain product it always was, so every number
+        published before is unchanged.
         """
         leaves = self.leaf_stages
+        if not leaves:
+            return 0
+
+        widths = {stage.id: max(len(stage.candidates), 0) for stage in leaves}
+        exclusive = self.exclusive_paths()
+        spoken_for = {sid for paths in exclusive.values()
+                      for path in paths.values() for sid in path}
+
         total = 1
         for stage in leaves:
-            total *= max(len(stage.candidates), 0)
-        return total if leaves else 0
+            if stage.id not in spoken_for:
+                total *= widths[stage.id]
+
+        for paths in exclusive.values():
+            alternatives = 0
+            for path in paths.values():
+                product = 1
+                for sid in path:
+                    product *= widths.get(sid, 1)
+                alternatives += product
+            total *= max(alternatives, 1)
+        return total
 
     def coarse_route_count(self) -> int:
         """What the count looks like if each stage is drawn as one decision.

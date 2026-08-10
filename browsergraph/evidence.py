@@ -352,31 +352,55 @@ class Evidence:
 
     def interactions(self, minimum: int = 3, threshold: float = 0.15
                      ) -> list[tuple[str, str, float, int]]:
-        """Pairs of choices that do worse together than separately.
+        """Pairs of choices that do worse together than one of them alone.
 
         Independence is the assumption that makes cheap search work, so it
         should be measured rather than believed. For each pair seen together,
-        compare the observed joint quality against the product of the parts. A
-        large negative gap means those two specifically need joint search; every
-        other sub-step can stay greedy.
+        compare how routes containing **both** did against routes containing
+        **exactly one** of them. A large negative gap means those two
+        specifically need joint search; every other sub-step can stay greedy.
 
-        Returns `(a, b, gap, runs)`, worst first. Requires `minimum` runs before
-        reporting a pair, because two observations of anything prove nothing.
+        The comparison used to be against `rate(a) * rate(b)`, and that was a
+        category error rather than a tuning problem. A route outcome is the
+        product over *every* step in it, so on a three-step route the observed
+        quality sits near 0.8³ = 0.51 while the expectation was 0.8² = 0.64 —
+        and every pair looked like it clashed. Measured on data built with no
+        interaction whatsoever, it reported eleven. The longer the route the
+        worse it got.
+
+        Both sides of the comparison are now whole routes of the same shape,
+        differing only in whether the pair co-occurs. That is the only version
+        of this that can be read as evidence about the *pair*.
+
+        Returns `(a, b, gap, runs)`, worst first. Requires `minimum` runs of the
+        pair together, because two observations of anything prove nothing.
         """
-        pairs: dict[tuple[str, str], list[float]] = {}
+        together: dict[tuple[str, str], list[float]] = {}
+        apart: dict[tuple[str, str], list[float]] = {}
+
+        seen_pairs = set()
+        for route, _context, _quality in self.routes:
+            for index, a in enumerate(route):
+                for b in route[index + 1:]:
+                    seen_pairs.add((a, b) if a < b else (b, a))
+
         for route, _context, quality in self.routes:
-            for i, a in enumerate(route):
-                for b in route[i + 1:]:
-                    pairs.setdefault((a, b) if a < b else (b, a), []).append(quality)
+            present = set(route)
+            for pair in seen_pairs:
+                a, b = pair
+                if a in present and b in present:
+                    together.setdefault(pair, []).append(quality)
+                elif a in present or b in present:
+                    apart.setdefault(pair, []).append(quality)
 
         out = []
-        for (a, b), observed in pairs.items():
-            if len(observed) < minimum:
+        for pair, both in together.items():
+            one = apart.get(pair, [])
+            if len(both) < minimum or len(one) < minimum:
                 continue
-            expected = self.posterior(a).rate * self.posterior(b).rate
-            gap = sum(observed) / len(observed) - expected
+            gap = sum(both) / len(both) - sum(one) / len(one)
             if gap < -threshold:
-                out.append((a, b, gap, len(observed)))
+                out.append((*pair, gap, len(both)))
         return sorted(out, key=lambda row: row[2])
 
     # --- persistence --------------------------------------------------------

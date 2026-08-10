@@ -732,3 +732,34 @@ def test_metrics_can_be_overridden_per_candidate_not_only_per_node(bench):
     nudged = aggregate(bench, route,
                        {next(iter(route.values())): {"quality": 0.01}})
     assert nudged["quality"] < plain["quality"]
+
+
+def test_a_known_bad_pair_does_not_survive_into_the_starting_route(bench, locked):
+    """`suggest()` samples each sub-step alone, which is only right while the
+    choices are independent — its own docstring says so and points at
+    `interactions()` as the check. Running the check and ignoring the answer was
+    the gap: a pair measured as bad together could be proposed every time."""
+    import random
+
+    from browsergraph import search
+    from browsergraph.evidence import Evidence, Observation, stages_of
+
+    stages = stages_of(bench, locked)
+    ids = [c for cs in stages.values() for c in cs]
+    bad_a, bad_b = ids[0], ids[40]
+    rng = random.Random(5)
+
+    store = Evidence()
+    for _ in range(300):
+        route = {sid: rng.choice(cs) for sid, cs in stages.items()}
+        together = bad_a in route.values() and bad_b in route.values()
+        for candidate in route.values():
+            store.observe(Observation(candidate=candidate, context="global",
+                                      ok=rng.random() < 0.85))
+        store.routes.append((tuple(route.values()), "global",
+                             0.15 if together else 0.85))
+
+    assert store.interactions(), "the rig did not produce a detectable clash"
+    got = search.within(bench, bench.optimization_profiles[0], policy=locked,
+                        evaluations=300, evidence=store)
+    assert any("worse together" in note for note in got.notes)

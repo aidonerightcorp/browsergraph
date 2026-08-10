@@ -327,6 +327,7 @@ def cmd_execute(args) -> int:
     with a different runtime, not two code paths.
     """
     import importlib
+    import pathlib
 
     from browsergraph import execute as _execute
     from browsergraph.compile import CompileError, compile_route
@@ -336,8 +337,26 @@ def cmd_execute(args) -> int:
     bench = (WorkbenchDefinition.load(args.config) if args.config
              else demo_workbench())
 
+    store = None
+    if args.evidence:
+        from browsergraph.evidence import Evidence
+        path = pathlib.Path(args.evidence)
+        store = (Evidence.load(str(path)) if path.exists() else Evidence())
+
     solutions = {s.id: s for s in bench.solutions}
-    if args.route and args.route in solutions:
+    if args.budget:
+        from browsergraph import search
+        if not bench.optimization_profiles:
+            print("--budget needs the workbench to carry an optimization profile")
+            return 1
+        found = search.within(bench, bench.optimization_profiles[0],
+                              evaluations=args.budget, evidence=store)
+        route = found.route
+        print(f"searched within {args.budget:,} evaluations: {found.strategy}")
+        for note in found.notes[-1:]:
+            print("  " + note)
+        print()
+    elif args.route and args.route in solutions:
         route = solutions[args.route].route
     elif args.route:
         print(f"unknown route {args.route!r}; known: {', '.join(solutions) or 'none'}")
@@ -374,9 +393,15 @@ def cmd_execute(args) -> int:
                           allow_effects=not args.dry_run,
                           strict=not args.keep_going)
     print(result.text())
+    receipt = result.receipt(task=args.route or "")
     if args.receipt:
-        written = result.receipt(task=args.route or "").write(args.receipt)
-        print(f"\nreceipt: {written}")
+        print(f"\nreceipt: {receipt.write(args.receipt)}")
+    if store is not None:
+        # The loop, in one command: what just ran becomes what is known, so the
+        # next call starts from it rather than from the numbers in the file.
+        store.from_receipt(receipt)
+        store.save(args.evidence)
+        print(f"evidence updated: {args.evidence}")
     return 0 if result.ok else 1
 
 
@@ -803,6 +828,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="refuse any step that declares an effect")
     ex.add_argument("--keep-going", action="store_true",
                     help="do not stop at the first failure")
+    ex.add_argument("--budget", type=int,
+                    help="search for the best route within this many evaluations")
+    ex.add_argument("--evidence", help="an evidence JSON file to learn from and update")
     ex.add_argument("--receipt", help="write a run receipt to this path")
     ex.set_defaults(fn=cmd_execute)
 

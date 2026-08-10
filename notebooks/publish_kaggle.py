@@ -74,6 +74,7 @@ KERNELS: dict[str, str] = {
     "20-forecast-next-month": "Graph Jobs 9 Forecast Next Month",
     "21-watch-for-changes": "Graph Jobs 10 Watch for Changes",
     "22-sort-text": "Graph Jobs 11 Sort Text into Categories",
+    "23-get-better-by-doing-it": "Graph Jobs 12 Get Better by Doing It",
 }
 
 

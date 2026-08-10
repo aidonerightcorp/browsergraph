@@ -922,3 +922,77 @@ def test_a_named_port_still_round_trips():
                             outputs=(PortSpec("out", "Record"),))
     back = StageDefinition.from_dict(stage.to_dict())
     assert [p.name for p in back.inputs] == ["price", "title"]
+
+
+# --- counting a branch ---------------------------------------------------------
+
+def _branchy():
+    """check(branch) -> small | large. Two paths, only one ever runs."""
+    from browsergraph.manifest import PortSpec
+    from browsergraph.workbench import (
+        Edge,
+        NodeCandidate,
+        StageDefinition,
+        WorkbenchDefinition,
+    )
+
+    def stage(sid, ins, outs, cands, kind="atomic"):
+        return StageDefinition(
+            id=sid, kind=kind,
+            inputs=tuple(PortSpec(n, t) for n, t in ins),
+            outputs=tuple(PortSpec(n, t) for n, t in outs),
+            candidates=tuple(cands))
+
+    ids = ["c1", "c2", "s1", "s2", "s3", "l1", "l2", "l3", "l4"]
+    return WorkbenchDefinition(
+        title="branchy",
+        stages=(stage("check", [("in", "N")],
+                      [("small", "N"), ("large", "N")], ["c1", "c2"], "branch"),
+                stage("small", [("in", "N")], [("out", "T")], ["s1", "s2", "s3"]),
+                stage("large", [("in", "N")], [("out", "T")], ["l1", "l2", "l3", "l4"])),
+        edges=(Edge("check", "small", from_port="small"),
+               Edge("check", "large", from_port="large")),
+        candidates=tuple(NodeCandidate(id=c, node_id=c) for c in ids))
+
+
+def test_a_branch_is_counted_as_a_sum_of_paths_not_a_product():
+    """Only one path can run, so two routes differing solely in the candidates
+    behind an untaken port are the same computation. Counting both is the kind
+    of overstatement this repository objects to everywhere else."""
+    bench = _branchy()
+    assert bench.route_count() == 2 * (3 + 4) == 14
+    naive = 1
+    for stage in bench.leaf_stages:
+        naive *= len(stage.candidates)
+    assert naive == 24, "the naive product should differ, or this proves nothing"
+
+
+def test_the_exclusive_stages_behind_each_port_are_identified():
+    paths = _branchy().exclusive_paths()
+    assert paths["check"] == {"small": ("small",), "large": ("large",)}
+
+
+def test_a_graph_with_no_branch_counts_exactly_as_it_always_did():
+    """Every number published before this change must be unchanged."""
+    from browsergraph.demo import workbench
+    assert workbench().route_count() == 3_802_314_700_800
+
+
+def test_a_stage_reachable_from_both_ports_belongs_to_neither_path():
+    """A re-join runs whichever way the branch went, so it is not exclusive to
+    either and must stay in the product."""
+    from dataclasses import replace
+
+    from browsergraph.workbench import Edge, NodeCandidate, StageDefinition
+
+    bench = _branchy()
+    joined = replace(
+        bench,
+        stages=bench.stages + (StageDefinition(
+            id="report", input_type="T", output_type="R",
+            candidates=("r1", "r2")),),
+        edges=bench.edges + (Edge("small", "report"), Edge("large", "report")),
+        candidates=bench.candidates + (NodeCandidate(id="r1", node_id="r1"),
+                                       NodeCandidate(id="r2", node_id="r2")))
+    assert "report" not in joined.exclusive_paths()["check"]["small"]
+    assert joined.route_count() == 2 * (3 + 4) * 2

@@ -163,7 +163,13 @@ class Run:
             task=task, graph=graph, ok=self.ok, plan=self.plan_digest,
             seconds=self.seconds,
             route=tuple(f"{s.stage}={s.candidate}" for s in self.steps),
-            steps=tuple(StepRecord(key=s.stage, kind=s.candidate,
+            # `key` holds the **candidate**, not the stage. `Evidence.from_receipt`
+            # reads `step.key` as the thing being learned about, and a receipt
+            # keyed by stage teaches that "schema" succeeded — which every
+            # candidate in that stage then shares, so nothing can ever be
+            # preferred over anything else. The stage goes in `kind`, where it
+            # is still available for grouping and display.
+            steps=tuple(StepRecord(key=s.candidate, kind=s.stage,
                                    name=s.candidate, ok=s.ok,
                                    seconds=s.seconds, error=s.error,
                                    mutates=bool(s.effects))
