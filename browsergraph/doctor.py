@@ -175,7 +175,19 @@ def check_ollama(cfg: LLMConfig | None = None) -> list[Check]:
     else:
         out.append(Check("ollama:model", bool(models),
                          ", ".join(models[:4]) or "none pulled",
-                         "set OLLAMA_MODEL, e.g. OLLAMA_MODEL=glm-5.2"))
+                         "ollama pull <model>, or set OLLAMA_MODEL"))
+
+    # Which model a job would actually get. "three models are present" is not
+    # the useful fact — "a vision node will call this one" is, and it is the
+    # answer that silently degrades when the only models pulled are text-only.
+    for capability in ("completion", "vision", "tools"):
+        try:
+            from browsergraph.nodes.llm import resolve_model
+            picked = resolve_model(cfg, capability)
+            out.append(Check(f"ollama:{capability}", True, picked))
+        except Exception as e:
+            out.append(Check(f"ollama:{capability}", False, str(e)[:90],
+                             f"pull a model that reports {capability}"))
     return out
 
 

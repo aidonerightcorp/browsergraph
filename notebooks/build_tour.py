@@ -799,7 +799,15 @@ print(to_text(space))
 """)
 
 code("""
-HTML(to_html(space))     # hover a value; click to lock a choice
+# Drawn as an image first, because it has to survive being *read* as well as
+# run: Kaggle's static view strips inline SVG and script, and the interactive
+# version degrades there into a wall of run-together words.
+from browsergraph.spacemap import to_figure
+to_figure(space); plt.tight_layout(); plt.show()
+""")
+
+code("""
+HTML(to_html(space))     # the same thing, live: hover a value, click to lock one
 """)
 
 md("""
@@ -869,8 +877,15 @@ print('  ', learned.why)
 """)
 
 code("""
+from browsergraph.planmap import to_figure as planes_figure
+planes_figure(ps, before=naive, after=learned,
+              title='one task, 3,024 candidate routes — chosen, then re-chosen')
+plt.tight_layout(); plt.show()
+""")
+
+code("""
 HTML(to_html(ps, before=naive, after=learned,
-             title='one task, many routes — chosen, then re-chosen'))
+             title='the same routes, live — hover and click'))
 """)
 
 md("""
@@ -1116,27 +1131,34 @@ skips; nothing else in the notebook depends on it.
 """)
 
 code("""
-OLLAMA_KEY = ''
+import os
 try:
     from kaggle_secrets import UserSecretsClient
-    OLLAMA_KEY = UserSecretsClient().get_secret('OLLAMA_API_KEY')
+    os.environ['OLLAMA_API_KEY'] = UserSecretsClient().get_secret('OLLAMA_API_KEY')
+    os.environ.setdefault('OLLAMA_HOST', 'https://ollama.com')
     print('Ollama key loaded from Kaggle Secrets')
 except Exception as e:
-    import os
-    OLLAMA_KEY = os.environ.get('OLLAMA_API_KEY', '')
     print('no Kaggle secret;', 'using OLLAMA_API_KEY from the environment'
-          if OLLAMA_KEY else f'LLM section will be skipped ({type(e).__name__})')
+          if os.environ.get('OLLAMA_API_KEY') else
+          f'LLM section will be skipped ({type(e).__name__})')
+
+# Reads OLLAMA_HOST / OLLAMA_API_KEY / OLLAMA_MODEL — the variables you already
+# have set, whether that is a local daemon, Ollama Cloud or a gateway.
+from browsergraph.dimensions import LLMConfig, LLMControl
+LLM = LLMConfig.from_env(mode=LLMControl.VERIFY, timeout=120)
+OLLAMA_KEY = LLM.api_key
+print('host:', LLM.host, '| model:', repr(LLM.model) or '(auto)')
 """)
 
 code("""
-from browsergraph.dimensions import LLMConfig, LLMControl
-from browsergraph.nodes.llm import LLMVerify
-
-LLM_HOST, LLM_MODEL = 'https://ollama.com', 'gpt-oss:120b'
+from browsergraph.nodes.llm import LLMVerify, resolve_model
 
 if OLLAMA_KEY:
-    cfg = LLMConfig(mode=LLMControl.VERIFY, host=LLM_HOST, model=LLM_MODEL,
-                    api_key=OLLAMA_KEY, timeout=120)
+    cfg = LLM
+    # No model is named anywhere above. It is resolved from what the host
+    # actually has, by capability — naming one in a default is how you get a
+    # 404 on a perfectly healthy Ollama that pulled something else.
+    print('resolved model:', resolve_model(cfg, 'completion'), '\\n')
     checks = [('https://example.com', 'this is the Example Domain placeholder page', True),
               ('https://example.com', 'this is a shopping cart checkout page',      False)]
     for url, claim, expected in checks:

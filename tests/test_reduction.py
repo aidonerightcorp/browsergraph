@@ -341,3 +341,40 @@ def test_new_axes_participate_in_enumeration():
     from browsergraph.combos import enumerate_specs
     specs = list(enumerate_specs({"preprocess": list(PreDim)}, base=Spec()))
     assert len(specs) == len(PreDim)
+
+
+# --- focus must never inflate -----------------------------------------------
+
+def test_focus_reports_no_saving_rather_than_a_negative_one():
+    """A reduction step that inflates is wrong, and reads as a broken library.
+
+    When the whole document already fits the budget nothing is dropped, and the
+    reassembled chunks come back marginally longer than the input — the
+    separators between them. The published notebook advertised `saved -14%`.
+    """
+    from browsergraph.focus import focus
+    small = "Contact us. Email sales@acme.example or call (303) 555-0142."
+    got = focus(small, "sales email", budget=5000)
+    assert got.saved_pct >= 0.0
+    assert got.chars <= len(small)
+    assert "sales@acme.example" in got.content
+
+
+def test_focus_measures_the_saving_against_what_was_passed_in():
+    """`select` only sees chunks, whose total is smaller than the input.
+
+    Measuring against that baseline turned a genuine 15% reduction into -14%.
+    """
+    from browsergraph.focus import focus
+    text = "Contact us.\n\n" + ("Filler sentence here. " * 300) + "\n\nsales@acme.example"
+    got = focus(text, "sales email", budget=300)
+    assert got.original_chars == len(text)
+    assert got.saved_pct > 90
+    assert "sales@acme.example" in got.content
+
+
+def test_focus_still_cuts_when_there_is_something_to_cut():
+    from browsergraph.focus import focus
+    text = "Intro.\n\n" + ("Irrelevant. " * 500) + "\n\nEmail sales@acme.example"
+    got = focus(text, "email", budget=400)
+    assert got.chars < len(text) / 2

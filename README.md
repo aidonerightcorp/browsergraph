@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Core deps: none](https://img.shields.io/badge/core%20deps-stdlib--only-brightgreen)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-598%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-618%20passing-brightgreen)](tests/)
 [![Kaggle](https://img.shields.io/badge/Kaggle-live%20demo-20BEFF?logo=kaggle)](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 
 Composable browser automation. Any engine × binary × transport × display ×
@@ -524,7 +524,7 @@ video included. There is a [runnable tour notebook](notebooks/browsergraph-tour.
 
 ```bash
 pip install -e ".[dev]"
-pytest -q          # 598 tests; no browser required, browser suites skip when absent
+pytest -q          # 618 tests; no browser required, browser suites skip when absent
 mypy browsergraph --ignore-missing-imports
 ruff check browsergraph
 ```

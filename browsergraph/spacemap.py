@@ -347,3 +347,58 @@ def to_text(space: Space, top: int = 6) -> str:
         extra = f"  (+{len(ranked) - top} more)" if len(ranked) > top else ""
         out.append(f"  {name:<11} {', '.join(bits)}{extra}")
     return "\n".join(out)
+
+
+def to_figure(space: Space, ax=None, width: float = 15.0, max_paths: int = 700):
+    """A matplotlib rendering of the same picture.
+
+    Exists because `to_html` does not survive every viewer. Kaggle's static
+    notebook view strips inline SVG and script, and the diagram degrades to a
+    wall of run-together words — `engineplaywrightplaywright_stealth…` — which
+    is worse than showing nothing, because it looks like a bug in the library.
+
+    So the interactive version is for a live kernel, and this one is for
+    anywhere the output is read rather than run. Same data, same caption, no
+    interactivity.
+    """
+    import matplotlib.patches as mpatches
+    import matplotlib.pyplot as plt
+
+    counts = space.value_counts()
+    rows = max((len(v) for _, v in space.planes), default=1)
+    if ax is None:
+        _, ax = plt.subplots(figsize=(width, 0.42 * rows + 2.2))
+
+    pos: dict[tuple[str, str], tuple[float, float]] = {}
+    for i, (name, values) in enumerate(space.planes):
+        for j, value in enumerate(values):
+            pos[(name, value)] = (i, rows - j)
+
+    step = max(1, len(space.paths) // max_paths)
+    drawn = space.paths[::step]
+    for path in drawn:
+        xs, ys = [], []
+        for (name, _), value in zip(space.planes, path, strict=True):
+            x, y = pos[(name, value)]
+            xs += [x - 0.34, x + 0.34]
+            ys += [y, y]
+        ax.plot(xs, ys, color="#2d6cb5", lw=0.6, alpha=0.05, zorder=1)
+
+    for i, (name, values) in enumerate(space.planes):
+        ax.text(i, rows + 1.3, name, ha="center", fontsize=10, fontweight="bold")
+        for value in values:
+            x, y = pos[(name, value)]
+            dead = counts.get((name, value), 0) == 0
+            ax.add_patch(mpatches.FancyBboxPatch(
+                (x - 0.36, y - 0.22), 0.72, 0.44, boxstyle="round,pad=0.02",
+                fc="#ffffff" if dead else "#eef1f5",
+                ec="#d6dbe2" if dead else "#8a93a0", lw=1.0, zorder=2))
+            ax.text(x, y, value if len(value) <= 17 else value[:16] + "…",
+                    ha="center", va="center", fontsize=6.4, zorder=3,
+                    color="#b9c0c9" if dead else "#22303f")
+
+    ax.set_xlim(-0.7, len(space.planes) - 0.3)
+    ax.set_ylim(0.2, rows + 2.0)
+    ax.axis("off")
+    ax.set_title(space.summary(), fontsize=8.5, color="#68737f", loc="left", pad=14)
+    return ax

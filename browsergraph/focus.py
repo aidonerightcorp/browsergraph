@@ -19,7 +19,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 _WORD = re.compile(r"[a-z0-9][a-z0-9'+-]{1,}", re.I)
 _HEADING = re.compile(r"^(#{1,6})\s+(.*)$", re.M)
@@ -239,9 +239,28 @@ def strip_boilerplate(pages: list[str], threshold: float = 0.6,
 
 def focus(text: str, query: str, budget: int = 6000, chunk_chars: int = 1200,
           neighbors: int = 1) -> Focused:
-    """Chunk, score, expand and fit in one call."""
-    return select(chunk(text, max_chars=chunk_chars), query,
-                  budget=budget, neighbors=neighbors)
+    """Chunk, score, expand and fit in one call.
+
+    When the whole document already fits the budget, nothing is dropped and the
+    reassembled chunks come back very slightly *longer* than the input — the
+    separators between them. The result was then advertised as `saved -14%`,
+    which reads as a broken library rather than as "there was nothing to cut".
+
+    A reduction step must never inflate. If focusing did not shrink the text,
+    the text is returned unchanged.
+    """
+    original = text or ""
+    picked = select(chunk(original, max_chars=chunk_chars), query,
+                    budget=budget, neighbors=neighbors)
+
+    # `select` only sees chunks, so it measures the saving against their total
+    # length — which is smaller than the input, because chunking drops the
+    # whitespace between them. That made a genuine 15% reduction report as
+    # "saved -14%". The saving is against what the caller actually passed in.
+    picked = replace(picked, original_chars=len(original))
+    if picked.chars >= len(original) and original:
+        return replace(picked, content=original, chars=len(original))
+    return picked
 
 
 def estimate_tokens(text: str) -> int:

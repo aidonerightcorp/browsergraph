@@ -365,3 +365,76 @@ def to_html(planes_: list[Plane], *, before: Route | None = None,
 {''.join(faint)}{picked}{''.join(parts)}</svg>
 <p class="{uid}-leg">{legend}</p>
 </div>"""
+
+
+def to_figure(planes_: list[Plane], *, before: Route | None = None,
+              after: Route | None = None, ax=None, width: float = 14.0,
+              title: str = "one task, many routes"):
+    """A matplotlib rendering, for viewers that do not run the notebook.
+
+    Kaggle's static view strips inline SVG and script, so `to_html` degrades to
+    run-together text there. Same content, no interactivity.
+    """
+    import matplotlib.patches as mpatches
+    import matplotlib.pyplot as plt
+
+    rows = max(len(p.candidates) for p in planes_)
+    if ax is None:
+        _, ax = plt.subplots(figsize=(width, 0.62 * rows + 2.6))
+
+    pos: dict[tuple[str, str], tuple[float, float]] = {}
+    for i, plane in enumerate(planes_):
+        for j, cand in enumerate(plane.candidates):
+            pos[(plane.name, cand.name)] = (i, rows - j)
+
+    def draw(route: Route, colour: str, lw: float, dashed: bool, z: int):
+        xs, ys = [], []
+        for plane in planes_:
+            x, y = pos[(plane.name, route.picks[plane.name])]
+            xs += [x - 0.38, x + 0.38]
+            ys += [y, y]
+        ax.plot(xs, ys, color=colour, lw=lw, zorder=z,
+                linestyle=(0, (6, 3)) if dashed else "-")
+
+    for route in routes(planes_, limit=500):
+        draw(route, "#9fb4cc", 0.5, False, 1)
+    if before:
+        draw(before, "#c98a2b", 2.4, True, 4)
+    if after:
+        draw(after, "#1f8a4c", 2.8, False, 5)
+
+    for i, plane in enumerate(planes_):
+        ax.text(i, rows + 1.55, plane.name, ha="center", fontsize=10.5,
+                fontweight="bold")
+        ax.text(i, rows + 1.15, plane.question, ha="center", fontsize=7,
+                color="#7b8794")
+        for cand in plane.candidates:
+            x, y = pos[(plane.name, cand.name)]
+            fc, ec = "#eef1f5", "#aab3bf"
+            if cand.kind == "engine":
+                fc, ec = "#e8f0fb", "#2d6cb5"
+            elif cand.kind == "builtin":
+                fc, ec = "#f3f6f2", "#7fa07f"
+            if cand.note == "model":
+                fc, ec = "#fdf3e2", "#c98a2b"
+            ax.add_patch(mpatches.FancyBboxPatch(
+                (x - 0.40, y - 0.26), 0.80, 0.52, boxstyle="round,pad=0.02",
+                fc=fc, ec=ec, lw=1.2, zorder=6))
+            ax.text(x, y + 0.06, cand.name, ha="center", va="center",
+                    fontsize=7.2, zorder=7)
+            note = (f"p={cand.p:.2f} n={cand.evidence:.0f}" if cand.p is not None
+                    else cand.note)
+            if note:
+                ax.text(x, y - 0.13, note, ha="center", va="center", fontsize=5.6,
+                        color="#8a6d1f" if cand.p is not None else "#8794a3", zorder=7)
+
+    handles = [mpatches.Patch(color="#c98a2b", label="first choice — no evidence"),
+               mpatches.Patch(color="#1f8a4c", label="after learning from outcomes"),
+               mpatches.Patch(color="#9fb4cc", label="every other runnable route")]
+    ax.legend(handles=handles, loc="lower center", ncol=3, fontsize=7.5,
+              frameon=False, bbox_to_anchor=(0.5, -0.06))
+    ax.set_xlim(-0.7, len(planes_) - 0.3)
+    ax.set_ylim(0.1, rows + 2.1)
+    ax.axis("off")
+    ax.set_title(title, fontsize=11, loc="left", pad=16)
+    return ax

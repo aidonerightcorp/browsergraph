@@ -15,22 +15,74 @@ import urllib.request
 from typing import Any, ClassVar
 
 from browsergraph.dimensions import LLMConfig
+from browsergraph.models import Catalog, ModelUnavailable
 from browsergraph.nodes.base import Node, register
 from browsergraph.ports import Context
+
+#: Catalogues, per host. Resolving a model costs a round trip, and every LLM
+#: node in a graph would otherwise pay it again.
+_CATALOGS: dict[tuple[str, str], "Catalog"] = {}
+
+
+def resolve_model(cfg: LLMConfig, capability: str = "completion") -> str:
+    """The model to actually call, given what this host has.
+
+    Three cases, in order of how much the caller asked for:
+
+    * an exact name that exists — used as given;
+    * a name that exists only as a *tag*, e.g. `glm-5.2` where the host has
+      `glm-5.2:cloud`. Ollama names models `name:tag` and people write the bare
+      name constantly. Failing that with a 404 is technically correct and
+      useless;
+    * nothing asked for — the best model on the host with the needed capability,
+      which is what `routing` already knows how to work out.
+
+    Returns the requested name unchanged when the host cannot be reached, so an
+    unreachable Ollama produces a connection error rather than being disguised
+    as a model-selection problem.
+    """
+    key = (cfg.host, cfg.api_key)
+    catalog = _CATALOGS.get(key)
+    if catalog is None:
+        catalog = Catalog.load(cfg.host, cfg.api_key)
+        _CATALOGS[key] = catalog
+    if not getattr(catalog, "reachable", False):
+        return cfg.model
+
+    names = [m.name for m in catalog.models]
+    if cfg.model:
+        if cfg.model in names:
+            return cfg.model
+        tagged = [n for n in names if n.split(":", 1)[0] == cfg.model]
+        if len(tagged) == 1:
+            return tagged[0]
+        if tagged:
+            return sorted(tagged)[0]
+        raise ModelUnavailable(
+            f"{cfg.model!r} is not on {cfg.host}. Available: {', '.join(names) or 'none'}. "
+            f"Leave LLMConfig.model empty to pick one automatically.")
+
+    best = catalog.best(capability)
+    if best is None:
+        raise ModelUnavailable(
+            f"no model on {cfg.host} reports the {capability!r} capability. "
+            f"Available: {', '.join(names) or 'none'}")
+    return best.name
 
 
 class OllamaClient:
     """Thin client for /api/chat. `api_key` is sent when set, for gateways."""
 
-    def __init__(self, cfg: LLMConfig, opener=None) -> None:
+    def __init__(self, cfg: LLMConfig, opener=None, capability: str = "completion") -> None:
         self.cfg = cfg
+        self.capability = capability
         self._opener = opener or urllib.request.urlopen
 
     def complete(self, prompt: str, system: str = "") -> str:
         messages = ([{"role": "system", "content": system}] if system else [])
         messages.append({"role": "user", "content": prompt})
         payload = json.dumps({
-            "model": self.cfg.model,
+            "model": resolve_model(self.cfg, self.capability),
             "messages": messages,
             "stream": False,
             "options": {"temperature": self.cfg.temperature},

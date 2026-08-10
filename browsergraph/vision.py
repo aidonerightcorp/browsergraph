@@ -65,8 +65,14 @@ class VisionClient:
         messages: list[dict[str, Any]] = (
             [{"role": "system", "content": system}] if system else [])
         messages.append({"role": "user", "content": prompt, "images": [b64]})
+        # Resolved against the *vision* capability, never merely "a model". A
+        # text-only model handed an image does not refuse — it answers from the
+        # prompt alone, fluently and wrongly, which is the most expensive
+        # failure mode this library has.
+        from browsergraph.nodes.llm import resolve_model
         payload = json.dumps({
-            "model": self.cfg.model, "messages": messages, "stream": False,
+            "model": resolve_model(self.cfg, "vision"),
+            "messages": messages, "stream": False,
             "options": {"temperature": self.cfg.temperature},
         }).encode()
         headers = {"Content-Type": "application/json"}
