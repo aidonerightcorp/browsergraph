@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 
 from browsergraph import arena, benchmark
+from browsergraph import edits as edits_mod
 
 BUDGET, REPEATS, SEED = 12, 5, 1
 
@@ -158,3 +159,70 @@ def test_guided_spends_no_more_runs_than_anything_else():
     guided = [r for r in got.results if r.strategy == "guided"][0]
     assert guided.runs <= 12
     assert "compiled" in guided.note, "the refusal rate belongs in the record"
+
+
+# --- the haystack: is pruning the thing guidance is actually for? ------------
+
+def test_the_haystack_distractors_are_all_legal():
+    """The point is that the type checker cannot help. Twenty nodes, every one
+    of which inserts anywhere and changes nothing, so telling them apart is a
+    judgement rather than a check."""
+    from browsergraph import edits
+
+    task = arena.haystack(steps=5, width=4, seed=1)
+    assert len(task.library) == 20
+    proposals = edits.mechanical(task.workbench, task.library)
+    got = edits.variants(task.workbench, proposals, library=task.library)
+    assert got.refusal_rate == 0.0, "a distractor that cannot compile is not one"
+    assert len(got.accepted) >= 60, "each node should fit at several positions"
+
+
+def test_only_one_library_node_actually_helps():
+    from browsergraph import edits, execute
+    from browsergraph.compile import compile_route
+
+    task = arena.haystack(steps=4, width=3, seed=2)
+    scores = {}
+    for manifest in task.library:
+        first_edge = task.workbench.wiring()[0]
+        outcome = edits.apply(task.workbench, edits.GraphEdit(
+            "insert", (first_edge.source, first_edge.target), manifest.id),
+            library=task.library)
+        assert outcome.ok
+        route = {s.id: s.candidates[0] for s in outcome.workbench.leaf_stages}
+        run = execute.run(compile_route(outcome.workbench, route), task.runtime)
+        scores[manifest.id] = task.verify(run)[1]
+
+    better = [nid for nid, v in scores.items()
+              if v > scores.get("cache.warm", 0) * 1.5]
+    assert better == ["repair.fix"], f"exactly one should help: {better}"
+
+
+def test_enumeration_is_complete_and_that_is_not_enough():
+    """The finding worth keeping. Eighty legal edits and forty runs means one
+    run each, whatever the allocator does — so a proposer offering everything is
+    offering nothing usable. Guidance earns its keep by *pruning*, not by
+    knowing something the type checker does not."""
+    from browsergraph import edits
+
+    task = arena.haystack(steps=5, width=4, seed=1)
+    proposals = edits.mechanical(task.workbench, task.library)
+    assert len(proposals) > 40, (
+        "the whole point is that enumeration produces more variants than a "
+        "realistic budget can evaluate")
+
+
+def test_a_proposer_that_picks_one_concentrates_the_budget():
+    """The mechanism, with the model's part written by hand so it is testable.
+    One correct edit turns a structural floor into a real score; the same budget
+    spread over eighty variants does not."""
+    task = arena.haystack(steps=5, width=4, seed=1)
+    right = [edits_mod.GraphEdit("insert", ("s0", "s1"), "repair.fix")]
+
+    focused = benchmark.compare(
+        task.workbench, task.runtime, verify=task.verify, budget=40, repeats=1,
+        library=task.library, propose=lambda b, lib: right,
+        strategies=("guided",))
+    assert focused.best("guided") > task.ceiling_without_edit, (
+        "one right edit should cross the structural ceiling")
+

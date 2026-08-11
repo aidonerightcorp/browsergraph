@@ -444,7 +444,51 @@ compiles — and almost no evidence about whether a model is good at this.
 The experiment that would be evidence: a library of twenty nodes of which one
 helps, no hint in the history, and the refusal rate reported next to the score.
 Against `edits.mechanical`, which would enumerate all twenty and be complete.
-That is not built.
+
+## That experiment, built — and what guidance is actually for
+
+`arena.haystack` is that task. Twenty nodes, nineteen of them plausible
+distractors with real descriptions — *keep recent results so repeated work is
+faster*, *append an entry to the compliance log* — and **every one of them
+legal**: each inserts anywhere and changes nothing. So the type checker cannot
+help, which is the point.
+
+**Proposal quality, five seeded trials:**
+
+```
+trial 0..4: repair.fix @ ('s0','s1')   compiled, correct
+5 edits proposed, 5 compiled (0% refused), the right node found in 5/5
+```
+
+The model picks the one useful node out of twenty and places it legally, every
+time. That is a real result, and much stronger than the one-node version.
+
+**End to end, budget 40, structural floor 58.2% gap:**
+
+| | gap to best |
+|---|---|
+| `solve` — routes only | 60.1% — at the floor, as predicted |
+| `guided` + `mechanical` | 66.9% — **worse than not editing at all** |
+| `guided` + one correct edit | 6.3% |
+
+Enumeration is complete and that is not enough. Eighty legal edits and forty
+runs is one run per variant, which is a single random route each — so a proposer
+that offers everything offers nothing usable. **The value of guidance here is
+pruning, not knowledge.** The model is not seeing something the type checker
+cannot; it is turning eighty options into one, which is what lets the budget go
+deep enough to matter.
+
+That also fixed a real bug in the harness. `guided` split its budget evenly, so
+a proposer was *punished for offering more options* and the comparison measured
+the allocator rather than the proposals. It uses successive halving now — spend
+a little on everything, keep the better half, spend again. Halving does not
+rescue enumeration at this budget, and that is the honest finding rather than a
+failure of the fix: forty runs cannot evaluate eighty variants under any
+allocation.
+
+One caveat kept because it was observed and is unexplained: a single unseeded
+call produced a proposal that was refused, where five seeded ones did not. It
+did not reproduce.
 
 ---
 

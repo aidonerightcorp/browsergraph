@@ -48,6 +48,7 @@ deciding which strategy wins is the most common way this kind of table lies.
 """
 from __future__ import annotations
 
+import math
 import random
 import statistics
 import time
@@ -311,20 +312,46 @@ def _guided(bench, runtime, verify, picked, budget, offset, inputs, workspace,
     tried = _edits.variants(bench, proposals, library=library)
 
     graphs = [bench] + [o.workbench for o in tried.accepted]
-    share = max(1, budget // len(graphs))
     best_score, best_route, any_ok, runs = float("-inf"), {}, False, 0
 
-    for graph in graphs:
-        if runs >= budget:
+    # Successive halving, not an even split.
+    #
+    # The even split was actively harmful and the haystack task proved it: with
+    # eighty legal edits and forty runs, every graph got one run, which is a
+    # single random route each and scores *worse than not editing at all*. A
+    # proposer offering many options was punished for offering them, so the
+    # comparison measured the allocator rather than the proposals.
+    #
+    # Halving spends a little on everything, keeps the better half, and spends
+    # again — so eighty cheap looks narrow to a few deep ones. It is the
+    # standard answer to exactly this shape of problem, and it makes a wide
+    # proposer merely slower rather than worse.
+    alive = list(graphs)
+    while alive and runs < budget:
+        rounds_left = max(1, math.ceil(math.log2(len(alive))) + 1) if len(alive) > 1 else 1
+        per_graph = max(1, (budget - runs) // (len(alive) * rounds_left))
+        scored: list[tuple[float, Any, dict]] = []
+        for graph in alive:
+            if runs >= budget:
+                break
+            answer = _solve.solve(graph, runtime, verify=verify, inputs=inputs,
+                                  profile=picked,
+                                  attempts=min(per_graph, budget - runs),
+                                  workspace=workspace, evidence=Evidence(),
+                                  seed=offset + runs)
+            runs += len(answer.attempts)
+            any_ok |= answer.ok
+            score = answer.score if answer.ok else float("-inf")
+            scored.append((score, graph, dict(answer.champion)))
+            if answer.ok and score > best_score:
+                best_score, best_route = score, dict(answer.champion)
+
+        if len(scored) <= 1:
             break
-        answer = _solve.solve(graph, runtime, verify=verify, inputs=inputs,
-                              profile=picked, attempts=min(share, budget - runs),
-                              workspace=workspace, evidence=Evidence(),
-                              seed=offset)
-        runs += len(answer.attempts)
-        any_ok |= answer.ok
-        if answer.ok and answer.score > best_score:
-            best_score, best_route = answer.score, dict(answer.champion)
+        scored.sort(key=lambda row: -row[0])
+        alive = [graph for _s, graph, _r in scored[:max(1, len(scored) // 2)]]
+        if len(alive) == len(graphs):       # nothing was eliminated; stop
+            break
 
     return Result(
         "guided", offset, best_score if any_ok else 0.0, any_ok, runs,

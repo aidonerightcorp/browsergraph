@@ -275,6 +275,86 @@ def missing_step(steps: int = 5, width: int = 5, seed: int = 0,
     return task
 
 
+#: Plausible-sounding nodes that do nothing. The point of a haystack is that the
+#: distractors are *readable as relevant*: a library of `noop.3` and `noop.4`
+#: tests whether a model can spot a word, not whether it can judge a pipeline.
+DISTRACTORS = (
+    ("cache.warm", "keep recent results so repeated work is faster"),
+    ("log.verbose", "record every step's inputs and outputs for debugging"),
+    ("metrics.emit", "publish counters and timings to a monitoring backend"),
+    ("retry.wrap", "attempt the next step again when it fails transiently"),
+    ("batch.chunk", "group the stream into fixed-size batches"),
+    ("dedupe.recent", "drop values identical to one seen in the last window"),
+    ("normalise.case", "lowercase and trim whitespace on text fields"),
+    ("audit.trail", "append an entry to the compliance log for each record"),
+    ("sample.head", "keep only the first portion, for a faster dry run"),
+    ("compress.gzip", "reduce the size of the payload in transit"),
+    ("validate.schema", "check the shape against a declared schema"),
+    ("enrich.lookup", "attach reference data from a side table"),
+    ("shuffle.stable", "reorder deterministically to break input correlation"),
+    ("throttle.rate", "slow the stream to a fixed rate"),
+    ("checkpoint.save", "persist progress so a crash can resume"),
+    ("redact.pii", "remove personally identifying fields"),
+    ("convert.units", "restate numeric fields in canonical units"),
+    ("index.build", "construct a lookup index over the values"),
+    ("partition.key", "split the stream by a key for parallel handling"),
+)
+
+
+def haystack(steps: int = 5, width: int = 4, seed: int = 0,
+             distractors: int = 19, penalty: float = 0.45) -> Task:
+    """One node in a library of twenty repairs the defect. Nothing says which.
+
+    The experiment `docs/GRAPH_QUESTIONS.md` specifies and `missing_step` is too
+    easy for. There, the library held one node and the prompt listed the two
+    places it fits, so a model only had to notice a hint. Here it must judge.
+
+    Every distractor is **legal**: each one type-checks, inserts anywhere, and
+    changes nothing. So enumeration finds twenty variants and has to split its
+    budget twenty ways, while a proposer that picks three gets a search six
+    times deeper in each. That is the real hypothesis about guidance — not that
+    it knows something the type checker does not, but that it **concentrates a
+    fixed budget**. It loses when it concentrates on the wrong thing, and this
+    task is built so that losing is possible.
+
+    The descriptions are deliberately plausible. A library of `noop.3` and
+    `noop.4` would test whether a model can spot an odd word out.
+    """
+    rng = random.Random(seed)
+    truth = {f"s{s}.c{c}": round(rng.uniform(0.55, 0.99), 4)
+             for s in range(steps) for c in range(width)}
+    truth["repair.fix"] = 1.0
+
+    def score(route):
+        total = 1.0
+        for cid in route.values():
+            total *= truth.get(cid, 1.0)
+        if "repair.fix" not in route.values():
+            total *= penalty
+        return total
+
+    task = _build("haystack", steps, width, truth, score,
+                  "one node in a library of twenty removes the defect")
+
+    chosen = list(DISTRACTORS[:max(0, distractors)])
+    rng.shuffle(chosen)
+    library = [node("repair.fix", "repair", [("in", "V")], [("out", "V")],
+                    description="repair the defect that is degrading every "
+                                "route through this pipeline")]
+    library += [node(nid, nid.split(".")[0], [("in", "V")], [("out", "V")],
+                     description=text) for nid, text in chosen]
+    rng.shuffle(library)
+    task.library = tuple(library)
+
+    for manifest in task.library:
+        task.runtime.register(manifest.id, lambda **kw: kw.get("in", 1.0))
+
+    best_with = dict(task.best_route)
+    task.best_score = score({**best_with, "repair": "repair.fix"})
+    task.ceiling_without_edit = score(best_with)
+    return task
+
+
 def _every_route(steps: int, width: int):
     import itertools
 
@@ -282,8 +362,8 @@ def _every_route(steps: int, width: int):
         yield {f"s{s}": f"s{s}.c{c}" for s, c in enumerate(combo)}
 
 
-TASKS = {"needle": needle, "flat": flat, "paired": paired,
-         "noisy": noisy, "missing_step": missing_step}
+TASKS = {"needle": needle, "flat": flat, "paired": paired, "noisy": noisy,
+         "missing_step": missing_step, "haystack": haystack}
 
 
 def get(name: str, **kwargs) -> Task:
