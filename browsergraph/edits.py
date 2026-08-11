@@ -187,11 +187,26 @@ def _insert(bench, edit, library) -> Outcome:
     known = {n.id: n for n in (*bench.nodes, *library)}
     missing = [w for w in wanted if w not in known]
     if missing:
-        # The failure mode that reads like a framework bug: a model names a
-        # node that does not exist and the graph silently omits a step.
-        return Outcome(edit, False,
-                       f"no node called {missing[0]!r} — propose a capability "
-                       f"and let the index resolve it, rather than an id")
+        # A model may name a *capability* instead of a node, which is what the
+        # prompt asks for — so try resolving before refusing. Only a name that
+        # is neither a node nor a capability anybody provides is a mistake.
+        from browsergraph import vocab
+
+        resolved = [m.id for name in missing
+                    for m in vocab.providers(name, library)]
+        if resolved:
+            wanted = [w for w in wanted if w in known] + resolved
+            known.update({m.id: m for name in missing
+                          for m in vocab.providers(name, library)})
+        else:
+            # The failure that reads like a framework bug: a model names a node
+            # that does not exist and the graph silently omits a step.
+            nearby = [c.id for c in vocab.find(missing[0], limit=3)]
+            return Outcome(edit, False,
+                           f"nothing called {missing[0]!r} — no node has that "
+                           f"id and no capability by that name is provided"
+                           + (f". Did you mean: {', '.join(nearby)}?"
+                              if nearby else ""))
 
     manifests = [known[w] for w in wanted]
     capabilities = tuple(dict.fromkeys(c for m in manifests

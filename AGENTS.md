@@ -572,3 +572,43 @@ Same run budget for both. The proposer there is `edits.mechanical`, which
 enumerates legal edits and uses no model at all — so that is the baseline a
 model-guided proposer has to beat, not an empty field. See
 [docs/GRAPH_QUESTIONS.md](docs/GRAPH_QUESTIONS.md).
+
+## Say what you need, not which node
+
+Sixty-four capability names were already in use across the templates and packs
+— `data.clean`, `check.schema`, `feature.numeric` — with nothing that knew it.
+`browsergraph.vocab` is the registry:
+
+```python
+from browsergraph import vocab
+
+vocab.find("fill in the missing values")     # -> data.impute, data.clean, ...
+vocab.resolve("data.clean", bench)           # -> nodes, each with legal positions
+vocab.gaps()                                 # what nothing here provides
+print(vocab.catalog_text())
+```
+
+An edit may now name a **capability** instead of a node id, which is what
+`edits.question` has been asking models to do all along:
+
+```python
+edits.GraphEdit("insert", ("s0", "s1"), "repair")     # resolves to repair.fix
+edits.GraphEdit("insert", ("s0", "s1"), "impute.magic")
+# refused: nothing called 'impute.magic' … Did you mean: data.impute, data.clean?
+```
+
+Three rules it keeps:
+
+**Implementations are discovered, never declared.** The registry reads the packs
+that exist, so it cannot claim something is implemented after the node is gone.
+
+**Resolution is filtered by the type checker, never by the description.** Search
+by meaning; the survivors are whatever compiles at the position asked about.
+
+**A capability nobody implements is recorded, not hidden.** The honest count is
+**17 provided, 56 declared with nothing to perform them** — the templates
+describe far more than the packs implement, and `gaps()` is the list.
+
+Note the module is `vocab`, not `capabilities`: that name already means what a
+*browser engine* can do, and two registries under one name is a collision
+waiting for whoever greps next.
