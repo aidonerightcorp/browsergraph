@@ -203,3 +203,21 @@ def test_the_documented_install_forms_are_valid_requirements(form):
     assert parsed.name == "browsergraph"
     assert parsed.url and parsed.url.startswith("git+"), \
         "an install form with no URL would send the reader to an index"
+
+
+def test_every_subpackage_is_in_the_packaging_manifest():
+    """A package directory left out of `packages` is simply absent from the
+    wheel, and the failure lands on whoever installed it — `browsergraph.packs`
+    was added and very nearly shipped missing."""
+    import re as _re
+
+    manifest = (ROOT / "pyproject.toml").read_text()
+    block = _re.search(r"packages\s*=\s*\[(.*?)\]", manifest, _re.DOTALL)
+    listed = set(_re.findall(r'"([\w.]+)"', block.group(1)))
+
+    on_disk = {f"{top.name}.{child.name}"
+               for top in (ROOT / "browsergraph", ROOT / "solutiongraph")
+               for child in top.iterdir()
+               if child.is_dir() and (child / "__init__.py").exists()}
+    missing = sorted(on_disk - listed)
+    assert not missing, f"sub-packages that would not ship: {missing}"

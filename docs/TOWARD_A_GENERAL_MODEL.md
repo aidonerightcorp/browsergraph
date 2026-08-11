@@ -1,23 +1,33 @@
 # Toward a general model — a critical review
 
 *What would have to be true for this to be a way of building software, rather
-than a good way of building browser automations. Written against the current
-implementation, not about it. Where I am criticising my own work I say so
-plainly.*
+than a good way of building browser automations. Written against the
+implementation as it was, not about it. Where I am criticising my own work I say
+so plainly.*
+
+> **Status, later.** Findings 1–5 and 7 have been fixed and the fixes are
+> described below, each next to the finding it answers. The review is kept
+> whole rather than edited into agreement with the code, because the argument
+> for the shape is worth more than a list of resolved tickets — and because a
+> critical review quietly rewritten to say the problems never existed is not a
+> document anybody should trust. What remains open is finding 6.
 
 ---
 
 ## Summary of findings
 
-| # | Finding | Severity |
-|---|---|---|
-| 1 | **The model is a pipeline, not a graph.** It cannot express fan-out, fan-in, or a join. The headline route arithmetic only works because it is a chain. | **Fatal to the universal claim** |
-| 2 | **Types are string equality.** No subtyping, no parametric containers, no semantic distinction. Substitutability is asserted, never checked. | High |
-| 3 | **Route-level success is a poor teacher.** Measured: it resolves 27% of the choice in 600 runs against 81% for per-step outcomes. | High — but the fix is already in the design |
-| 4 | **No compiled plan.** `validate()` checks a description; nothing produces an immutable, content-addressed thing that *ran*. | High |
-| 5 | **Nothing checks a node at its ports at run time.** A node can declare `Record[]` and return a string. | Medium |
-| 6 | **The package name fights the claim.** `pip install browsergraph` to do document extraction is a tax on every adopter. | Medium, and cheap to fix |
-| 7 | **LLM adoption needs a checker, not prose.** Documentation does not stop a model inventing a field. | Medium, mostly addressed this round |
+| # | Finding | Severity | Now |
+|---|---|---|---|
+| 1 | **The model is a pipeline, not a graph.** It cannot express fan-out, fan-in, or a join. The headline route arithmetic only works because it is a chain. | **Fatal to the universal claim** | **Fixed.** Typed named ports, an explicit edge list, per-edge checking, longest-path layering. `map` and `branch` are step kinds; loops are deliberately absent. |
+| 2 | **Types are string equality.** No subtyping, no parametric containers, no semantic distinction. Substitutability is asserted, never checked. | High | **Fixed.** A subtype lattice with `is_a`, and `element_of` for the `List[Row]`/`Row` relationship a map step needs. |
+| 3 | **Route-level success is a poor teacher.** Measured: it resolves 27% of the choice in 600 runs against 81% for per-step outcomes. | High — but the fix is already in the design | **Fixed**, and then fixed again: the verdict was reaching the receipt but not the per-candidate posteriors, so a reader that produced nothing and one that produced two records were believed equally. |
+| 4 | **No compiled plan.** `validate()` checks a description; nothing produces an immutable, content-addressed thing that *ran*. | High | **Fixed.** `compile_route` freezes a plan with a content digest, and receipts and evidence key on it. |
+| 5 | **Nothing checks a node at its ports at run time.** A node can declare `Record[]` and return a string. | Medium | **Fixed.** Every step's output is guarded against its declared ports, and the branch case checks only the ports actually taken. |
+| 6 | **The package name fights the claim.** `pip install browsergraph` to do document extraction is a tax on every adopter. | Medium, and cheap to fix | **Open.** `solutiongraph` exists as the domain-neutral core and ships in the same distribution, so the layering is real and the name is still wrong. |
+| 7 | **LLM adoption needs a checker, not prose.** Documentation does not stop a model inventing a field. | Medium, mostly addressed this round | **Fixed.** `explore.py`: the model proposes, the compiler disposes, and a refused suggestion is recorded as refused. |
+
+The list further down — *What I would do next, in order* — has been worked
+through as far as item 5. Items 6 and 7 of that list are the live ones.
 
 ---
 
@@ -297,6 +307,24 @@ not — because that is a different and true statement about the same system.
 Items 1–4 are the difference between a good tool and a way of building
 software. Items 5–6 are the difference between one that gets used and one that
 does not.
+
+**Where that list stands.** 1 to 4 are done. 5 is half done — `solutiongraph`
+is a real package boundary with its own schemas, and it ships inside the
+`browsergraph` distribution, so the layering exists and the name still lies.
+
+6 is done: `browsergraph.packs` has three non-browser domains — batching a
+folder, gating data quality, fitting a tabular model — each filling one of the
+templates, each standard-library only, and each with **every one of its routes
+executed by a test** rather than a sampled few. Building them was worth it for
+what they found: the tabular pack shipped with the category encoding re-derived
+from the held-out rows, which silently multiplied a weight meaning *is a flat*
+by a column meaning *is a house*, and made the correct encoder score worse than
+the wrong one. That bug is invisible in a template. It is only findable by
+running the thing.
+
+7 is the live one. `interactions()` measures where independence breaks and
+`pair_effects()` feeds that back into the search, so joint search has its input;
+Pareto fronts and learned cost models do not exist.
 
 ---
 

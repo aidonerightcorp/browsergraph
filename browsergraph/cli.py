@@ -964,6 +964,45 @@ def cmd_solve(args) -> int:
     return 0 if answer.ok else 1
 
 
+def cmd_packs(args) -> int:
+    """List the domain packs, or run one.
+
+    A pack is a template with the code already written. `templates` gives you
+    eleven shapes and every one of them has zero candidates; a pack fills one
+    in and brings functions, so a domain goes from expressible to runnable
+    without anybody writing a node.
+    """
+    from browsergraph import packs
+
+    if not args.name:
+        print(packs.catalog_text())
+        print("\nrun one:   browsergraph packs files --solve")
+        return 0
+
+    try:
+        pack = packs.get(args.name)
+    except KeyError as problem:
+        print(str(problem).strip('"'))
+        return 1
+
+    bench = pack.workbench()
+    if args.draw:
+        from browsergraph import viz
+        print(f"wrote {viz.write_report(bench, args.draw)}")
+        return 0
+
+    if not args.solve:
+        print(f"{pack.name}: {pack.summary}")
+        print(f"  template {pack.template} · {bench.route_count():,} routes")
+        for stage in bench.leaf_stages:
+            print(f"  {stage.id:<14} {', '.join(stage.candidates)}")
+        return 0
+
+    answer = pack.solve(attempts=args.attempts)
+    print(answer.text(bench))
+    return 0 if answer.ok else 1
+
+
 def cmd_serve(args) -> int:
     from browsergraph.server import serve
     serve(port=args.port)
@@ -1174,6 +1213,13 @@ def main(argv: list[str] | None = None) -> int:
     sv.add_argument("--evidence", help="an evidence JSON file to learn from and update")
     sv.add_argument("-o", "--out", help="write a report page here")
     sv.set_defaults(fn=cmd_solve)
+
+    pk = sub.add_parser("packs", help="domain packs: templates with the code written")
+    pk.add_argument("name", nargs="?", help="a pack name (default: list them all)")
+    pk.add_argument("--solve", action="store_true", help="run it on its own example")
+    pk.add_argument("--draw", metavar="PATH", help="write a report page here")
+    pk.add_argument("--attempts", type=int, default=8)
+    pk.set_defaults(fn=cmd_packs)
 
     gr = sub.add_parser("graph", help="draw a graph and audit its contracts")
     gr.add_argument("config")

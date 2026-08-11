@@ -200,6 +200,17 @@ class Runtime:
     def __init__(self, functions: Mapping[str, Callable] | None = None) -> None:
         self._functions: dict[str, Callable] = dict(functions or {})
 
+    @property
+    def candidates(self) -> tuple[str, ...]:
+        """What this runtime can actually do.
+
+        `missing(plan)` answers the question one plan at a time. This answers it
+        for the runtime, which is what you need to check a runtime against a
+        *graph* — every candidate implemented, and no function that no step can
+        reach.
+        """
+        return tuple(sorted(self._functions))
+
     def register(self, candidate_id: str, function: Callable) -> Runtime:
         self._functions[candidate_id] = function
         return self

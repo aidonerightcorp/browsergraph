@@ -196,6 +196,11 @@ def test_eligible_routes_refuses_a_space_too_big_to_enumerate():
 
     from browsergraph import search
     from browsergraph.demo import workbench
+    from browsergraph.policy import Policy
 
+    # Permissive, because the size guard is what is under test. Under a
+    # restrictive policy some stage has nothing eligible, the space is *zero*,
+    # and yielding nothing is the correct answer to a different question.
     with pytest.raises(search.SpaceTooLarge):
-        list(search.eligible_routes(workbench(), limit=1000))
+        list(search.eligible_routes(workbench(), policy=Policy.permissive(),
+                                    limit=1000))

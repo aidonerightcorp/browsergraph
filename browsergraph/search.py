@@ -765,7 +765,15 @@ def eligible_routes(workbench: WorkbenchDefinition, *,
     """
     stages = [s for s in workbench.leaf_stages if s.candidates]
     eligible, _blocked = _eligible_by_stage(workbench, policy or Policy())
-    keys = [s.id for s in stages if eligible.get(s.id)]
+
+    # A stage policy has emptied means there are **no complete routes**, not
+    # that the stage stops being part of one. Skipping it here produced routes
+    # missing a step, which compiled to "no candidate chosen for 'list'" — a
+    # confusing way to be told the policy blocked everything.
+    if any(not eligible.get(s.id) for s in stages):
+        return
+
+    keys = [s.id for s in stages]
     if not keys:
         return
 

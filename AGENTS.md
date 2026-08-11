@@ -261,6 +261,8 @@ give it no file. The functions stay outside the graph — `--runtime module:name
 is the only thing that differs between a dry run and a live one.
 
 ```bash
+browsergraph packs                                   # domains with the code written
+browsergraph packs tabular --solve                   # ...and run one on its example
 browsergraph check     job.json                      # valid? and what is advice vs error
 browsergraph draw      job.json -o job.html          # one self-contained page
 browsergraph draw      job.json --format mermaid     # for a README

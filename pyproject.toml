@@ -55,7 +55,7 @@ version = {attr = "browsergraph._version.__version__"}
 packages = [
     "browsergraph", "browsergraph.nodes", "browsergraph.drivers",
     "browsergraph.dimensions", "browsergraph.extract", "browsergraph.classify",
-    "browsergraph.tasks",
+    "browsergraph.tasks", "browsergraph.packs",
     # The domain-neutral core. browsergraph is one adapter on top of it.
     "solutiongraph", "solutiongraph.schemas",
 ]
