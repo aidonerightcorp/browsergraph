@@ -398,6 +398,122 @@ def mechanical(bench: WorkbenchDefinition,
     return proposals
 
 
+#: The questions from `docs/GRAPH_QUESTIONS.md`, as prompts. Each one is narrow
+#: on purpose: a question whose answer cannot be turned into a checkable edit is
+#: not a question, it is a conversation.
+QUESTIONS = {
+    "missing": (
+        "Is this pipeline missing a step? If so, name the capability it needs, "
+        "where it belongs, and which of the available nodes provide it."),
+    "redundant": (
+        "Is any step here not earning its place — doing nothing useful, or "
+        "duplicating what a neighbour already does?"),
+    "shape": (
+        "Is the shape wrong? Specifically: is a step that should run once per "
+        "item running once for all of them, or is a decision being made "
+        "somewhere that should be a branch?"),
+    "widen": (
+        "Is any step admitting too few options — is there an available node "
+        "that could also perform it and is not listed?"),
+}
+
+
+def question(bench: WorkbenchDefinition, *, kind: str = "missing",
+             library: Sequence[NodeManifest] = (), history: str = "",
+             max_nodes: int = 20) -> str:
+    """One narrow question about this graph's *shape*, as a prompt.
+
+    The counterpart to `explore.describe`, which asks which candidate should
+    fill a step. This asks whether the steps are the right steps.
+
+    Two things it does that matter more than the wording:
+
+    **It offers only legal insertion points.** Working out where a node would
+    type-check costs nothing and removes the largest category of wasted
+    proposals — and a model shown three legal positions gives a better answer
+    than one shown eleven positions of which three are possible.
+
+    **It says what the reply must look like, in the vocabulary the compiler
+    accepts.** A model asked an open question returns prose; asked for a
+    `GraphEdit`, it returns something `from_dicts` can read and `apply` can
+    refuse on the merits.
+    """
+    if kind not in QUESTIONS:
+        raise KeyError(f"no question {kind!r}; known: {', '.join(sorted(QUESTIONS))}")
+
+    lines = [f"TASK: {bench.task or bench.title}", ""]
+    if bench.success:
+        lines += [f"SUCCESS MEANS: {bench.success}", ""]
+
+    lines.append("THE PIPELINE AS IT STANDS, in order:")
+    for stage in bench.leaf_stages:
+        ports_in = ", ".join(f"{p.name}:{p.type}" for p in stage.inputs) or "—"
+        ports_out = ", ".join(f"{p.name}:{p.type}" for p in stage.outputs)
+        kinds = "" if stage.kind == "atomic" else f"  [{stage.kind}]"
+        lines.append(f"  {stage.id}  ({stage.name}){kinds}")
+        lines.append(f"    takes {ports_in}  ->  gives {ports_out}")
+        lines.append(f"    {len(stage.candidates)} option(s)"
+                     + ("  — optional, may be left out" if stage.optional else ""))
+
+    wiring = ", ".join(f"{e.source}->{e.target}" for e in bench.wiring())
+    lines += ["", f"WIRING: {wiring}"]
+
+    if library:
+        lines += ["", "NODES AVAILABLE BUT NOT IN THE PIPELINE:"]
+        for manifest in list(library)[:max_nodes]:
+            places = insertion_points(bench, manifest)
+            takes = ", ".join(f"{p.name}:{p.type}" for p in manifest.inputs) or "—"
+            gives = ", ".join(f"{p.name}:{p.type}" for p in manifest.outputs)
+            lines.append(f"  {manifest.id} — {manifest.description}")
+            lines.append(f"    takes {takes}  ->  gives {gives}")
+            # Only the legal ones. Offering a position where the types do not
+            # meet invites a proposal that can only be refused.
+            lines.append("    could go: "
+                         + (", ".join(f"between {a} and {b}" for a, b in places)
+                            if places else "nowhere — its types do not fit"))
+        hidden = len(library) - min(len(library), max_nodes)
+        if hidden:
+            lines.append(f"  ... and {hidden} more not shown")
+
+    if history:
+        lines += ["", "WHAT HAS BEEN TRIED:", history]
+
+    lines += ["", f"QUESTION: {QUESTIONS[kind]}", "",
+              "Reply as JSON only — a list of edits, at most three:",
+              '[{"kind": "insert", "where": ["after_step", "before_step"], '
+              '"what": "node.id", "why": "one short sentence", '
+              '"confidence": 0.7}]',
+              "",
+              f"`kind` must be one of: {', '.join(KINDS)}.",
+              "For `insert`, `where` is the pair it goes between. For the "
+              "others, `where` is one step id.",
+              "Propose nothing rather than something you are unsure of: every "
+              "edit is compiled, and a refused one is recorded against you."]
+    return "\n".join(lines)
+
+
+def parse(reply: str) -> list[GraphEdit]:
+    """Pull edits out of whatever the model actually said.
+
+    Lenient about the envelope — models wrap JSON in prose, in fences, or in an
+    explanation nobody asked for — and strict about nothing else, because the
+    strictness that matters happens in `apply`, where a proposal meets the type
+    checker. Discarding a good edit over a code fence would be strictness in
+    the one place it buys nothing.
+    """
+    import json as _json
+    import re as _re
+
+    match = _re.search(r"\[.*\]", reply, _re.DOTALL)
+    if not match:
+        return []
+    try:
+        data = _json.loads(match.group(0))
+    except _json.JSONDecodeError:
+        return []
+    return from_dicts(data if isinstance(data, list) else [data])
+
+
 def to_dicts(proposals: Sequence[GraphEdit]) -> list[dict]:
     return [p.to_dict() for p in proposals]
 

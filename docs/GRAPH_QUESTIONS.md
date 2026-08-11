@@ -420,6 +420,34 @@ number from a broken setup is the thing to watch for; here the tell was that a
 
 ---
 
+## A real model, asked once
+
+`edits.question` renders one of the questions above; `edits.parse` reads the
+reply. Asked `missing` on `arena.missing_step`, a local `deepseek-v4-flash`
+replied:
+
+```json
+[{"kind": "insert", "where": ["s0", "s1"], "what": "repair.fix",
+  "why": "Adds the missing repair capability to remove the defect that
+          penalizes all routes.", "confidence": 0.9}]
+```
+
+Which compiles. `1 of 1 edits compiled (0% refused)`.
+
+**That is much less impressive than it looks, and the reason matters.** The
+library held exactly one node, the prompt listed the two positions where it
+legally fits, and the history said every route carries the same penalty. The
+model's job was to notice a hint, not to have an idea. A correct answer here is
+evidence that the *plumbing* works — question renders, reply parses, edit
+compiles — and almost no evidence about whether a model is good at this.
+
+The experiment that would be evidence: a library of twenty nodes of which one
+helps, no hint in the history, and the refusal rate reported next to the score.
+Against `edits.mechanical`, which would enumerate all twenty and be complete.
+That is not built.
+
+---
+
 ## Status of this document
 
 Written 2026-08-11. Describes:
@@ -431,8 +459,8 @@ Written 2026-08-11. Describes:
   rate, `mechanical` enumeration, and `insertion_points`; `benchmark`'s `guided`
   strategy. Every number above is reproducible via `pytest tests/test_arena.py`.
 * **Designed, not implemented** — capability URIs, port semantics, embeddings,
-  the node index, `GraphQuestion` as a rendered prompt, Q1–Q5 as code, and
-  blueprints. `edits.GraphEdit` is the answer format those questions would
+  the node index, blueprints, and the experiment that would tell you whether a
+  model beats enumeration. `edits.GraphEdit` is the answer format those questions would
   return, and `from_dicts` already parses it, so a proposer is a function
   returning a list of edits and nothing above it needs to change.
 

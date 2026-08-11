@@ -175,3 +175,69 @@ def test_edits_round_trip_through_dicts(bench):
 def test_a_reply_missing_the_kind_is_skipped_not_guessed():
     assert edits.from_dicts([{"where": "read"}, {"kind": "remove", "where": "x"}]) \
         == [edits.GraphEdit("remove", "x")]
+
+
+# --- asking a model for a shape ---------------------------------------------
+
+def test_a_question_offers_only_legal_insertion_points(bench):
+    """Working out where a node type-checks costs nothing and removes the
+    largest category of wasted proposals."""
+    text = edits.question(bench, kind="missing", library=[REPAIR, CONVERT])
+    assert "between read and use" in text
+    assert "repair.fix" in text
+    # `convert` gives W where `use` takes V, so there is nowhere for it to go
+    # and the prompt must say so rather than offer a position. Located by line
+    # rather than by splitting on the id, which also appears in a description.
+    lines = text.splitlines()
+    header = next(i for i, line in enumerate(lines)
+                  if line.startswith("  convert.it"))
+    assert "nowhere" in lines[header + 2]
+
+
+def test_a_question_states_the_reply_format_in_the_compilers_vocabulary(bench):
+    text = edits.question(bench, library=[REPAIR])
+    for kind in edits.KINDS:
+        assert kind in text
+    assert '"kind"' in text and '"where"' in text
+
+
+def test_a_question_carries_what_has_been_tried_when_given_it(bench):
+    text = edits.question(bench, library=[REPAIR], history="8 routes, best 0.4")
+    assert "8 routes, best 0.4" in text
+
+
+def test_an_unknown_question_says_what_there_is(bench):
+    with pytest.raises(KeyError, match="missing"):
+        edits.question(bench, kind="what-colour-is-it")
+
+
+def test_a_reply_wrapped_in_prose_and_fences_still_parses():
+    """Models wrap JSON in explanations nobody asked for. Discarding a good
+    edit over a code fence is strictness in the one place it buys nothing."""
+    reply = ('Sure! Here is my suggestion:\n```json\n'
+             '[{"kind": "insert", "where": ["read", "use"], '
+             '"what": "repair.fix", "why": "it repairs", "confidence": 0.9}]\n'
+             '```\nHope that helps.')
+    got = edits.parse(reply)
+    assert len(got) == 1
+    assert got[0].kind == "insert" and got[0].where == ("read", "use")
+    assert got[0].confidence == 0.9
+
+
+def test_a_reply_with_no_json_yields_nothing_rather_than_raising():
+    assert edits.parse("I don't think it needs anything.") == []
+    assert edits.parse("[not json at all}") == []
+
+
+def test_the_whole_loop_from_a_reply_to_a_compiled_graph(bench):
+    """Question, reply, parse, apply. What a model-guided proposer does, with
+    the model's part written out by hand so the rest can be tested."""
+    edits.question(bench, library=[REPAIR])
+    reply = ('[{"kind": "insert", "where": ["read", "use"], '
+             '"what": "repair.fix", "why": "the data needs repairing"},'
+             ' {"kind": "insert", "where": ["read", "use"], '
+             '"what": "convert.it", "why": "this one cannot fit"}]')
+    got = edits.variants(bench, edits.parse(reply), library=[REPAIR, CONVERT])
+    assert len(got.accepted) == 1, got.text()
+    assert got.refusal_rate == 0.5
+    assert got.accepted[0].workbench.validate() == []
