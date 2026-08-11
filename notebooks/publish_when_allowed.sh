@@ -1,12 +1,42 @@
 #!/bin/bash
 # Publish the notebooks that are not up yet, waiting out Kaggle's write quota.
 #
-# Kaggle answers 429 to every kernel save once you have pushed enough in a day,
-# and it stays that way for a while. Retrying in a tight loop just burns the
-# allowance, so this waits several minutes between rounds and stops as soon as
-# everything is up.
+#   ./notebooks/publish_when_allowed.sh 16 17
 #
-#   ./notebooks/publish_when_allowed.sh 15 16 17 18 19 20 21 22
+# WHAT THE QUOTA ACTUALLY DOES, measured over two days rather than guessed:
+#
+# It is a **daily allowance**, not a short cooldown. Once spent, every
+# `SaveKernel` answers 429 for many hours — a full day of hourly retries got
+# nothing. When it resets you get a burst: eleven notebooks went up inside one
+# window, and then it refused again immediately.
+#
+# So an intermediate reading — "about three pushes, then it clears in minutes" —
+# was wrong, and worth writing down because it is the reading the first hour of
+# evidence supports. Three did go through, and the rest went through later in the
+# *same* open window rather than after a cooldown.
+#
+# Two consequences for anyone running this:
+#
+#   * Retrying faster does not help and may spend the allowance on failures.
+#   * `kaggle kernels list` keeps working while saves are refused, so a 429 here
+#     is never an auth problem. Check with `kaggle kernels status <user>/<slug>`,
+#     which answers about one kernel exactly — `kernels list` paginates
+#     unreliably on a large account and reported eleven live notebooks as
+#     missing.
+#
+# RUN IT SOMEWHERE THAT SURVIVES. A backgrounded shell loop was killed four
+# times out of four in an agent session, so if you want this unattended, hand it
+# to the process supervisor instead:
+#
+#   systemd-run --user --on-calendar=hourly --unit=bg-publish \
+#       "$PWD/notebooks/publish_when_allowed.sh" 16 17
+#
+# or a crontab line:
+#
+#   17 * * * * cd /path/to/browsergraph && ./notebooks/publish_when_allowed.sh 16 17
+#
+# Neither is installed by this script. Starting a recurring job on somebody's
+# machine is not a thing a publishing helper should do without being asked.
 cd "$(dirname "$0")/.." || exit 1
 PENDING=("$@")
 [ ${#PENDING[@]} -eq 0 ] && PENDING=(15 16 17 18 19 20 21 22)
