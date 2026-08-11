@@ -504,3 +504,37 @@ encoder scoring 9.96 and one scoring 66.67 had identical posteriors. Grades now
 reach the store, `measured_metrics` normalises them within the candidate pool
 and folds them in, and the worst candidate is scaled rather than zeroed so it
 can still be tried again.
+
+## Does the search work? Ask a task that knows the answer
+
+`benchmark` says which strategy won on real work. It cannot say *why*, because
+nobody knows the best route on a real task. `browsergraph.arena` builds tasks
+with a hidden ground truth, which turns the question into an experiment:
+
+```python
+from browsergraph import arena, benchmark
+task = arena.get("needle", steps=6, width=5, seed=1)
+got = benchmark.compare(task.workbench, task.runtime, verify=task.verify,
+                        budget=12, repeats=5)
+print(got.text(), task.gap(got.best("solve")))     # 0.0 is perfect, 1.0 is worst
+```
+
+Measured, on 15,625 routes with twelve runs allowed:
+
+| task | first | random | solve | gap to best |
+|---|---|---|---|---|
+| `flat` — nothing varies | 0.2621 | 0.2621 | 0.2621 | 0% for all, correctly |
+| `needle` — independent steps | 0.1497 | 0.3380 | **0.3807** | 77% → **32%** |
+| `paired` — independence false | 0.0805 | 0.3898 | **0.4479** | 92% → **27%** |
+| `noisy` — 5% observation noise | 0.1512 | 0.3320 | **0.3949** | 77% → **29%** |
+
+So the sum-not-product claim holds where its assumptions hold, and `flat` proves
+the harness cannot manufacture a win. It also explains the packs: their spaces
+are 36 routes with coarse scores, so eight random draws find the maximum and
+there is nothing for a search to add. **That is a fact about those tasks, not
+about the search** — and neither was knowable before there was a task with a
+known answer.
+
+Every one of these numbers is about choosing candidates in a graph whose *shape*
+a person fixed. Proposing the shape is the open problem — see
+[docs/GRAPH_QUESTIONS.md](docs/GRAPH_QUESTIONS.md).
