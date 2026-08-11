@@ -181,3 +181,25 @@ def test_no_document_promises_an_index_this_is_not_on():
     assert not offenders, (
         "these lines send readers to an index that does not have it:\n  "
         + "\n  ".join(offenders))
+
+
+@pytest.mark.parametrize("form", [
+    "browsergraph @ {repo}",
+    "browsergraph[yaml] @ {repo}",
+    "browsergraph[all] @ {repo}",
+    "browsergraph[yaml] @ {repo}@v0.4.0",
+])
+def test_the_documented_install_forms_are_valid_requirements(form):
+    """PEP 508 allows extras before a direct URL, but it is easy to write wrong.
+
+    Since there is no index to fall back on, an install line with a syntax
+    mistake fails on a stranger's machine with a parser error and nothing to
+    suggest what to try instead. Parsed rather than installed — this asserts the
+    requirement is well formed, not that GitHub is reachable.
+    """
+    from packaging.requirements import Requirement
+
+    parsed = Requirement(form.format(repo="git+https://example.invalid/x.git"))
+    assert parsed.name == "browsergraph"
+    assert parsed.url and parsed.url.startswith("git+"), \
+        "an install form with no URL would send the reader to an index"
