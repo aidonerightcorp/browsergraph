@@ -126,11 +126,11 @@ open afterwards. Standard library plus numpy and Pillow, so they run anywhere.
 | 15 | [Clean up messy data](notebooks/15-clean-up-data.ipynb) | a messy table in, a clean one plus every change recorded | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-4-clean-up-messy-data) |
 | 16 | [Fit a model](notebooks/16-fit-a-model.ipynb) | a dataset in, regression and classification scores out | [not yet](notebooks/16-fit-a-model.ipynb) |
 | 17 | [Batch many files](notebooks/17-batch-many-files.ipynb) | forty files in, a total and the broken ones named | [not yet](notebooks/17-batch-many-files.ipynb) |
-| 18 | [Retry and fall back](notebooks/18-retry-and-fall-back.ipynb) | a flaky source, and a run that succeeds anyway | [not yet](notebooks/18-retry-and-fall-back.ipynb) |
-| 19 | [Find duplicates](notebooks/19-find-duplicates.ipynb) | one customer list in, matched pairs out | [not yet](notebooks/19-find-duplicates.ipynb) |
-| 20 | [Forecast next month](notebooks/20-forecast-next-month.ipynb) | two years of sales in, three months out | [not yet](notebooks/20-forecast-next-month.ipynb) |
-| 21 | [Watch for changes](notebooks/21-watch-for-changes.ipynb) | a thing to check, and noise only when it moved | [not yet](notebooks/21-watch-for-changes.ipynb) |
-| 22 | [Sort text into categories](notebooks/22-sort-text.ipynb) | support messages in, the right team out | [not yet](notebooks/22-sort-text.ipynb) |
+| 18 | [Retry and fall back](notebooks/18-retry-and-fall-back.ipynb) | a flaky source, and a run that succeeds anyway | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-7-retry-and-fall-back) |
+| 19 | [Find duplicates](notebooks/19-find-duplicates.ipynb) | one customer list in, matched pairs out | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-8-find-duplicate-records) |
+| 20 | [Forecast next month](notebooks/20-forecast-next-month.ipynb) | two years of sales in, three months out | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-9-forecast-next-month) |
+| 21 | [Watch for changes](notebooks/21-watch-for-changes.ipynb) | a thing to check, and noise only when it moved | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-10-watch-for-changes) |
+| 22 | [Sort text into categories](notebooks/22-sort-text.ipynb) | support messages in, the right team out | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-jobs-11-sort-text-into-categories) |
 
 What they actually produce, not what they claim to: 3 products parsed from three
 different price formats with the priceless one dropped and named; 6 records
@@ -154,22 +154,22 @@ committed.
 | 01 | [Express a problem as a graph](notebooks/01-build-a-graph.ipynb) | stages, ports, candidates, and the four checks | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-1-express-a-problem-as-a-graph) |
 | 02 | [Search without enumerating](notebooks/02-search-and-learn.ipynb) | 3.8 trillion routes is 41.8 bits, not an obstacle | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-2-search-without-enumerating) |
 | 03 | [A domain that is not browsing](notebooks/03-a-new-domain.ipynb) | the same machinery on document work | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-3-a-domain-that-is-not-browsing) |
-| 04 | [A Kaggle pipeline is a graph](notebooks/04-tabular-pipeline.ipynb) | numeric ∥ categorical encoding is a join | [not yet](notebooks/04-tabular-pipeline.ipynb) |
-| 05 | [Two readings of one document](notebooks/05-document-extraction.ipynb) | text and layout are independent extractions | [not yet](notebooks/05-document-extraction.ipynb) |
-| 06 | [A workflow with no data science](notebooks/06-service-workflow.ipynb) | effects, permissions, and one step that reaches outside | [not yet](notebooks/06-service-workflow.ipynb) |
+| 04 | [A Kaggle pipeline is a graph](notebooks/04-tabular-pipeline.ipynb) | numeric ∥ categorical encoding is a join | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-4-a-kaggle-pipeline-is-a-graph) |
+| 05 | [Two readings of one document](notebooks/05-document-extraction.ipynb) | text and layout are independent extractions | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-5-two-readings-of-one-document) |
+| 06 | [A workflow with no data science](notebooks/06-service-workflow.ipynb) | effects, permissions, and one step that reaches outside | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-6-a-workflow-with-no-data-science) |
 | 07 | [A gate that can say no](notebooks/07-data-quality-gate.ipynb) | schema and drift meeting at one decision | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-7-a-gate-that-can-say-no) |
 | 08 | [Build, verify, release](notebooks/08-release-pipeline.ipynb) | a gate with two inputs cannot be half-skipped | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-8-build-verify-release) |
 | 09 | [Retrieval is two searches](notebooks/09-retrieval-qa.ipynb) | dense and lexical recall, joined | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-9-retrieval-is-two-searches) |
 | 10 | [The leak you cannot see in CV](notebooks/10-timeseries-forecast.ipynb) | the split as a node with two named outputs | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-10-the-leak-you-cannot-see) |
 | 11 | [The domain this started in](notebooks/11-web-harvest.ipynb) | completed ≠ worked | [Kaggle](https://www.kaggle.com/code/taylorsamarel/graph-solutions-11-the-domain-this-started-in) |
 
-**Twelve of the twenty-five are on Kaggle so far**, and those ran there to
+**Twenty-three of the twenty-five are on Kaggle**, and those ran there to
 completion — the library is installed from this repository in cell one, so what
-you see rendered is what the code in `main` actually does. The rest are built,
-executed and committed here; the account is sitting on a write quota that has
-been refusing for over a day, and a row says "not yet" rather than linking a
-kernel that does not exist. `python notebooks/check_published.py` reconciles this
-table against the account.
+you see rendered is what the code in `main` actually does. The two that are not
+say "not yet" and link the committed notebook, rather than a kernel that does
+not exist. `python notebooks/check_published.py --fix` reconciles this table
+against the account in both directions, because a row claiming "not yet" about a
+published notebook misleads exactly as much as a dead link.
 
 ### Two picture books
 

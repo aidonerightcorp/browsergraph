@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import pathlib
-import re
 import subprocess
 import sys
 
@@ -30,19 +29,25 @@ from publish_kaggle import KERNELS, USER, slugify  # noqa: E402
 
 
 def live() -> set[str]:
-    """Every kernel slug on the account, paged until it stops growing."""
+    """Which of *our* kernels exist, asked one at a time.
+
+    Deliberately not `kernels list`. Paging an account with several hundred
+    kernels returned a different set each time and never reliably included the
+    ones just pushed — so the first version of this script reported three
+    notebooks as missing minutes after Kaggle had returned their URLs.
+
+    `kernels status` answers about one kernel exactly: a 404 means it is not
+    there, anything else means it is. Twenty-five calls instead of one, and
+    twenty-five right answers instead of one plausible one.
+    """
     found: set[str] = set()
-    for page in range(1, 8):
+    for title in KERNELS.values():
+        slug = slugify(title)
         done = subprocess.run(
-            ["kaggle", "kernels", "list", "--user", USER,
-             "--page-size", "100", "--page", str(page)],
-            capture_output=True, text=True, timeout=180)
-        rows = {line.split()[0].split("/", 1)[1]
-                for line in done.stdout.splitlines()
-                if line.startswith(f"{USER}/")}
-        if rows <= found:
-            break
-        found |= rows
+            ["kaggle", "kernels", "status", f"{USER}/{slug}"],
+            capture_output=True, text=True, timeout=120)
+        if "404" not in (done.stdout + done.stderr):
+            found.add(slug)
     return found
 
 
@@ -53,37 +58,41 @@ def main() -> int:
     args = parser.parse_args()
 
     published = live()
-    if not published:
-        print("could not list any kernels — is the token present?")
-        return 1
-
     up = {s: t for s, t in KERNELS.items() if slugify(t) in published}
     missing = {s: t for s, t in KERNELS.items() if slugify(t) not in published}
-    print(f"{len(published)} kernels on the account")
     print(f"{len(up)} of {len(KERNELS)} notebooks published")
     for slug in sorted(missing):
         print(f"  not live: {slug}")
 
+    # Reconcile in **both** directions, and only over kernels this file owns.
+    #
+    # The first version did neither. It compared every Kaggle URL in the README
+    # against a set built only from `KERNELS`, so the tour — a real kernel that
+    # is not in that map — was reported dead. And it could only ever demote a
+    # link, so when the backlog finally published, the table went on saying "not
+    # yet" about eight notebooks that were live. Wrong in the other direction,
+    # and just as misleading to a reader.
     text = README.read_text()
-    dead = sorted({s for s in re.findall(
-        rf"https://www\.kaggle\.com/code/{USER}/([\w-]+)", text)
-        if s not in published})
-    print(f"\n{len(dead)} dead link(s) in README.md")
-    for slug in dead:
-        print(f"  {slug}")
+    wrong: list[str] = []
+    for slug, title in KERNELS.items():
+        kernel = slugify(title)
+        linked = f"[Kaggle](https://www.kaggle.com/code/{USER}/{kernel})"
+        placeholder = f"[not yet](notebooks/{slug}.ipynb)"
+        if kernel in published and placeholder in text:
+            wrong.append(f"{slug}: live, and the table says 'not yet'")
+            text = text.replace(placeholder, linked)
+        elif kernel not in published and linked in text:
+            wrong.append(f"{slug}: linked, and the kernel does not exist")
+            text = text.replace(linked, placeholder)
 
-    if dead and args.fix:
-        by_slug = {slugify(t): s for s, t in KERNELS.items()}
-        for kernel in dead:
-            notebook = by_slug.get(kernel)
-            replacement = (f"[not yet](notebooks/{notebook}.ipynb)" if notebook
-                           else "not yet")
-            text = re.sub(
-                rf"\[Kaggle\]\(https://www\.kaggle\.com/code/{USER}/{kernel}\)",
-                replacement, text)
+    print(f"\n{len(wrong)} row(s) disagree with the account")
+    for line in wrong:
+        print(f"  {line}")
+
+    if wrong and args.fix:
         README.write_text(text)
-        print(f"\nrewrote {len(dead)} link(s) — run again after publishing")
-    return 0 if not dead else 1
+        print(f"\nrewrote {len(wrong)} row(s)")
+    return 0 if not wrong else 1
 
 
 if __name__ == "__main__":
