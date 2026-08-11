@@ -219,7 +219,8 @@ class Evidence:
         if quality is not None:
             self.routes.append((tuple(route), context, float(quality)))
 
-    def from_receipt(self, receipt: Any, context: str = "global") -> None:
+    def from_receipt(self, receipt: Any, context: str = "global",
+                     quality: float | None = None) -> None:
         """Fold a `TaskReceipt` in, so evidence comes from real runs.
 
         A step counts as a success only if it ran **and** the run was accepted.
@@ -250,9 +251,16 @@ class Evidence:
             self.observe(Observation(
                 candidate=step.key or step.kind, context=context,
                 ok=bool(step.ok) and ok, latency_ms=step.seconds * 1000.0,
+                # How *well* it did, when the caller graded it. Without this the
+                # store only ever learns whether a route worked, and on any task
+                # where every route works and they differ by degree — which is
+                # most real tasks — it learns nothing at all.
+                quality=quality,
                 route=route, run=getattr(receipt, "task", "")))
         if route:
-            self.routes.append((route, context, 1.0 if ok else 0.0))
+            self.routes.append((route, context,
+                                float(quality) if quality is not None
+                                else (1.0 if ok else 0.0)))
 
     # --- reading ------------------------------------------------------------
 
@@ -516,11 +524,31 @@ def measured_metrics(evidence: Evidence, candidates: Sequence[str],
     """
     out: dict[str, dict[str, float]] = {}
     priors = dict(prior_quality or {})
+
+    # How *well* each candidate did, on whatever scale the caller graded with.
+    # Normalised inside this pool because a grade can be anything — accuracy in
+    # 0..1, a count of records, a negative error — and blending a raw -66 into a
+    # probability would be arithmetic on two different things.
+    graded = {c: p.quality for c in candidates
+              if (p := evidence.posterior(c, context)).measured and p.quality}
+    preference: dict[str, float] = {}
+    if len(set(round(v, 9) for v in graded.values())) > 1:
+        low, high = min(graded.values()), max(graded.values())
+        # Into [0.5, 1.5], deliberately not [0, 1]. A candidate that merely
+        # scored worst is not worthless, and multiplying it by zero would stop
+        # it ever being tried again — the same blindness in the other
+        # direction. Best gets half again, worst gets half.
+        preference = {c: 0.5 + (v - low) / (high - low)
+                      for c, v in graded.items()}
+
     for candidate in candidates:
         posterior = evidence.posterior(candidate, context)
         weight = posterior.confidence
         prior = priors.get(candidate, posterior.rate)
-        shrunk = (1.0 - weight) * prior + weight * posterior.rate
+        # Did it work, times how well. A failed run has no quality worth having,
+        # and a run that worked badly is not the same as one that worked.
+        measured = posterior.rate * preference.get(candidate, 1.0)
+        shrunk = (1.0 - weight) * prior + weight * measured
         # Not clamped to 1.0, and that is not an oversight. Clamping saturated
         # every candidate whose prior plus bonus reached 1.0 — which, since an
         # undeclared prior *is* 1.0, meant almost all of them. Tried and untried

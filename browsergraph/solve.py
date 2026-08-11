@@ -229,7 +229,17 @@ def solve(bench: WorkbenchDefinition, runtime: Runtime, *,
         attempt.run = run
         attempt.seconds = time.monotonic() - step_began
 
-        verdict = judge(run)
+        try:
+            verdict = judge(run)
+        except Exception as problem:        # noqa: BLE001 - a verdict, not a crash
+            # A verifier reaching for an output that a failed run never produced
+            # is not broken; it is being asked to judge nothing. Treating that
+            # as "not acceptable" keeps the other seven attempts, where letting
+            # it propagate loses the whole solve to one bad route — and the
+            # commonest verifier of all, `run.output(...)`, raises on exactly
+            # the runs most likely to appear in a search.
+            verdict = False
+            attempt.reason = f"the verifier could not judge this run: {problem}"
         if isinstance(verdict, tuple) and len(verdict) == 2:
             attempt.ok, attempt.score = bool(verdict[0]), float(verdict[1])
         else:
@@ -245,7 +255,13 @@ def solve(bench: WorkbenchDefinition, runtime: Runtime, *,
         # route which completes is a route that worked.
         receipt = run.receipt(task=f"solve-{len(solution.attempts)}")
         receipt.ok = attempt.ok
-        store.from_receipt(receipt, context=context[0] if context else "global")
+        # The *grade*, not only the verdict. Recording pass/fail alone made this
+        # loop blind on any task where every route runs and they differ by how
+        # good the answer is — it then picks at random and looks like it is
+        # learning. Measured on the tabular pack: identical posteriors for an
+        # encoder scoring 9.96 and one scoring 66.67.
+        store.from_receipt(receipt, context=context[0] if context else "global",
+                           quality=attempt.score if attempt.ok else None)
         if journal is not None:
             journal.record(receipt)
         solution.attempts.append(attempt)
@@ -276,13 +292,21 @@ def outputs_are_not_empty(*stages: str) -> Verifier:
         if not run.ok:
             return False, 0.0
         counted = 0
-        for stage in stages:
-            try:
-                value = run.output(stage)
-            except KeyError:
+        for name in stages:
+            stage, _, port = name.partition(".")
+            if port:
+                found = [run.values.get((stage, port))]
+            else:
+                # Every port of the stage, not one. A stage with two outputs —
+                # `ok` and `bad`, which is the commonest split there is — made
+                # `run.output(stage)` raise "has several outputs", and this
+                # scored zero for it. That reads as "the route produced
+                # nothing" when what happened is the question was ambiguous.
+                found = [value for (sid, _p), value in run.values.items()
+                         if sid == stage]
+            if not found or any(v is None for v in found):
                 return False, 0.0
-            if value is None:
-                return False, 0.0
-            counted += len(value) if hasattr(value, "__len__") else 1
+            for value in found:
+                counted += len(value) if hasattr(value, "__len__") else 1
         return counted > 0, float(counted)
     return judge

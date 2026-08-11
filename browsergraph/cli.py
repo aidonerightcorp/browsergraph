@@ -1029,6 +1029,51 @@ def cmd_packs(args) -> int:
     return 0 if answer.ok else 1
 
 
+def cmd_benchmark(args) -> int:
+    """Does the searching help? Run the task every way and print the table.
+
+    The comparison this library owed anyone reading its claims. Every strategy
+    gets the same run budget, is judged by the same verifier, and the verdict
+    says plainly when searching lost — which, on the packs shipped here, it
+    sometimes does.
+    """
+    from browsergraph import benchmark, packs
+
+    if args.pack:
+        try:
+            pack = packs.get(args.pack)
+        except KeyError as problem:
+            print(str(problem).strip('"'))
+            return 1
+        bench, runtime = pack.workbench(), pack.runtime(**pack.example())
+    else:
+        from browsergraph.execute import Runtime
+        bench = _load_bench(args.config)
+        runtime = Runtime()
+        if args.runtime:
+            found = _load_attribute(args.runtime, "RUNTIME")
+            runtime = found if isinstance(found, Runtime) else Runtime(found)
+
+    if args.verify:
+        verify = _load_attribute(args.verify, "verify")
+    elif args.stage:
+        from browsergraph import solve as _solve
+        verify = _solve.outputs_are_not_empty(*args.stage)
+    else:
+        print("benchmarking needs a judge — the same one for every strategy.\n"
+              "  --stage NAME          score on how much that stage produced\n"
+              "  --verify module:name  your own, given the finished run")
+        return 1
+
+    got = benchmark.compare(bench, runtime, verify=verify, budget=args.budget,
+                            repeats=args.repeats, workspace=args.workspace)
+    if args.json:
+        print(json.dumps(got.to_dict(), indent=2))
+    else:
+        print(got.text())
+    return 0
+
+
 def cmd_serve(args) -> int:
     from browsergraph.server import serve
     serve(port=args.port)
@@ -1251,6 +1296,22 @@ def main(argv: list[str] | None = None) -> int:
     pk.add_argument("--draw", metavar="PATH", help="write a report page here")
     pk.add_argument("--attempts", type=int, default=8)
     pk.set_defaults(fn=cmd_packs)
+
+    bm = sub.add_parser("benchmark",
+                        help="does searching beat writing it by hand? measured")
+    bm.add_argument("config", nargs="?", help="a workbench JSON file")
+    bm.add_argument("--pack", help="benchmark a domain pack instead")
+    bm.add_argument("--runtime", help="module:name holding the functions")
+    bm.add_argument("--verify", help="module:name of the judge")
+    bm.add_argument("--stage", action="append",
+                    help="score on how much this stage produced (repeatable)")
+    bm.add_argument("--budget", type=int, default=8,
+                    help="routes each strategy may run (default 8)")
+    bm.add_argument("--repeats", type=int, default=3,
+                    help="seeds, because one seed deciding a winner is a lie")
+    bm.add_argument("--workspace", help="folder for artifacts")
+    bm.add_argument("--json", action="store_true")
+    bm.set_defaults(fn=cmd_benchmark)
 
     gr = sub.add_parser("graph", help="draw a graph and audit its contracts")
     gr.add_argument("config")

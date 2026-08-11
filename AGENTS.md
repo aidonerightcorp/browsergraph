@@ -479,3 +479,28 @@ run event, not a reconstructed START/COMPLETE pair, because a receipt is written
 after the fact. `attestation` is an in-toto statement that is **unsigned and
 makes no hermeticity or reproducibility claim**, and says so in the document
 rather than letting the shape imply otherwise.
+
+## Does the searching help? Measure it
+
+```bash
+browsergraph benchmark --pack tabular --stage evaluate --budget 8 --repeats 3
+```
+
+Four strategies on the same task, same run budget, same judge: **first** (the
+first candidate at every step — the hand-written pipeline), **random** (the
+control), **greedy** (declared priors, one run), **solve** (the full loop).
+
+It is built to be able to report a loss, and on the packs shipped here it often
+does. Two of the three tie with random sampling; on the tabular pack, plain
+greedy beats the evidence loop with a single run because the declared priors are
+already good. Those are real results and they are printed as the verdict line
+rather than left for a reader to work out from the table.
+
+**Building it found the bug that mattered most.** `solve` recorded pass/fail and
+threw the *score* away, so on any task where every route runs and they differ
+only in how good the answer is — most real tasks — the evidence loop learned
+nothing and degenerated to random sampling. Measured on the tabular pack: an
+encoder scoring 9.96 and one scoring 66.67 had identical posteriors. Grades now
+reach the store, `measured_metrics` normalises them within the candidate pool
+and folds them in, and the worst candidate is scaled rather than zeroed so it
+can still be tried again.
