@@ -538,3 +538,37 @@ known answer.
 Every one of these numbers is about choosing candidates in a graph whose *shape*
 a person fixed. Proposing the shape is the open problem — see
 [docs/GRAPH_QUESTIONS.md](docs/GRAPH_QUESTIONS.md).
+
+## Changing the shape, not only the choices
+
+A route names one candidate per stage, so a route search cannot add a step
+nobody thought of. That is a ceiling no budget crosses. `browsergraph.edits`
+makes the shape searchable:
+
+```python
+from browsergraph import edits
+outcome = edits.apply(bench, edits.GraphEdit("insert", ("clean", "encode"),
+                                             "impute.median"), library=NODES)
+outcome.ok, outcome.reason, outcome.workbench    # a new graph, or why not
+```
+
+Five kinds — `insert`, `remove`, `widen`, `make_map`, `make_branch`. Nothing is
+applied in place, every edit is validated before it is offered, and a refusal is
+kept: `variants(...).refusal_rate` is the only honest measure of a proposer.
+
+**There is no `replace`.** A stage must admit every compatible candidate, so
+narrowing one is refused by the validator — restricting what may run is a policy
+decision made at gate time with a reason, not a structural edit. `widen` only
+ever adds.
+
+Measured on `arena.missing_step`, whose answer needs a step the graph lacks:
+
+| | budget 20 | budget 40 |
+|---|---|---|
+| `solve` (routes only) | 68.4% gap | **59.7%** — against a floor of 57.2% |
+| `guided` (may edit) | 29.3% | **19.2%** |
+
+Same run budget for both. The proposer there is `edits.mechanical`, which
+enumerates legal edits and uses no model at all — so that is the baseline a
+model-guided proposer has to beat, not an empty field. See
+[docs/GRAPH_QUESTIONS.md](docs/GRAPH_QUESTIONS.md).

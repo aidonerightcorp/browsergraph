@@ -66,6 +66,14 @@ class Task:
     best_score: float = 0.0
     worst_score: float = 0.0
     note: str = ""
+    #: Nodes that exist but are in no stage. What a structural proposal has to
+    #: name — a task whose answer needs a node nobody can find is not a test of
+    #: proposing, it is a test of inventing.
+    library: tuple = ()
+    #: The best score reachable *without* changing the shape. On a task whose
+    #: answer needs an edit this is below `best_score`, and the difference is
+    #: exactly what a search over routes can never close.
+    ceiling_without_edit: float = 0.0
 
     def gap(self, score: float) -> float:
         """How far a score is from perfect, as a fraction of the whole range.
@@ -214,6 +222,59 @@ def noisy(steps: int = 6, width: int = 5, seed: int = 0,
     return task
 
 
+def missing_step(steps: int = 5, width: int = 5, seed: int = 0,
+                 penalty: float = 0.45) -> Task:
+    """The best solution needs a step the graph does not have.
+
+    Every other task here is winnable by choosing better candidates. This one is
+    not, at any budget, and that is the point: a route names one candidate per
+    stage, so a search over routes cannot reach a graph with an extra stage in
+    it. The ceiling is structural.
+
+    Concretely, the scoring says the data has a defect that only `repair.fix`
+    can remove, and no stage holds `repair.fix`. Until something *inserts* it,
+    every route is multiplied by `penalty`.
+
+    `library` carries the node that would fix it, so a proposer has something
+    real to name — and `Task.best_score` is the score with the repair applied,
+    which means `gap()` reports the honest distance from a graph that does not
+    have it. A search that reports 0% gap on this task is measuring itself
+    against the wrong ceiling.
+    """
+    rng = random.Random(seed)
+    truth = {f"s{s}.c{c}": round(rng.uniform(0.55, 0.99), 4)
+             for s in range(steps) for c in range(width)}
+    truth["repair.fix"] = 1.0
+
+    def score(route):
+        total = 1.0
+        for cid in route.values():
+            total *= truth.get(cid, 1.0)
+        # The defect. Present unless something in the route repairs it.
+        if "repair.fix" not in route.values():
+            total *= penalty
+        return total
+
+    task = _build("missing_step", steps, width, truth, score,
+                  "the best graph has a step this one does not")
+    task.library = (node("repair.fix", "repair", [("in", "V")], [("out", "V")],
+                         description="remove the defect every route otherwise "
+                                     "carries"),)
+    # The library node needs a function, or every variant graph fails to run and
+    # the experiment silently measures nothing. The first version of this task
+    # omitted it: all four edits compiled, none of them could execute, and
+    # `guided` scored *below* the unguided search while reporting 0% refused —
+    # a result that looked like a finding and was a missing registration.
+    task.runtime.register("repair.fix", lambda **kw: kw.get("in", 1.0))
+    # Best *possible*, which requires the insertion. Reported deliberately: a
+    # gap measured against the best reachable route would say the search did
+    # perfectly while leaving 55% of the score on the table.
+    best_with = dict(task.best_route)
+    task.best_score = score({**best_with, "repair": "repair.fix"})
+    task.ceiling_without_edit = score(best_with)
+    return task
+
+
 def _every_route(steps: int, width: int):
     import itertools
 
@@ -221,7 +282,8 @@ def _every_route(steps: int, width: int):
         yield {f"s{s}": f"s{s}.c{c}" for s, c in enumerate(combo)}
 
 
-TASKS = {"needle": needle, "flat": flat, "paired": paired, "noisy": noisy}
+TASKS = {"needle": needle, "flat": flat, "paired": paired,
+         "noisy": noisy, "missing_step": missing_step}
 
 
 def get(name: str, **kwargs) -> Task:

@@ -59,7 +59,7 @@ from browsergraph.compile import CompileError, compile_route
 from browsergraph.execute import Runtime
 from browsergraph.workbench import OptimizationProfile, WorkbenchDefinition
 
-STRATEGIES = ("first", "random", "greedy", "solve")
+STRATEGIES = ("first", "random", "greedy", "solve", "guided")
 
 #: A win below this is a tie. Two medians differing in the twelfth decimal are
 #: not a result, and reporting one as "+0.0% better" is how a benchmark starts
@@ -206,6 +206,7 @@ def compare(bench: WorkbenchDefinition, runtime: Runtime, *,
             inputs: Mapping[str, Any] | None = None,
             workspace: str | None = None,
             strategies: Sequence[str] = STRATEGIES,
+            library: Sequence[Any] = (), propose=None,
             seed: int = 0) -> Comparison:
     """Run the task every way and return the table.
 
@@ -217,6 +218,12 @@ def compare(bench: WorkbenchDefinition, runtime: Runtime, *,
     from browsergraph import search
     from browsergraph import solve as _solve
     from browsergraph.evidence import Evidence
+
+    # `guided` is the only strategy that can change the shape, so without a
+    # library there is nothing for it to add and it is dropped rather than
+    # reported as a tie it never had a chance to break.
+    strategies = [s for s in strategies
+                  if s != "guided" or library or propose]
 
     picked = profile or (bench.optimization_profiles[0]
                          if bench.optimization_profiles else None)
@@ -275,4 +282,52 @@ def compare(bench: WorkbenchDefinition, runtime: Runtime, *,
                 time.monotonic() - began, dict(answer.champion),
                 "try, judge the output, learn, choose again"))
 
+        if "guided" in strategies:
+            comparison.results.append(_guided(
+                bench, runtime, verify, picked, budget, offset, inputs,
+                workspace, library, propose))
+
     return comparison
+
+
+def _guided(bench, runtime, verify, picked, budget, offset, inputs, workspace,
+            library, propose) -> Result:
+    """Change the *shape*, then search inside each shape that compiles.
+
+    The only strategy here that can reach a graph the others cannot, and the
+    only one whose budget needs arguing about. It gets the same total number of
+    runs as everything else, split across the original graph and each variant —
+    so if it wins it is not because it was allowed to run more.
+
+    A variant that fails to compile costs nothing and is counted, because the
+    refusal rate is what says whether the proposer is worth its latency.
+    """
+    from browsergraph import edits as _edits
+    from browsergraph import solve as _solve
+    from browsergraph.evidence import Evidence
+
+    began = time.monotonic()
+    proposals = (propose or _edits.mechanical)(bench, library)
+    tried = _edits.variants(bench, proposals, library=library)
+
+    graphs = [bench] + [o.workbench for o in tried.accepted]
+    share = max(1, budget // len(graphs))
+    best_score, best_route, any_ok, runs = float("-inf"), {}, False, 0
+
+    for graph in graphs:
+        if runs >= budget:
+            break
+        answer = _solve.solve(graph, runtime, verify=verify, inputs=inputs,
+                              profile=picked, attempts=min(share, budget - runs),
+                              workspace=workspace, evidence=Evidence(),
+                              seed=offset)
+        runs += len(answer.attempts)
+        any_ok |= answer.ok
+        if answer.ok and answer.score > best_score:
+            best_score, best_route = answer.score, dict(answer.champion)
+
+    return Result(
+        "guided", offset, best_score if any_ok else 0.0, any_ok, runs,
+        time.monotonic() - began, best_route,
+        f"{len(tried.accepted)} of {len(proposals)} edits compiled "
+        f"({tried.refusal_rate:.0%} refused)")

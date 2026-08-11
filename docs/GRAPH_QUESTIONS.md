@@ -367,16 +367,74 @@ everybody after you not to build it.
 
 ---
 
+## The measurement, built — and what it says
+
+Task D above said to build the measurement before believing anything else here,
+so that happened first. `arena.missing_step` is a task whose best solution needs
+a step the graph does not have. The node exists in a library; no stage holds it.
+
+That gives a **structural ceiling**: a route search names one candidate per
+stage, so it cannot reach a graph with an extra stage in it, at any budget.
+
+    best possible                          0.7068   (requires the insertion)
+    best reachable without an edit         0.3181
+    -> no route search can beat a gap of   57.2%
+
+Measured, 3,125 routes, same run budget for every strategy:
+
+| strategy | budget 20 | budget 40 | gap to best |
+|---|---|---|---|
+| `first` | 0.0916 | 0.0916 | 90.5% |
+| `random` | 0.1805 | 0.2379 | 77.4% → 69.0% |
+| `solve` | 0.2415 | 0.3007 | 68.4% → **59.7%** — arriving at the floor |
+| `guided` | **0.5076** | **0.5764** | 29.3% → **19.2%** — through it |
+
+`solve` at budget 40 lands at 59.7% against a predicted floor of 57.2%: the
+route search does its job and then stops, exactly where the arithmetic said it
+would. `guided` crosses because it is allowed to change the shape, on the same
+number of runs, split across the original graph and each variant.
+
+**The proposer in that table is not a model.** `edits.mechanical` enumerates
+every legal insertion by trying them, which on a small library and a small graph
+is complete — and complete is a strong property a model cannot beat, only match
+faster. That reframes the whole guided layer: it is not needed where enumeration
+is affordable. It is needed where the library is large, or where the answer is a
+removal or a retype that enumeration would propose hundreds of. **That is where
+a model has to be measured, and against this baseline rather than against
+nothing.**
+
+Two things fell out of building it, both worth keeping:
+
+**There is no `replace` edit.** Writing its test is how the invariant was
+rediscovered: a stage must admit *every* compatible candidate, so narrowing one
+is refused by the validator. Restricting what may run is a policy decision made
+at gate time with a reason attached, not a structural edit. The vocabulary has
+`widen`, which only ever adds.
+
+**The first version of the experiment measured nothing and looked like a
+finding.** The library node had no function registered, so every variant graph
+compiled and none could run — and `guided` scored *below* the unguided search
+while reporting 0% of edits refused. A benchmark that can produce a confident
+number from a broken setup is the thing to watch for; here the tell was that a
+0% refusal rate and a worse score cannot both be true.
+
+---
+
 ## Status of this document
 
 Written 2026-08-11. Describes:
 
 * **Implemented** — the facet/type split and its enforcing test; node discovery
   by contract; `explore.describe/parse/guided` for candidate choice with recorded
-  refusals; optional-step topology in the search; `arena.py` and `benchmark.py`,
-  with the arena numbers above reproducible via `python -m pytest tests/test_arena.py`.
+  refusals; optional-step topology in the search; `arena.py` and `benchmark.py`;
+  `edits.py` — `GraphEdit`, `apply`, the five kinds, `variants` with a refusal
+  rate, `mechanical` enumeration, and `insertion_points`; `benchmark`'s `guided`
+  strategy. Every number above is reproducible via `pytest tests/test_arena.py`.
 * **Designed, not implemented** — capability URIs, port semantics, embeddings,
-  the node index, `GraphQuestion`, `GraphEdit`, Q1–Q5 as code, blueprints.
+  the node index, `GraphQuestion` as a rendered prompt, Q1–Q5 as code, and
+  blueprints. `edits.GraphEdit` is the answer format those questions would
+  return, and `from_dicts` already parses it, so a proposer is a function
+  returning a list of edits and nothing above it needs to change.
 
 Nothing in the second list should be described as working until it is in the
 first.
