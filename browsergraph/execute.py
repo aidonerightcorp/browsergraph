@@ -100,6 +100,11 @@ class StepRun:
 class Run:
     """Everything that came out of running a plan."""
     plan_digest: str = ""
+    #: Wall-clock start, as an epoch second. `seconds` is measured on the
+    #: monotonic clock — right for durations and useless for saying *when*, and
+    #: a receipt with no when cannot become a lineage event: OpenLineage
+    #: requires an eventTime and PROV wants a startTime.
+    started_at: float = 0.0
     values: dict[tuple[str, str], Any] = field(default_factory=dict)
     steps: list[StepRun] = field(default_factory=list)
     artifacts: list[Artifact] = field(default_factory=list)
@@ -167,7 +172,7 @@ class Run:
 
         return TaskReceipt(
             task=task, graph=graph, ok=self.ok, plan=self.plan_digest,
-            seconds=self.seconds,
+            seconds=self.seconds, started_at=self.started_at,
             route=tuple(f"{s.stage}={s.candidate}" for s in self.steps),
             # `key` holds the **candidate**, not the stage. `Evidence.from_receipt`
             # reads `step.key` as the thing being learned about, and a receipt
@@ -373,6 +378,7 @@ def run(plan: Plan, runtime: Runtime, inputs: Mapping[str, Any] | None = None,
     are deterministic and effect-free are ever cached.
     """
     started = time.monotonic()
+    wall_clock = time.time()
     supplied = dict(inputs or {})
     folder = pathlib.Path(workspace).resolve() if workspace else None
     if folder is not None:
@@ -386,7 +392,7 @@ def run(plan: Plan, runtime: Runtime, inputs: Mapping[str, Any] | None = None,
     else:
         before = {}
 
-    result = Run(plan_digest=plan.digest)
+    result = Run(plan_digest=plan.digest, started_at=wall_clock)
     consumed: set[tuple[str, str]] = set()
     fallbacks = dict(fallbacks or {})
 

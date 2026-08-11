@@ -432,3 +432,50 @@ Further reading, in the order that helps most: [HOW_IT_WORKS.md](HOW_IT_WORKS.md
 (plain English), [UNIVERSAL_GRAPH_SYSTEM.md](UNIVERSAL_GRAPH_SYSTEM.md) (the
 formal model), [docs/TOWARD_A_GENERAL_MODEL.md](docs/TOWARD_A_GENERAL_MODEL.md)
 (what is still wrong with it).
+
+---
+
+## Searching over graphs, not only over nodes
+
+A route names one candidate per stage. A stage marked `optional=True` can also
+be named by **nothing**, and then it is left out of the graph entirely:
+
+```python
+compile_route(bench, {"read": "read.csv", "use": "use.it"})   # no 'impute' key
+plan.omitted            # ('impute',)
+plan.edges              # read -> use, reconnected around the gap
+```
+
+That is a different plan with a different digest, so the two topologies keep
+their evidence apart. `route_count` counts it, and `search.eligible_routes`
+offers it.
+
+**Optional carries an obligation: what feeds the stage must satisfy what it
+feeds.** A step turning `Rows` into `Matrix` cannot be lifted out however it is
+declared, and `workbench.omittable()` is the one implementation of that rule —
+used by the counter, the compiler and `browsergraph check`, so they cannot
+drift. The demonstration workbench declares three optional stages and *none* of
+them can actually be omitted; counting them anyway inflated its headline route
+count by 1.5×.
+
+If you want "do nothing" as a choice *within* a step rather than the step
+disappearing, use `quick.passthrough` instead. The two are different: a
+pass-through keeps the stage in the graph so routes stay comparable, while
+omission changes the shape.
+
+## Lineage a catalogue can read
+
+A receipt is ours and nothing else can read it, so lineage stops at the edge of
+this library unless it is exported:
+
+```bash
+browsergraph execute cheapest job.json --runtime mine:RUNTIME \
+    --provenance lineage.json --provenance-format openlineage
+```
+
+Three formats, and each refuses to invent what the receipt did not say. `prov`
+is W3C PROV-JSON — entities, activities, agents. `openlineage` is one terminal
+run event, not a reconstructed START/COMPLETE pair, because a receipt is written
+after the fact. `attestation` is an in-toto statement that is **unsigned and
+makes no hermeticity or reproducibility claim**, and says so in the document
+rather than letting the shape imply otherwise.

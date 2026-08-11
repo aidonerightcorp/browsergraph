@@ -259,3 +259,97 @@ def test_the_compiler_is_at_least_as_strict_as_the_validator(bench):
     route = {s.id: s.candidates[0] for s in bench.leaf_stages if s.candidates}
     assert bench.validate() == []
     assert compile_route(bench, route).digest.startswith("plan:")
+
+
+# --- searching over graphs, not only over nodes ------------------------------
+
+def _optional_bench(convert: bool = False):
+    """A three-step chain whose middle step is declared optional.
+
+    `convert=True` makes that middle step change the type, which is the case
+    where the declaration cannot be true.
+    """
+    from browsergraph.quick import chain, graph, node, step
+
+    out_type = "Matrix" if convert else "Rows"
+    nodes = [node("read.a", "read", gives=[("out", "Rows")]),
+             node("read.b", "read", gives=[("out", "Rows")]),
+             node("mid.one", "mid", [("in", "Rows")], [("out", out_type)]),
+             node("use.it", "use", [("in", out_type)], [("out", "Report")])]
+    steps = [step("read", "Read", [], [("out", "Rows")], "read",
+                  ["read.a", "read.b"]),
+             step("mid", "Middle", [("in", "Rows")], [("out", out_type)], "mid",
+                  ["mid.one"], optional=True),
+             step("use", "Use", [("in", out_type)], [("out", "Report")], "use",
+                  ["use.it"])]
+    return graph("Optional middle", "with and without the middle step",
+                 steps, nodes, chain("read", "mid", "use"))
+
+
+def test_a_route_may_leave_an_optional_stage_out_entirely():
+    """`optional` was a declared field nothing read: every route had to fill
+    every stage, so it meant nothing at compile time, run time or to search."""
+    bench = _optional_bench()
+    plan = compile_route(bench, {"read": "read.a", "use": "use.it"})
+    assert [s.stage for s in plan.steps] == ["read", "use"]
+    assert plan.omitted == ("mid",)
+
+
+def test_leaving_a_stage_out_reconnects_its_neighbours():
+    """Otherwise the plan is the old graph with a hole in it, and execution
+    has nothing to feed the step that came after."""
+    bench = _optional_bench()
+    plan = compile_route(bench, {"read": "read.b", "use": "use.it"})
+    assert [(e.source, e.target) for e in plan.edges] == [("read", "use")]
+    assert plan.order == ("read", "use")
+    assert all("mid" not in layer for layer in plan.layers)
+
+
+def test_the_two_topologies_are_different_plans():
+    """A pipeline that imputed and one that did not are different computations.
+    Sharing a digest would pool their evidence."""
+    bench = _optional_bench()
+    with_it = compile_route(bench, {"read": "read.a", "mid": "mid.one",
+                                    "use": "use.it"})
+    without = compile_route(bench, {"read": "read.a", "use": "use.it"})
+    assert with_it.digest != without.digest
+
+
+def test_an_optional_stage_that_converts_its_type_cannot_be_left_out():
+    """The obligation `optional` carries: what feeds it must satisfy what it
+    feeds. A step turning Rows into Matrix leaves a hole nothing fills."""
+    bench = _optional_bench(convert=True)
+    with pytest.raises(CompileError) as raised:
+        compile_route(bench, {"read": "read.a", "use": "use.it"})
+    assert any("cannot be left out" in p for p in raised.value.problems)
+
+
+def test_a_required_stage_left_unfilled_says_how_to_allow_it():
+    bench = _optional_bench()
+    with pytest.raises(CompileError) as raised:
+        compile_route(bench, {"read": "read.a", "mid": "mid.one"})
+    assert any("mark the stage optional" in p for p in raised.value.problems)
+
+
+def test_the_count_includes_the_route_that_leaves_it_out():
+    bench = _optional_bench()
+    assert bench.route_count() == 2 * (1 + 1) * 1 == 4
+
+
+def test_the_count_excludes_an_omission_that_could_never_compile():
+    """Counting `width + 1` unconditionally inflated the demonstration
+    workbench's headline by 1.5x — all three of its optional stages convert
+    their input type and none of them can actually be left out."""
+    bench = _optional_bench(convert=True)
+    assert bench.route_count() == 2 * 1 * 1 == 2
+    assert bench.omittable() == {"mid": False}
+
+
+def test_the_search_offers_the_topology_as_a_choice():
+    from browsergraph import search
+
+    bench = _optional_bench()
+    routes = list(search.eligible_routes(bench))
+    assert len(routes) == 4
+    assert sum(1 for r in routes if "mid" not in r) == 2, \
+        "half the routes should leave the optional step out"

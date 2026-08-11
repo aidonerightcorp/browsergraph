@@ -81,6 +81,10 @@ class Plan:
     permissions: tuple[str, ...] = ()
     effects: tuple[str, ...] = ()
     deterministic: bool = True
+    #: Optional stages this route left out. Part of the plan's identity: a
+    #: pipeline that imputed and one that did not are different computations,
+    #: and giving them the same digest would pool their evidence.
+    omitted: tuple[str, ...] = ()
     schema_version: str = "1.0"
     source: str = ""
 
@@ -94,6 +98,13 @@ class Plan:
         two workbenches that differ only in a description compile to the same
         plan and should share evidence, and two that differ in a bound
         parameter must not, however similar they look.
+
+        `omitted` is deliberately **not** in this payload, and its absence is
+        load-bearing rather than an oversight. Leaving a stage out already
+        changes `steps`, `edges` and `order`, so the two plans hash differently
+        anyway; adding the key would additionally change the digest of every
+        plan that omits nothing — which is all of them so far — and orphan every
+        receipt and posterior already keyed on one.
         """
         payload = json.dumps({"steps": [s.to_dict() for s in self.steps],
                               "edges": [e.to_dict() for e in self.edges],
@@ -121,6 +132,7 @@ class Plan:
                 "edges": [e.to_dict() for e in self.edges],
                 "order": list(self.order),
                 "layers": [list(layer) for layer in self.layers],
+                "omitted": list(self.omitted),
                 "permissions": list(self.permissions),
                 "effects": list(self.effects),
                 "deterministic": self.deterministic}
@@ -150,6 +162,96 @@ class Plan:
         return "\n".join(lines)
 
 
+def _rewired(edges, omitted) -> tuple[Edge, ...]:
+    """The wiring with the omitted stages lifted out and their neighbours joined.
+
+    `A -> skip -> B` becomes `A -> B`, carrying A's outgoing port and B's
+    incoming port, because those are the ports that now meet. Done repeatedly
+    so a run of two adjacent optional stages collapses properly rather than
+    leaving a dangling edge into the second one.
+    """
+    if not omitted:
+        return tuple(edges)
+
+    kept = list(edges)
+    for stage_id in omitted:
+        incoming = [e for e in kept if e.target == stage_id]
+        outgoing = [e for e in kept if e.source == stage_id]
+        kept = [e for e in kept
+                if e.source != stage_id and e.target != stage_id]
+        for before in incoming:
+            for after in outgoing:
+                kept.append(Edge(source=before.source, target=after.target,
+                                 from_port=before.from_port,
+                                 to_port=after.to_port))
+    return tuple(kept)
+
+
+def _bypass_problems(workbench: WorkbenchDefinition, omitted, lattice) -> list[str]:
+    """Whether leaving these stages out still type-checks.
+
+    Omitting a step is not free. If `impute` turns `Rows` into `Rows` then it
+    can be lifted out and its neighbours joined directly; if it turns `Rows`
+    into `Matrix` then removing it leaves a hole nothing fills, and the graph
+    that results is not a graph at all.
+
+    So an optional stage has a real obligation: **what feeds it must satisfy
+    what it feeds.** Checked here rather than trusted, because "optional" is a
+    thing a person writes in a declaration and this is the only place that can
+    tell whether it is true.
+
+    Reported as a compile problem rather than raised, so a caller asking for an
+    impossible topology gets it in the same list as every other reason a route
+    would not compile.
+    """
+    if not omitted:
+        return []
+
+    can_omit = workbench.omittable()
+    by_id = {s.id: s for s in workbench.leaf_stages}
+    edges = workbench.wiring()
+    problems: list[str] = []
+
+    for stage_id in omitted:
+        if can_omit.get(stage_id):
+            continue
+
+        incoming = [e for e in edges if e.target == stage_id]
+        outgoing = [e for e in edges if e.source == stage_id]
+        if not incoming and outgoing:
+            problems.append(
+                f"{stage_id!r} is optional but nothing feeds it, so leaving it "
+                f"out removes the only source for "
+                f"{', '.join(sorted(e.target for e in outgoing))}")
+            continue
+        if len(incoming) > 1 or len(outgoing) > 1:
+            problems.append(
+                f"{stage_id!r} is optional but has {len(incoming)} inputs and "
+                f"{len(outgoing)} outputs — only a stage with one of each can "
+                f"be left out, because otherwise there is no single connection "
+                f"to make in its place")
+            continue
+
+        # `omittable` already decided; this loop exists to say *why* in the
+        # reader's terms, naming the two stages that would have to meet.
+        for before in incoming:
+            upstream = by_id.get(before.source)
+            produced = upstream.port(before.from_port, outgoing=True) if upstream else None
+            for after in outgoing:
+                downstream = by_id.get(after.target)
+                consumed = (downstream.port(after.to_port, outgoing=False)
+                            if downstream else None)
+                if produced is None or consumed is None:
+                    continue
+                mismatch = _types.check(produced, consumed, lattice)
+                if mismatch is not None:
+                    problems.append(
+                        f"{stage_id!r} cannot be left out: {before.source} then "
+                        f"gives {produced.type!r} straight to {after.target}, "
+                        f"which takes {consumed.type!r} — {mismatch}")
+    return problems
+
+
 def compile_route(workbench: WorkbenchDefinition, route: Mapping[str, str],
                   *, source: str = "") -> Plan:
     """Resolve one route into a plan, or refuse with every reason.
@@ -167,11 +269,27 @@ def compile_route(workbench: WorkbenchDefinition, route: Mapping[str, str],
     for cycle in workbench.cycles():
         problems.append("the graph has a cycle: " + " -> ".join(cycle))
 
+    # An optional stage a route did not name is *left out of the graph*, not
+    # left unfilled. That is a different plan — a different topology — and it is
+    # the smallest form of searching over graphs rather than only over nodes.
+    #
+    # `optional` was a declared field that nothing read: every route had to fill
+    # every stage, so "optional" meant nothing at compile time, nothing at run
+    # time, and nothing to the search. It means something now.
+    omitted = tuple(sorted(s.id for s in workbench.leaf_stages
+                           if s.optional and not route.get(s.id)))
+    problems.extend(_bypass_problems(workbench, omitted, lattice))
+
     steps: list[Step] = []
     for stage in workbench.leaf_stages:
+        if stage.id in omitted:
+            continue
         chosen = route.get(stage.id)
         if not chosen:
-            problems.append(f"no candidate chosen for {stage.id!r}")
+            problems.append(
+                f"no candidate chosen for {stage.id!r}"
+                + ("" if stage.optional else
+                   " (mark the stage optional if leaving it out is allowed)"))
             continue
         if chosen not in stage.candidates:
             problems.append(f"{chosen!r} is not admitted to {stage.id!r}")
@@ -254,12 +372,21 @@ def compile_route(workbench: WorkbenchDefinition, route: Mapping[str, str],
     if problems:
         raise CompileError(problems)
 
-    order = [stage for layer in workbench.layers() for stage in layer]
+    order = [stage for layer in workbench.layers() for stage in layer
+             if stage not in omitted]
+    # Reconnect around what was left out, so the plan is a graph in its own
+    # right rather than the original graph with holes in it. Everything
+    # downstream — execution, drawing, the digest — then sees one consistent
+    # topology and needs to know nothing about optionality.
+    edges = _rewired(workbench.wiring(), omitted)
     return Plan(
         steps=tuple(sorted(steps, key=lambda s: order.index(s.stage))),
-        edges=tuple(workbench.wiring()),
+        edges=edges,
         order=tuple(order),
-        layers=tuple(tuple(layer) for layer in workbench.layers()),
+        omitted=omitted,
+        layers=tuple(tuple(s for s in layer if s not in omitted)
+                     for layer in workbench.layers()
+                     if any(s not in omitted for s in layer)),
         permissions=tuple(sorted({p for s in steps for p in s.permissions})),
         effects=tuple(sorted({e for s in steps for e in s.effects})),
         deterministic=all(s.deterministic for s in steps),

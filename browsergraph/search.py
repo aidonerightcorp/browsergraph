@@ -777,14 +777,169 @@ def eligible_routes(workbench: WorkbenchDefinition, *,
     if not keys:
         return
 
+    # An optional stage that can genuinely be lifted out gets an extra choice:
+    # not being there. `None` becomes an absent key in the route, which is how
+    # `compile_route` reads "leave this one out" — so the search ranges over
+    # topologies and not only over which node fills a fixed set of slots.
+    #
+    # `omittable` and not `optional`, because a stage that converts its input
+    # type cannot be removed however it is declared, and offering the choice
+    # would fill the space with routes that cannot compile.
+    can_omit = workbench.omittable()
+    choices = {s.id: ([*eligible[s.id], None] if can_omit.get(s.id)
+                      else eligible[s.id])
+               for s in stages}
+
     space = 1
     for key in keys:
-        space *= len(eligible[key])
+        space *= len(choices[key])
     if space > limit:
         raise SpaceTooLarge(
             f"{space:,} eligible routes exceeds the enumeration limit of "
             f"{limit:,}. This is the case search exists for — use `within` "
             f"with a budget instead of asking for all of them.")
 
-    for combination in itertools.product(*(eligible[key] for key in keys)):
-        yield dict(zip(keys, combination, strict=True))
+    for combination in itertools.product(*(choices[key] for key in keys)):
+        yield {key: pick for key, pick in zip(keys, combination, strict=True)
+               if pick is not None}
+
+
+@dataclass
+class Frontier:
+    """The routes worth arguing about, and how much of the space was searched.
+
+    A weighted score answers "which route" by deciding the trade-off for you.
+    Sometimes that is what you want. Often the honest answer is "here are the
+    four routes where you cannot get more of one thing without less of
+    another" — and which of those four you take is a judgement nobody should be
+    making inside a scoring function.
+    """
+    routes: list[dict[str, str]] = field(default_factory=list)
+    metrics: list[dict[str, float]] = field(default_factory=list)
+    examined: int = 0
+    total: int = 0
+    objectives: tuple[str, ...] = ()
+    #: Set when the search sampled rather than enumerated. A front over a
+    #: sample is a front over a sample, and saying so is the difference between
+    #: a result and a claim.
+    sampled: bool = False
+
+    def __len__(self) -> int:
+        return len(self.routes)
+
+    def best(self, metric: str, direction: str = "maximize") -> dict[str, str]:
+        """The corner of the front. What you would have got optimising alone."""
+        if not self.routes:
+            return {}
+        pick = max if direction == "maximize" else min
+        index = self.metrics.index(pick(self.metrics,
+                                        key=lambda m: m.get(metric, 0.0)))
+        return dict(self.routes[index])
+
+    def text(self) -> str:
+        lines = [f"{len(self.routes)} non-dominated of {self.examined:,} "
+                 f"examined ({self.total:,} exist)"
+                 + ("  — sampled, so this is a front over the sample"
+                    if self.sampled else "")]
+        for route, metrics in zip(self.routes, self.metrics, strict=True):
+            shown = "  ".join(f"{name}={metrics.get(name, 0):.4g}"
+                              for name in self.objectives)
+            lines.append(f"  {shown}")
+            lines.append(f"      {', '.join(f'{s}={c}' for s, c in route.items())}")
+        return "\n".join(lines)
+
+
+def _dominates(left: Mapping[str, float], right: Mapping[str, float],
+               objectives) -> bool:
+    """Left is at least as good everywhere and better somewhere."""
+    better_somewhere = False
+    for objective in objectives:
+        a = left.get(objective.metric)
+        b = right.get(objective.metric)
+        if a is None or b is None:
+            return False
+        if objective.direction == "maximize":
+            if a < b:
+                return False
+            better_somewhere |= a > b
+        else:
+            if a > b:
+                return False
+            better_somewhere |= a < b
+    return better_somewhere
+
+
+def frontier(workbench: WorkbenchDefinition, profile: OptimizationProfile, *,
+             policy: Policy | None = None, limit: int = 20_000,
+             sample: int = 0, seed: int = 0,
+             evidence=None, context: Sequence[str] = ("global",)) -> Frontier:
+    """Every route you cannot improve without giving something up.
+
+    The counterpart to `within`, and it answers a different question. `within`
+    returns *one* route, because a profile's weights have already decided how
+    much latency a point of quality is worth. That decision is often the whole
+    problem, and burying it in a weight makes it invisible: two profiles that
+    disagree produce two winners with nothing to say about the ground between.
+
+    This returns the Pareto front — the routes where nothing is free. Faster
+    costs quality, cheaper costs speed, and *which* trade you want is a
+    judgement, not a computation.
+
+    Enumerates when the eligible space fits in `limit`. Above that, pass
+    `sample=N` to draw N routes at random and get the front over those, which
+    is reported as sampled rather than quietly presented as the real front.
+
+    `solutiongraph.evidence.pareto_front` does the same thing for that model's
+    aggregates; this is the workbench-side version, over the same domination
+    rule, so a front computed either way means the same.
+    """
+    stages = [s for s in workbench.leaf_stages if s.candidates]
+    eligible, _blocked = _eligible_by_stage(workbench, policy or Policy())
+    if any(not eligible.get(s.id) for s in stages):
+        return Frontier(total=workbench.route_count(),
+                        objectives=tuple(o.metric for o in profile.objectives))
+
+    overrides = pairs = None
+    if evidence is not None:
+        from browsergraph.evidence import measured_metrics, pair_effects
+        every = [c for stage in stages for c in eligible[stage.id]]
+        overrides = measured_metrics(evidence, every, context)
+        pairs = pair_effects(evidence)
+
+    keys = [s.id for s in stages]
+    space = 1
+    for key in keys:
+        space *= len(eligible[key])
+
+    sampled = False
+    if space <= limit:
+        routes = [dict(zip(keys, combo, strict=True))
+                  for combo in itertools.product(*(eligible[k] for k in keys))]
+    elif sample:
+        rng = random.Random(seed)
+        routes = [{k: rng.choice(eligible[k]) for k in keys}
+                  for _ in range(sample)]
+        sampled = True
+    else:
+        raise SpaceTooLarge(
+            f"{space:,} eligible routes exceeds the enumeration limit of "
+            f"{limit:,}. Pass sample=N for a front over N random routes, and "
+            f"it will be reported as sampled.")
+
+    scored = [(route, aggregate(workbench, route, overrides, pairs))
+              for route in routes]
+    front = [(route, metrics) for route, metrics in scored
+             if not any(_dominates(other, metrics, profile.objectives)
+                        for _r, other in scored if other is not metrics)]
+
+    # Ordered by the first objective, so the front reads as a trade-off curve
+    # rather than as whatever order the product happened to produce.
+    lead = profile.objectives[0] if profile.objectives else None
+    if lead:
+        front.sort(key=lambda pair: pair[1].get(lead.metric, 0.0),
+                   reverse=lead.direction == "maximize")
+
+    return Frontier(routes=[r for r, _ in front], metrics=[m for _, m in front],
+                    examined=len(scored), total=workbench.route_count(),
+                    objectives=tuple(o.metric for o in profile.objectives),
+                    sampled=sampled)

@@ -484,6 +484,18 @@ def cmd_execute(args) -> int:
     receipt = result.receipt(task=args.route or "")
     if args.receipt:
         print(f"\nreceipt: {receipt.write(args.receipt)}")
+    if args.provenance:
+        # The receipt is ours and nothing else can read it, so lineage stops at
+        # the edge of this library unless it is exported into something a
+        # catalogue already understands.
+        import pathlib as _pathlib
+
+        from browsergraph import provenance as _prov
+        target = _pathlib.Path(args.provenance)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_prov.export(receipt, args.provenance_format),
+                          encoding="utf-8")
+        print(f"provenance ({args.provenance_format}): {target}")
     if store is not None:
         # The loop, in one command: what just ran becomes what is known, so the
         # next call starts from it rather than from the numbers in the file.
@@ -601,6 +613,20 @@ def cmd_check(args) -> int:
                     "fix": "either add an alternative or fold this into its "
                            "neighbour — a sub-step with one option is a "
                            "hard-coded choice, not a decision"})
+        # An "optional" stage that converts its input type cannot be left out,
+        # whatever the declaration says — so the declaration is not true, and
+        # nothing was checking it. The demonstration workbench has three.
+        can_omit = bench.omittable()
+        for leaf in leaves:
+            if leaf.optional and not can_omit.get(leaf.id):
+                findings.append({
+                    "severity": "advice", "where": leaf.id,
+                    "message": f"{leaf.id!r} is declared optional but cannot be "
+                               f"left out — what feeds it does not satisfy what "
+                               f"it feeds",
+                    "fix": "drop the optional flag, or add a pass-through "
+                           "candidate so 'do nothing' is a choice inside the "
+                           "step rather than the step disappearing"})
         if not bench.solutions:
             findings.append({"severity": "advice", "where": "solutions",
                              "message": "no named route",
@@ -1090,6 +1116,11 @@ def main(argv: list[str] | None = None) -> int:
                     help="search for the best route within this many evaluations")
     ex.add_argument("--evidence", help="an evidence JSON file to learn from and update")
     ex.add_argument("--receipt", help="write a run receipt to this path")
+    ex.add_argument("--provenance", metavar="PATH",
+                    help="also export lineage a catalogue can read")
+    ex.add_argument("--provenance-format", default="prov",
+                    choices=("prov", "openlineage", "attestation"),
+                    help="W3C PROV, an OpenLineage event, or an in-toto statement")
     ex.set_defaults(fn=cmd_execute)
 
     vf = sub.add_parser("verify", help="run every route and check the controls")

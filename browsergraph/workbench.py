@@ -831,10 +831,64 @@ class WorkbenchDefinition:
         routes from, and that is the sort of number this repository exists to
         object to.
         """
+        can_omit = self.omittable()
         total = 1
         for stage in self.leaf_stages:
-            total *= max(len(stage.candidates), 0)
+            width = max(len(stage.candidates), 0)
+            # An optional stage that can genuinely be left out has one more
+            # choice than it has candidates: not being there. That is a
+            # different plan with a different digest, so ignoring it understates
+            # the space the search can reach.
+            #
+            # Only when it *can* be, though. The demonstration workbench
+            # declares three stages optional and every one of them converts its
+            # input type, so leaving any of them out disconnects the graph.
+            # Counting them anyway inflated the headline by 1.5× — the exact
+            # kind of unearned number this method exists to avoid.
+            total *= (width + 1) if can_omit.get(stage.id) else width
         return total if self.leaf_stages else 0
+
+    def omittable(self) -> dict[str, bool]:
+        """Which optional stages can actually be lifted out of the graph.
+
+        "Optional" is a claim somebody wrote in a declaration, and it carries a
+        real obligation: **what feeds the stage must satisfy what it feeds.** A
+        step that turns `Rows` into `Matrix` cannot be skipped whatever its
+        declaration says, because removing it leaves a hole nothing fills.
+
+        One implementation of the rule, used by three callers — the counter
+        here, the compiler when a route omits a stage, and the validator when it
+        reports a declaration that cannot be true.
+        """
+        optional = [s for s in self.leaf_stages if s.optional]
+        if not optional:
+            return {}
+
+        lattice = _types.lattice_from(self.nodes)
+        by_id = {s.id: s for s in self.leaf_stages}
+        edges = self.wiring()
+        out: dict[str, bool] = {}
+
+        for stage in optional:
+            incoming = [e for e in edges if e.target == stage.id]
+            outgoing = [e for e in edges if e.source == stage.id]
+            if not outgoing:
+                out[stage.id] = True          # nothing was waiting for it
+                continue
+            # A join or a fan-out has no single pair of ports to reconnect, and
+            # guessing which to keep would invent a graph nobody wrote.
+            if not incoming or len(incoming) > 1 or len(outgoing) > 1:
+                out[stage.id] = False
+                continue
+
+            before, after = incoming[0], outgoing[0]
+            upstream, downstream = by_id.get(before.source), by_id.get(after.target)
+            produced = upstream.port(before.from_port, outgoing=True) if upstream else None
+            consumed = (downstream.port(after.to_port, outgoing=False)
+                        if downstream else None)
+            out[stage.id] = (produced is not None and consumed is not None
+                             and _types.check(produced, consumed, lattice) is None)
+        return out
 
     def computation_count(self) -> int:
         """Distinct executions this graph can produce. Branches sum, not multiply.

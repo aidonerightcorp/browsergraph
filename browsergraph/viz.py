@@ -11,7 +11,7 @@ So everything here takes a `WorkbenchDefinition` and nothing else. If a domain
 can be expressed as stages, typed ports, edges and candidates — the only things
 the compiler knows about — it can be drawn, and no drawing code changes.
 
-Seven pictures, each answering a question the others cannot:
+Eight pictures, each answering a question the others cannot:
 
 * `dag` — *what shape is this?* Layers, fan-out, joins. The picture that would
   have caught "this is a pipeline, not a graph" on sight, because a diamond
@@ -29,6 +29,9 @@ Seven pictures, each answering a question the others cannot:
   ranked, with the failures left in.
 * `trend` — *is this getting better?* A series over time against the lines it
   should be judged by, because a rising line could be rising towards mediocre.
+* `pareto` — *what do I have to give up?* The routes where nothing is free,
+  with the dominated cloud behind them. A weighted score answers this by
+  deciding the trade-off for you; this shows it.
 
 Implementation notes, both learned the hard way and both non-obvious:
 
@@ -668,7 +671,93 @@ def trend(points: Sequence[float], *, width: int = 940, height: int = 300,
                   width, height)
 
 
-# --- 7. what the solver tried -----------------------------------------------
+# --- 7. what you have to give up --------------------------------------------
+
+def pareto(front, *, x: str = "", y: str = "", width: int = 940,
+           height: int = 420, title: str = "", note: str = "",
+           background: Sequence[Mapping[str, float]] = ()) -> Figure:
+    """The trade-off, as a curve you can put your finger on.
+
+    A weighted score answers "which route" by having already decided what a
+    point of quality is worth in milliseconds. That decision is frequently the
+    entire problem, and a single number hides it completely — two profiles
+    disagreeing produce two winners and no account of the ground between them.
+
+    This draws the routes where nothing is free: faster costs quality, cheaper
+    costs speed. Pass `background` — the routes that were examined and beaten —
+    and the dominated cloud is drawn faintly behind, which is what makes the
+    front look like a boundary rather than a list of dots.
+
+    Takes a `search.Frontier`, or anything with `.metrics` and `.objectives`.
+    """
+    metrics = list(getattr(front, "metrics", front) or [])
+    names = list(getattr(front, "objectives", ()) or [])
+    x = x or (names[0] if names else "")
+    y = y or (names[1] if len(names) > 1 else "")
+    if not metrics or not x or not y:
+        return Figure('<svg width="10" height="10"></svg>',
+                      title or "trade-off",
+                      note or "needs at least two objectives to trade off")
+
+    cloud = [dict(m) for m in background]
+    pool = metrics + cloud
+    xs = [m.get(x, 0.0) for m in pool]
+    ys = [m.get(y, 0.0) for m in pool]
+    left, right, top, bottom = 78, 40, 54, 62
+    plot_w, plot_h = width - left - right, height - top - bottom
+    x_lo, x_hi = min(xs), max(xs)
+    y_lo, y_hi = min(ys), max(ys)
+    x_span = (x_hi - x_lo) or 1.0
+    y_span = (y_hi - y_lo) or 1.0
+
+    def at(m):
+        return (left + (m.get(x, 0.0) - x_lo) / x_span * plot_w,
+                top + plot_h - (m.get(y, 0.0) - y_lo) / y_span * plot_h)
+
+    parts = [f'<line x1="{left}" y1="{top}" x2="{left}" y2="{top + plot_h}" '
+             f'stroke="{LINE}"/>',
+             f'<line x1="{left}" y1="{top + plot_h}" x2="{left + plot_w}" '
+             f'y2="{top + plot_h}" stroke="{LINE}"/>',
+             f'<text x="{left + plot_w / 2}" y="{height - 22}" '
+             f'text-anchor="middle" font-size="11" fill="{INK}">{_esc(x)}</text>',
+             f'<text x="20" y="{top + plot_h / 2}" font-size="11" fill="{INK}" '
+             f'transform="rotate(-90 20 {top + plot_h / 2})" '
+             f'text-anchor="middle">{_esc(y)}</text>']
+    for value, anchor, dx in ((x_lo, "start", 0), (x_hi, "end", plot_w)):
+        parts.append(f'<text x="{left + dx}" y="{top + plot_h + 18}" '
+                     f'text-anchor="{anchor}" font-size="9.5" '
+                     f'fill="{MUTED}">{_fmt(value)}</text>')
+    for value, dy in ((y_lo, plot_h), (y_hi, 0)):
+        parts.append(f'<text x="{left - 8}" y="{top + dy + 4}" text-anchor="end" '
+                     f'font-size="9.5" fill="{MUTED}">{_fmt(value)}</text>')
+
+    for m in cloud:
+        cx, cy = at(m)
+        parts.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="2.4" '
+                     f'fill="{EDGE}" opacity=".28"/>')
+
+    points = sorted((at(m) for m in metrics), key=lambda p: p[0])
+    if len(points) > 1:
+        parts.append('<polyline points="'
+                     + " ".join(f"{px:.1f},{py:.1f}" for px, py in points)
+                     + f'" fill="none" stroke="{CHOSEN}" stroke-width="1.6" '
+                       f'stroke-dasharray="4 3" opacity=".7"/>')
+    for m, (cx, cy) in zip(metrics, (at(m) for m in metrics), strict=True):
+        detail = "  ".join(f"{n}={_fmt(m.get(n, 0))}" for n in names)
+        parts.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="5" '
+                     f'fill="{CHOSEN}" opacity=".85"><title>{_esc(detail)}</title>'
+                     f'</circle>')
+
+    beaten = f", {len(cloud):,} dominated behind" if cloud else ""
+    return Figure(Figure._svg("".join(parts), width, height),
+                  title or f"{len(metrics)} routes where nothing is free",
+                  note or (f"Every point on the line gives up one thing to get "
+                           f"another{beaten}. Which you want is a judgement, "
+                           f"not a computation."),
+                  width, height)
+
+
+# --- 8. what the solver tried -----------------------------------------------
 
 def scoreboard(solution, *, width: int = 1000, title: str = "",
                note: str = "") -> Figure:
