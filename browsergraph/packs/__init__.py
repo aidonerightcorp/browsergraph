@@ -86,7 +86,7 @@ class Pack:
 
 
 def available() -> tuple[str, ...]:
-    return ("agents", "files", "geo", "harness", "judge", "migrate",
+    return ("agents", "clean", "files", "geo", "harness", "judge", "migrate",
             "models", "quality", "redteam", "spacetime", "synth", "tabular")
 
 

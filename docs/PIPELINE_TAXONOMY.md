@@ -31,7 +31,7 @@ topic with a nice name, and `tests/test_taxonomy.py` refuses to let one exist.
 | Categories | 41 |
 | Families | 9 |
 | With a **checkable shape** (a template) | 41 (100%) |
-| With **code that runs** (a pack, every route executed by a test) | 13 (32%) |
+| With **code that runs** (a pack, every route executed by a test) | 14 (34%) |
 | Templates in the registry | 39 |
 | Packs in the registry | 12 |
 
@@ -106,7 +106,7 @@ Fails as: late events land after their window closed and are dropped silently, s
 | category | the question | template | pack |
 |---|---|---|---|
 | **`condition.validate`** | Is this fit to use, yes or no? | `data.quality` | `quality` |
-| **`condition.clean`** | Can this be made usable without inventing anything? | `data.clean` | — |
+| **`condition.clean`** | Can this be made usable without inventing anything? | `data.clean` | `clean` |
 | **`condition.impute`** | What do I do about the gaps? | `data.impute` | — |
 | **`condition.dedupe`** | Are these two rows one customer? | `entity.resolution` | — |
 | **`condition.merge`** | Two systems say different things. Which do I write down? | `data.merge` | — |
@@ -388,7 +388,6 @@ template that already compiles.
 | `acquire.document` | shape 'document.extraction', no pack |
 | `acquire.image` | shape 'image.processing', no pack |
 | `acquire.stream` | shape 'stream.window', no pack |
-| `condition.clean` | shape 'data.clean', no pack |
 | `condition.impute` | shape 'data.impute', no pack |
 | `condition.dedupe` | shape 'entity.resolution', no pack |
 | `condition.merge` | shape 'data.merge', no pack |

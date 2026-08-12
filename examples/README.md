@@ -35,6 +35,7 @@ the library. Every number they print is computed when you run them.
 | 11 | [Place and time](11_place_and_time.py) | addresses that are well-formed and do not exist; a rainfall figure published two days after the sale; midnight in Denver landing in next year |
 | 12 | [Synthetic data](12_synthetic_data.py) | five generators, five different ways to score well, and the one metric that catches the copier |
 | 13 | [Find your shape](13_find_your_shape.py) | look the job up in the taxonomy, get a typed skeleton and the mistakes people make in it |
+| 14 | [Audit a judge](14_audit_a_judge.py) | a judge that agrees with people less often than answering "good" every time would, and the three separate checks that say so — needs no graph, only `assay` |
 
 ## The ten-minute version
 

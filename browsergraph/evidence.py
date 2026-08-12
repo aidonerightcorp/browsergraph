@@ -45,7 +45,7 @@ import pathlib
 import random
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 #: Weight given to a parent context's evidence relative to the child's. A
 #: neighbouring context is informative, not authoritative.
@@ -196,6 +196,12 @@ class Evidence:
     posteriors: dict[str, dict[str, Posterior]] = field(default_factory=dict)
     #: Route-level outcomes, for detecting interaction between choices.
     routes: list[tuple[tuple[str, ...], str, float]] = field(default_factory=list)
+
+    #: The record type this store accepts. Advertised rather than assumed so
+    #: that a writer which does not import this package — `assay.obligations`
+    #: is the one that made this necessary — can build the right thing by
+    #: asking the store instead of importing the class.
+    observation_type: ClassVar[type] = Observation
 
     # --- recording ----------------------------------------------------------
 

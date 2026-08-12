@@ -5,6 +5,66 @@ Notable changes. Dates are the release date; the format follows
 
 ## [Unreleased]
 
+### The integrity layer moved out
+
+`assay` is a new top-level package holding the half of this project that is not
+about browsers: the pipeline taxonomy, the obligations an evaluation owes,
+controls on the harness itself, and a judge audit. Standard library only, and
+it imports nothing from `browsergraph` —
+`tests/test_assay.py::test_assay_imports_nothing_from_browsergraph` reads the
+AST to keep it that way, and **caught a real dependency the first time it ran**:
+`Loop.fold_into` imported `browsergraph.evidence` inside the function body,
+which felt like it avoided the dependency and did not. An evidence store now
+advertises `observation_type` and the writer asks rather than imports.
+
+- **`assay.judge`** (new) — audit a model used as a grader. Agreement with
+  people above chance, rubric sensitivity, length bias, position bias, self
+  preference, and one `audit()` over the lot. `CANNOT_CHECK` is a verdict, not
+  an error: a single-class human sample cannot validate a judge, and reporting
+  that as the judge's fault convicts it of the evaluation's own sampling.
+  `python -m assay.cli judge --data labels.csv` needs nothing else from this
+  project, and exits non-zero so it can go in CI.
+- **`assay.controls`** (new) — null, negative, positive and shuffle controls as
+  values, with `chance_level()` defaulting to the majority baseline rather than
+  1/k. The rule it enforces: **a harness with no controls cannot return better
+  than PROVISIONAL.**
+- **`assay.obligations`** — was `browsergraph.duecare`, renamed because Due Care
+  is also an unrelated product and one name for two things is how a search for
+  either finds neither.
+- **`assay.taxonomy`** — was `browsergraph.taxonomy`. The map is a claim about
+  engineering work rather than a fact about this library, so any pipeline
+  library can now report coverage against the same forty-one shapes.
+- The old import paths still work and will keep working; twenty-three published
+  notebooks use them. A test asserts the shims re-export the *same objects*, not
+  copies.
+
+### Added
+
+- **`casestudies.py` and `docs/CASE_STUDIES.md`** — twelve real findings, each
+  with a `run()` that reproduces its numbers, and a test that every figure the
+  prose quotes is a key the code actually returns. The document is generated;
+  editing it by hand fails a test that says how to regenerate it. Writing them
+  found four studies that did not demonstrate what their titles claimed — two
+  quoted numbers the code contradicted, one compared a system with an identical
+  copy of itself, and one counted attack variants where it meant attack
+  families.
+- **`clean` pack** (13 packs, from 12) — filling the `data.clean` template, so
+  `condition.clean` moves from a shape to code. Five steps, 72 routes. What it
+  shows, all measured: `repair.drop` deletes the twelve rows holding the
+  seventeen problems, `verify.recheck` re-reads the result, finds zero
+  remaining, and reports ok — **an empty table is perfectly clean**, and the
+  `rows_before`/`rows_after` line is the only thing in the graph that says so.
+  `repair.impute` fixes 5 of 17 and the fixed-only ledger reports "5 fixed"
+  with no denominator, while `verify.count` returns ok on a frame with twelve
+  problems left in it.
+- **`browsergraph cases`** and **`examples/14_audit_a_judge.py`**.
+
+### Fixed
+
+- `Evidence` now advertises `observation_type`, so a writer outside the package
+  can build the record type the store accepts instead of importing it.
+
+
 The theme is **the shapes engineering work comes in, and what an evaluation
 owes**. 0.4.0 could express and run a graph. It could not tell you whether your
 problem was one of the shapes it knew, and it had no answer to "would this

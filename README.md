@@ -127,19 +127,58 @@ topic with a nice name, and a test refuses to let one exist. Coverage is counted
 from the registries on every run: 41 categories have a checkable shape, 13 have
 code that runs, and the 28 gaps are listed rather than rounded up.
 
-## Harnesses, and evaluations you could defend
+## Audit the judge before you believe the dashboard
 
-The obligations of an evaluation are usually habits. `duecare` makes them
-values: nine obligations, each **discharged with evidence, waived with a stated
+If you ship a feature built on a language model you almost certainly have a
+judge. It probably produces a number every day, and it has probably never been
+checked against a person.
+
+```bash
+python -m assay.cli judge --demo
+python -m assay.cli judge --data labels.csv --model verdict --human truth
+```
+
+```
+JUDGE AUDIT — FAIL
+
+BELOW_CHANCE — kappa -0.207 on 120 items
+  raw agreement 65.0%, but chance alone gives 71.0% on this distribution. The
+  judge agrees with people less often than a coin weighted to the commonest
+  answer would.
+
+RUBRIC-DEPENDENT — kappa spans 0.694 across 3 rubrics
+  +0.487  is anything in it false
+  +0.000  rate the overall quality
+  -0.207  did it answer the question asked
+
+FAIL  length
+  score and answer length correlate at rho +0.95
+```
+
+Four ways a judge is wrong while looking right: it agrees at chance, it scores
+length, it scores position, or the rubric decides instead of the input. All
+four fall out of one realistic mechanism in the demo, and every number above is
+printed by the command rather than typed into this page.
+
+`CANNOT_CHECK` is a verdict, not an error. A single-class human sample cannot
+validate a judge, and reporting that as the judge's fault convicts it of the
+evaluation's own sampling.
+
+[**Example 14**](examples/14_audit_a_judge.py) · [`assay/README.md`](assay/README.md)
+
+## Controls, and evaluations you could defend
+
+The obligations of an evaluation are usually habits. `assay.obligations` makes
+them values: nine obligations, each **discharged with evidence, waived with a stated
 reason, failed, or visibly outstanding** — and a verdict computed while a
 blocking obligation is outstanding is `PROVISIONAL`, never a pass.
 
 ```python
-from browsergraph import duecare
+from assay import obligations          # was browsergraph.duecare; both work
 
-ledger = duecare.Ledger.standard()
+ledger = obligations.Ledger.standard()
 ledger.discharge("holdout", "cases 0-199 were never used in development")
-ledger.record(duecare.check_negative_control(real=0.91, broken=0.89))
+ledger.record(obligations.check_negative_control(real=0.91, broken=0.89))
 print(ledger.verdict(0.91).text())
 # FAIL — 0.910  [50ed4cc56a8c]
 #   failed:      negative_control — a deliberately broken variant scored 0.890
@@ -160,7 +199,7 @@ that as the grader's fault would convict it of the evaluation's own sampling.
 
 A waiver **needs a reason** — `waive()` refuses an empty one — and waivers appear
 in the report as prominently as discharges. The ledger's digest is a hash of the
-standard rather than the score, so `duecare.compare()` will tell you two numbers
+standard rather than the score, so `obligations.compare()` will tell you two numbers
 are *not comparable* when the standard slipped between them.
 
 The other half is the loop: each round's failures become permanent regression
@@ -169,9 +208,38 @@ same observation that graded the output. It reports **new** failures per round
 rather than total, because a total that goes down is also what deleting the hard
 cases looks like.
 
+And a harness with **no** controls at all cannot report better than
+`PROVISIONAL` — `assay.controls` enforces that, because "we did not check
+whether this harness works" is the accurate description and having a word for it
+is what stops it being rendered as a pass.
+
 [**Example 09**](examples/09_due_care_evaluation.py) runs all of it.
 
-## Twelve domains with the code already written
+## Twelve findings a green test suite would have missed
+
+Every one of these was hit while building this repository, usually while
+writing a demonstration of the feature it broke. **None raised an exception.**
+
+```bash
+browsergraph cases                              # the twelve
+browsergraph cases --id judge-below-chance      # one, with its numbers
+```
+
+| study | what looked fine | what was happening |
+|---|---|---|
+| `judge-below-chance` | 73% agreement with people | chance alone gives 76.6%; answering "good" every time beats it |
+| `empty-result-passes` | exits 0 every night for weeks | the selector matches nothing and a 0-byte file overwrites yesterday |
+| `timezone-rolls-the-year` | every timestamp stored in UTC | 23:30 on 31 December in Denver is reported in the following year |
+| `the-copier-wins` | best fidelity *and* best utility | it is returning the input; the privacy it existed for is gone |
+| `label-belongs-to-a-response` | one human label per case, reused | the label describes the incumbent, so every system is scored on matching it |
+| `blocking-hides-a-pair` | 73% fewer comparisons, same duplicates found | pairs split across blocks are unreachable at any threshold |
+
+The full set is [`docs/CASE_STUDIES.md`](docs/CASE_STUDIES.md), which is
+**generated**: each study's numbers are computed when the document is rendered,
+and `tests/test_casestudies.py` fails if the committed copy drifts from what the
+code produces.
+
+## Thirteen domains with the code already written
 
 A **template** is a shape with typed ports and zero candidates. A **pack** is the
 other half: real candidates with real implementations, so a domain goes from
@@ -197,6 +265,7 @@ browsergraph packs harness --solve    # run one
 | `migrate` | move data and prove it arrived | equal counts with swapped contents look identical |
 | `files` | do the same thing to every file | one parser per folder is not enough, and only a verifier that counts records knows |
 | `tabular` | fit a model on a table | the model has to carry its own encoding, or the wrong encoder wins |
+| `clean` | repair a messy table | `repair.drop` empties the table, every check passes, and only the row count says so |
 
 Each pack's docstring carries a table of **measured** numbers, and
 `tests/test_packs.py` turns every one of those sentences into arithmetic. A pack
@@ -477,7 +546,7 @@ chromedriver/snap version skew, a dependency that ships broken source.
 | **Universal graph** | portable node manifests, atomic candidates, stage/route validation and a five-view studio — [UNIVERSAL_GRAPH_SYSTEM.md](UNIVERSAL_GRAPH_SYSTEM.md) |
 | **Evidence** | per-candidate, per-context posteriors; Thompson-samples a route at *sum* cost instead of enumerating, and reports how many **bits** of the choice remain |
 | **Pictures** | seven figures of any workbench — shape, route space, funnel, per-step evidence, run timeline, solve scoreboard, learning trend — as self-contained SVG, Mermaid, JSON or matplotlib. Domain-neutral: `viz` takes a graph and knows nothing else |
-| **Domain packs** | twelve non-browser domains with the code already written. Standard library only, every route of every pack executed by a test: `browsergraph packs harness --solve` |
+| **Domain packs** | thirteen non-browser domains with the code already written. Standard library only, every route of every pack executed by a test: `browsergraph packs harness --solve` |
 | **Taxonomy** | 41 pipeline categories in 9 families, classified by shape and silent failure; coverage counted from the registries, gaps listed — [docs/PIPELINE_TAXONOMY.md](docs/PIPELINE_TAXONOMY.md) |
 | **Due care** | what an evaluation owes, as values: nine obligations, `PASS`/`PROVISIONAL`/`FAIL`, waivers that need a reason, and a feedback loop whose regression cases are permanent |
 | **Route search** | policy gates first, then greedy / beam / exhaustive over the eligible space, reporting how much of it was actually examined |

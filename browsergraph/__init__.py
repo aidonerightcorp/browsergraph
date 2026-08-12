@@ -121,4 +121,10 @@ __all__ = [
 # small, dependency-free and read as data — and `from browsergraph import
 # duecare` failing at the point of use would be a poor first experience of a
 # module whose subject is not cutting corners.
+#
+# Both now live in `assay` and are re-exported from here. The names stay
+# because twenty-three published notebooks use them; the code moved because
+# the map of pipeline shapes and the obligations an evaluation owes are not
+# facts about browsers, and a package that ships them under a browser's name
+# is a package nobody looking for them will find.
 from browsergraph import duecare, taxonomy  # noqa: E402

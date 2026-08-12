@@ -13,6 +13,8 @@
 - [Pipeline taxonomy](docs/PIPELINE_TAXONOMY.md): The 41 shapes engineering work
   comes in, classified by graph shape and silent failure mode, with counted
   coverage — read this first to find out whether a problem is a known shape
+- [Case studies](docs/CASE_STUDIES.md): Twelve ways a pipeline reports success
+  and has done nothing. Generated; every number is measured at render time
 
 ## Code
 
@@ -20,13 +22,22 @@
 - [Wire schemas](solutiongraph/schemas/): JSON Schema 2020-12 contracts
 - [Browser adapter](browsergraph/): Concrete runtime proof
 - [Universal conformance tests](tests/test_solutiongraph.py): Executable architecture requirements
-- [Category map](browsergraph/taxonomy.py): Families, categories, and coverage
-  counted from the template and pack registries
-- [Due care](browsergraph/duecare.py): What an evaluation owes — obligations,
-  PASS/PROVISIONAL/FAIL verdicts, and the regression feedback loop
+- [assay](assay/): The integrity layer, standard library only, importing
+  nothing from browsergraph — taxonomy, obligations, controls, judge
+- [Category map](assay/taxonomy.py): Families, categories, and coverage counted
+  from the template and pack registries. Re-exported as `browsergraph.taxonomy`
+- [Obligations](assay/obligations.py): What an evaluation owes — obligations,
+  PASS/PROVISIONAL/FAIL verdicts, and the regression feedback loop. Was
+  `browsergraph.duecare`, which still works
+- [Controls](assay/controls.py): Null, negative, positive and shuffle controls
+  as values; a harness with none of them cannot exceed PROVISIONAL
+- [Judge audit](assay/judge.py): Agreement above chance, rubric sensitivity,
+  length and position bias. `python -m assay.cli judge --demo`
+- [Case studies](browsergraph/casestudies.py): Twelve real findings, each with
+  a run() that reproduces its numbers
 - [Problem templates](browsergraph/templates.py): 39 shapes with typed ports,
   zero candidates, and the anti-patterns that travel with each
-- [Domain packs](browsergraph/packs/): 12 shapes with the code written; every
+- [Domain packs](browsergraph/packs/): 13 shapes with the code written; every
   route of every pack is executed by a test
 - [Workspace modeling skill](.agents/skills/model-solution-graph/SKILL.md): On-demand agent workflow
 

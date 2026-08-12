@@ -32,6 +32,7 @@ COPY pyproject.toml README.md ./
 # split out — and nothing noticed, because the image is only built on a tag.
 COPY browsergraph ./browsergraph
 COPY solutiongraph ./solutiongraph
+COPY assay ./assay
 RUN pip install ".[${EXTRAS}]"
 
 # Download browser binaries for the chosen engine family (no-op if not needed).

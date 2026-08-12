@@ -265,6 +265,8 @@ browsergraph taxonomy                                # the 41 shapes work comes 
 browsergraph taxonomy --search address               # which category is this job?
 browsergraph taxonomy --coverage                     # what has code, and what does not
 browsergraph packs                                   # domains with the code written
+browsergraph cases                                   # findings a green suite would miss
+browsergraph cases --id judge-below-chance           # one, with its numbers recomputed
 browsergraph packs harness --solve                   # ...and run one on its example
 browsergraph check     job.json                      # valid? and what is advice vs error
 browsergraph draw      job.json -o job.html          # one self-contained page
@@ -296,7 +298,8 @@ need.
 
 ### Evaluating anything
 
-Use `duecare.Ledger`, and do not report a bare score.
+Use `assay.obligations.Ledger` (still importable as `browsergraph.duecare`), and
+do not report a bare score.
 
 - A verdict with a blocking obligation outstanding is `PROVISIONAL`, and
   `Verdict.ok` is false for it. Do not treat it as a pass, and do not "resolve"
@@ -306,8 +309,15 @@ Use `duecare.Ledger`, and do not report a bare score.
 - A check that **could not run** is `outstanding`, not `failed`. Do not convict
   a grader of an evaluation's own sampling — a single-class human sample cannot
   validate anything.
-- Do not compare two scores whose ledger digests differ. `duecare.compare()`
-  will refuse, and the refusal is the useful output.
+- Do not compare two scores whose ledger digests differ.
+  `obligations.compare()` will refuse, and the refusal is the useful output.
+- Put the controls **in the graph**, not on a checklist. `assay.controls`
+  returns `PROVISIONAL` for a harness with no control at all, and `FAIL` when a
+  deliberately broken system scored within the margin of the real one.
+- Grading with a model? Run `assay.judge.audit` against a human sample before
+  quoting the number. Four things go wrong while looking right: agreement at
+  chance, length bias, position bias, and a rubric that decides more than the
+  input does.
 
 `verify` is the one worth wiring into CI. It runs many routes and checks the
 controls: the candidates you named with `--expect-failure` **must** fail. A test

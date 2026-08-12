@@ -1029,6 +1029,38 @@ def cmd_packs(args) -> int:
     return 0 if answer.ok else 1
 
 
+def cmd_cases(args) -> int:
+    """Real findings, each one invisible to a green test suite.
+
+    The numbers are computed when this runs, not read from a file, because a
+    case study whose figures were typed in is a story about a bug rather than
+    a reproduction of one.
+    """
+    from browsergraph import casestudies
+
+    if args.id:
+        try:
+            study = casestudies.get(args.id)
+        except KeyError as exc:
+            print(str(exc).strip("'"), file=sys.stderr)
+            return 2
+        print(casestudies.render(study))
+        return 0
+    if args.category:
+        found = casestudies.for_category(args.category)
+        if not found:
+            print(f"no case study filed under {args.category!r}")
+            return 1
+        for study in found:
+            print(f"{study.id:<36} {study.title}")
+        return 0
+    if args.all:
+        print(casestudies.render_all())
+        return 0
+    print(casestudies.index())
+    return 0
+
+
 def cmd_taxonomy(args) -> int:
     """The finite list of shapes engineering work comes in, and what runs.
 
@@ -1365,6 +1397,14 @@ def main(argv: list[str] | None = None) -> int:
                     help="what has a shape, what has code, what has neither")
     tx.add_argument("--search", metavar="TEXT", help="find categories by word")
     tx.set_defaults(fn=cmd_taxonomy)
+
+    cs = sub.add_parser("cases",
+                        help="real findings a green test suite would miss")
+    cs.add_argument("--id", help="one study, rendered in full")
+    cs.add_argument("--category", help="studies filed under a taxonomy category")
+    cs.add_argument("--all", action="store_true",
+                    help="the whole collection as markdown")
+    cs.set_defaults(fn=cmd_cases)
 
     bm = sub.add_parser("benchmark",
                         help="does searching beat writing it by hand? measured")

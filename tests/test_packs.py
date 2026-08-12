@@ -553,3 +553,89 @@ def test_models_attention_does_not_win_at_this_size():
     for data in ("load.linear_truth", "load.threshold_truth"):
         assert rmse(data, "fit.attention") > rmse(data, "fit.boosted")
         assert rmse(data, "fit.attention") < rmse(data, "fit.constant")
+
+
+# --- clean ------------------------------------------------------------------
+#
+# The pack docstring makes six numeric claims. Each one is arithmetic here,
+# because a docstring number nothing recomputes is a number that was true once.
+
+def test_clean_detectors_disagree_by_exactly_the_outlier():
+    from browsergraph.packs import clean
+
+    rows = clean._rows(clean.TABLE, typed=True)
+    rules = clean._detect(rows, rules=True, robust=False)
+    robust = clean._detect(rows, rules=True, robust=True)
+    schema = clean._detect(rows, rules=False, robust=False)
+
+    assert len(rules["issues"]) == 17
+    assert len(robust["issues"]) == 18
+    assert len(schema["issues"]) == 5
+
+    # The one extra is the 900, and it is found as an outlier rather than as a
+    # range violation — the price ceiling is deliberately loose so that the two
+    # detectors are genuinely different rather than nominally so.
+    extra = [i for i in robust["issues"] if i["kind"] == "outlier"]
+    assert len(extra) == 1 and extra[0]["column"] == "price"
+
+
+def test_clean_a_ledger_without_a_denominator_reads_as_a_clean_run():
+    from browsergraph.packs import clean
+
+    rows = clean._rows(clean.TABLE, typed=True)
+    found = clean._detect(rows, rules=True, robust=False)
+    repaired = clean._repair(rows, found, how="impute")
+
+    without = clean._account(repaired["changes"], found, denominator=False)
+    with_it = clean._account(repaired["changes"], found, denominator=True)
+
+    assert without["fixed"] == with_it["fixed"] == 5
+    assert "still_broken" not in without
+    assert with_it["found"] == 17 and with_it["still_broken"] == 12
+
+
+def test_clean_counting_the_ledger_cannot_see_a_repair_that_did_not_take():
+    """The headline finding: median imputation cannot fill an empty column."""
+    from browsergraph.packs import clean
+
+    rows = clean._rows(clean.TABLE, typed=True)
+    found = clean._detect(rows, rules=True, robust=False)
+    repaired = clean._repair(rows, found, how="impute")
+    ledger = clean._account(repaired["changes"], found, denominator=False)
+
+    counted = clean._verify(repaired["out"], ledger, recheck=False)
+    rechecked = clean._verify(repaired["out"], ledger, recheck=True)
+
+    assert counted["ok"] is True, "the count-based check passes it"
+    assert rechecked["ok"] is False and rechecked["remaining"] == 12
+
+
+def test_clean_dropping_every_row_passes_every_check():
+    """An empty table is perfectly clean, and only the row count says so."""
+    from browsergraph.packs import clean
+
+    rows = clean._rows(clean.TABLE, typed=True)
+    found = clean._detect(rows, rules=True, robust=False)
+    repaired = clean._repair(rows, found, how="drop")
+    ledger = clean._account(repaired["changes"], found, denominator=True)
+
+    assert ledger["rows_before"] == 12 and ledger["rows_after"] == 0
+    assert ledger["rows_deleted"] == 12
+    verdict = clean._verify(repaired["out"], ledger, recheck=True)
+    assert verdict["ok"] is True and verdict["remaining"] == 0
+
+
+def test_clean_the_verifier_refuses_the_emptied_table():
+    """`solve` must not crown the route that deleted the data.
+
+    The check above shows the graph's own verdict cannot catch this. The
+    verifier weights by rows kept for exactly that reason, and this test is
+    what stops that weighting being quietly dropped as an oddity later.
+    """
+    from browsergraph import packs
+    from browsergraph.packs import clean
+
+    pack = packs.get("clean")
+    answer = pack.solve(verify=clean.leaves_nothing_unexplained, attempts=24)
+    assert answer.ok
+    assert answer.champion["repair"] != "repair.drop"
