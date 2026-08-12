@@ -3,6 +3,86 @@
 Notable changes. Dates are the release date; the format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) loosely.
 
+## [Unreleased]
+
+The theme is **the shapes engineering work comes in, and what an evaluation
+owes**. 0.4.0 could express and run a graph. It could not tell you whether your
+problem was one of the shapes it knew, and it had no answer to "would this
+harness have noticed if the system were broken".
+
+### Added
+
+- **`taxonomy.py`** — 41 pipeline categories in 9 families, classified by
+  **shape and silent failure mode** rather than by subject matter. Two jobs are
+  the same category when they have the same graph shape and go wrong the same
+  way; they are different categories when a correct implementation of one is a
+  silently broken implementation of the other. Every category records how it
+  fails *while reporting success*, and a test refuses to let one exist without
+  that field. Coverage is counted from the template and pack registries on
+  every call, so the 28 gaps are real gaps; `OUT_OF_SCOPE` names what the map
+  deliberately excludes and why. `browsergraph taxonomy` and
+  [docs/PIPELINE_TAXONOMY.md](docs/PIPELINE_TAXONOMY.md).
+- **`duecare.py`** — what an evaluation owes, as values rather than habits.
+  Nine obligations, each discharged with evidence, waived with a stated reason,
+  failed, or visibly outstanding. A verdict computed while a blocking
+  obligation is outstanding is `PROVISIONAL` — not a soft pass, and `ok` is
+  false for it. `waive()` refuses an empty reason. "Could not check" is kept
+  distinct from "checked and came back no": a single-class human sample cannot
+  validate a grader, and reporting that as the grader's fault would convict it
+  of the evaluation's own sampling. The ledger digest hashes the *standard*
+  rather than the score, so `compare()` refuses two numbers produced under
+  different obligations. `Loop` makes each round's failures permanent
+  regression cases, folds outcomes into route evidence, and reports **new**
+  failures per round because a falling total is also what deleting the hard
+  cases looks like.
+- **28 new templates**, taking the catalogue from 11 to 39: cleaning,
+  imputation, entity resolution, merging, reference/geographic/temporal and
+  place-and-time enrichment, EDA, anomalies, clustering, user flows, feature
+  engineering, model bake-off, policy learning, synthetic tabular data,
+  synthetic corpora, adversarial generation, document assembly, evaluation
+  harness, LLM-as-judge, red team, supervisor-worker agents, tool use, drift
+  monitoring, front-end rendering, image conditioning and stream windowing.
+  The compiler rejected six of them on first instantiation, at a port, with a
+  reason — a multi-output node needs its edge to name which port it leaves by.
+- **Eight new packs**, taking the registry from 4 to 12: `harness`, `judge`,
+  `redteam`, `agents`, `geo`, `spacetime`, `synth`, `models`. Every pack
+  docstring carries a table of measured numbers and `tests/test_packs.py` turns
+  each of those sentences into arithmetic.
+- **Examples 09-13** — a defensible evaluation and its feedback loop;
+  supervisors and workers; place and time; synthetic data; and finding your
+  shape in the taxonomy.
+
+### Findings from building it
+
+Kept because the packs exist to show them, and each one is documented where it
+happened rather than smoothed away.
+
+- A **depth-three regression tree scored worse than predicting the mean** on
+  the threshold dataset, because one-hot encoding drops a reference level and
+  the tree then needs two of its three splits to isolate the dropped category.
+  The encoding a linear model requires is not the encoding a tree requires.
+- **Boosting depth-one stumps is an additive model** and cannot express an
+  interaction at all, so it did no better than the linear fit on data built
+  from one. The base learner is at depth two for that reason.
+- A **detector fitted to its own attack set is wrong in both directions**: it
+  fires on attempts the guard successfully blocked and is silent on the four
+  families that got through.
+- **`utility.tsts` did not flatter the marginal generator**, because a
+  generator that destroys every relationship destroys it for itself too. A
+  fifth generator was added — internally perfect, externally useless — because
+  that is the case train-on-synthetic-test-on-synthetic cannot see through.
+- A **human label belongs to a response, not to a case.** The first draft of
+  the harness pack attached one to each case, which silently made it a label
+  about whichever system happened to run.
+
+### Changed
+
+- `enrich.geo`'s `attach` slot grew a second output port. An enrichment that
+  filters is a filter, and the rows it would not code now leave by their own
+  port rather than out of the count.
+- `tests/test_examples.py` globbed `0*.py`, which stopped covering the examples
+  the moment there were more than nine.
+
 ## [0.4.0] — 2026-08-10
 
 The theme is **running it, and looking at what happened**. 0.3.0 could describe a

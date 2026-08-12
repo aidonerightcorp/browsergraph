@@ -12,8 +12,12 @@ import sys
 
 import pytest
 
+# Numbered examples only — `solutiongraph_quickstart.py` is deliberately not
+# in the sequence. The glob was `0*.py` until there were more than nine, at
+# which point it silently stopped covering the new ones, which is the failure
+# mode of every glob that encodes a count.
 EXAMPLES = sorted((pathlib.Path(__file__).resolve().parent.parent
-                   / "examples").glob("0*.py"))
+                   / "examples").glob("[0-9][0-9]_*.py"))
 
 
 def test_there_are_examples_to_run():

@@ -1029,6 +1029,66 @@ def cmd_packs(args) -> int:
     return 0 if answer.ok else 1
 
 
+def cmd_taxonomy(args) -> int:
+    """The finite list of shapes engineering work comes in, and what runs.
+
+    Three questions this answers and nothing else in the CLI does: is my
+    problem one of the known shapes, which shape is it, and has anybody
+    written the code for it yet. The coverage numbers are counted from the
+    template and pack registries every time this runs, so a gap here is a real
+    gap rather than a stale note.
+    """
+    from browsergraph import taxonomy
+
+    if args.search:
+        found = taxonomy.search(args.search)
+        if not found:
+            print(f"nothing about {args.search!r} in {len(taxonomy.CATEGORIES)} "
+                  f"categories. Try `browsergraph taxonomy` for the whole map.")
+            return 1
+        for category in found:
+            print(f"{category.id:<24} {category.title}")
+            print(f"{'':<24} {category.question}")
+            print(f"{'':<24} shape: {category.template or '(none written)'}"
+                  f"   code: {category.pack or '(none written)'}")
+        return 0
+
+    if args.name:
+        try:
+            category = taxonomy.get(args.name)
+        except KeyError as problem:
+            print(str(problem).strip('"'))
+            return 1
+        print(f"{category.id}  [{category.family}]")
+        print(f"  {category.title} — {category.question}")
+        print(f"  shape:     {category.shape}")
+        print(f"  fails as:  {category.fails_as}")
+        print(f"  template:  {category.template or '(none written yet)'}")
+        print(f"  pack:      {category.pack or '(none written yet)'}")
+        if category.not_to_be_confused_with:
+            print(f"  not:       {', '.join(category.not_to_be_confused_with)}")
+        for example in category.examples:
+            print(f"  e.g.       {example}")
+        return 0
+
+    if args.coverage:
+        print(taxonomy.coverage().text())
+        print("\nout of scope, deliberately:")
+        for name, why in taxonomy.OUT_OF_SCOPE:
+            print(f"  {name}")
+            print(f"    {why}")
+        return 0
+
+    print(taxonomy.catalog_text(args.family or ""))
+    found = taxonomy.coverage()
+    print(f"\n{found.total} categories · {found.expressible} with a checkable "
+          f"shape · {found.runnable} with code that runs")
+    print("  browsergraph taxonomy --coverage      what is missing, and why")
+    print("  browsergraph taxonomy enrich.geo      one category")
+    print("  browsergraph taxonomy --search address")
+    return 0
+
+
 def cmd_benchmark(args) -> int:
     """Does the searching help? Run the task every way and print the table.
 
@@ -1296,6 +1356,15 @@ def main(argv: list[str] | None = None) -> int:
     pk.add_argument("--draw", metavar="PATH", help="write a report page here")
     pk.add_argument("--attempts", type=int, default=8)
     pk.set_defaults(fn=cmd_packs)
+
+    tx = sub.add_parser("taxonomy",
+                        help="the finite list of pipeline shapes, and what runs")
+    tx.add_argument("name", nargs="?", help="one category id, e.g. enrich.geo")
+    tx.add_argument("--family", help="only this family")
+    tx.add_argument("--coverage", action="store_true",
+                    help="what has a shape, what has code, what has neither")
+    tx.add_argument("--search", metavar="TEXT", help="find categories by word")
+    tx.set_defaults(fn=cmd_taxonomy)
 
     bm = sub.add_parser("benchmark",
                         help="does searching beat writing it by hand? measured")

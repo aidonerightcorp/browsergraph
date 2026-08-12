@@ -19,9 +19,22 @@ python examples/01_smallest_useful_graph.py
 | 07 | [Solve it for me](07_solve_it_for_me.py) | one call: try, judge, champion plus fallback |
 | 08 | [Draw what happened](08_draw_what_happened.py) | a timeline and a scoreboard of a real run, in one page |
 
-They are meant to be read in order and copied out of. Every one is short enough
+01-08 are meant to be read in order and copied out of. Every one is short enough
 to hold in your head, which is the point — a 300-line example teaches the
 example rather than the library.
+
+## Whole jobs
+
+These are longer, and each one is a category of work rather than a feature of
+the library. Every number they print is computed when you run them.
+
+| | Script | What it shows |
+|---|---|---|
+| 09 | [An evaluation you could defend](09_due_care_evaluation.py) | six routes, six scores, and the ledger that says which one you may act on — plus the loop that turns this round's failures into next round's cases |
+| 10 | [Supervisors and workers](10_supervisors_and_workers.py) | the four-field answer to a three-field document, and why the best-looking output is the wrong one |
+| 11 | [Place and time](11_place_and_time.py) | addresses that are well-formed and do not exist; a rainfall figure published two days after the sale; midnight in Denver landing in next year |
+| 12 | [Synthetic data](12_synthetic_data.py) | five generators, five different ways to score well, and the one metric that catches the copier |
+| 13 | [Find your shape](13_find_your_shape.py) | look the job up in the taxonomy, get a typed skeleton and the mistakes people make in it |
 
 ## The ten-minute version
 

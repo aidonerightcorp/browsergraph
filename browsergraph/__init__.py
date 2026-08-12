@@ -113,4 +113,12 @@ __all__ = [
     "guided", "Suggestion", "ollama_proposer",
     # pictures of any workbench — `import browsergraph.viz` for the rest
     "VizFigure", "viz_report",
+    # what an evaluation owes, and the map of shapes it can be applied to
+    "duecare", "taxonomy",
 ]
+
+# Imported eagerly rather than exposed through `__getattr__` because both are
+# small, dependency-free and read as data — and `from browsergraph import
+# duecare` failing at the point of use would be a poor first experience of a
+# module whose subject is not cutting corners.
+from browsergraph import duecare, taxonomy  # noqa: E402

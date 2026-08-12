@@ -261,8 +261,11 @@ give it no file. The functions stay outside the graph — `--runtime module:name
 is the only thing that differs between a dry run and a live one.
 
 ```bash
+browsergraph taxonomy                                # the 41 shapes work comes in
+browsergraph taxonomy --search address               # which category is this job?
+browsergraph taxonomy --coverage                     # what has code, and what does not
 browsergraph packs                                   # domains with the code written
-browsergraph packs tabular --solve                   # ...and run one on its example
+browsergraph packs harness --solve                   # ...and run one on its example
 browsergraph check     job.json                      # valid? and what is advice vs error
 browsergraph draw      job.json -o job.html          # one self-contained page
 browsergraph draw      job.json --format mermaid     # for a README
@@ -278,6 +281,33 @@ browsergraph verify    job.json --runtime mine:RUNTIME --expect-failure bad.node
 `--stage NAME`, `--verify module:name`, or an explicit `--accept-anything`. It
 is not defaulted, because the default would be "nothing raised", and a route
 that returns an empty result passes that with full marks.
+
+### Before modelling a new domain, look it up
+
+`browsergraph taxonomy --search <word>` first. The map holds 41 categories
+classified by **graph shape and silent failure mode**, and a job that matches one
+should start from that template rather than from a blank workbench: two harnesses
+that both start from `tabular.supervised` produce comparable graphs, and two that
+each invented a pipeline produce two snowflakes.
+
+Each category names the way it fails *while reporting success*. Read that field
+before writing the verifier — it is usually a description of the verifier you
+need.
+
+### Evaluating anything
+
+Use `duecare.Ledger`, and do not report a bare score.
+
+- A verdict with a blocking obligation outstanding is `PROVISIONAL`, and
+  `Verdict.ok` is false for it. Do not treat it as a pass, and do not "resolve"
+  it by removing the obligation.
+- `waive()` requires a reason and the waiver appears in the report. Waiving is
+  a legitimate move; waiving silently is not available.
+- A check that **could not run** is `outstanding`, not `failed`. Do not convict
+  a grader of an evaluation's own sampling — a single-class human sample cannot
+  validate anything.
+- Do not compare two scores whose ledger digests differ. `duecare.compare()`
+  will refuse, and the refusal is the useful output.
 
 `verify` is the one worth wiring into CI. It runs many routes and checks the
 controls: the candidates you named with `--expect-failure` **must** fail. A test

@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Core deps: none](https://img.shields.io/badge/core%20deps-stdlib--only-brightgreen)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-1467%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-1848%20passing-brightgreen)](tests/)
 [![Studio](https://img.shields.io/badge/studio-explore%20live-2f6fed)](https://aidonerightcorp.github.io/browsergraph/)
 [![Kaggle](https://img.shields.io/badge/Kaggle-run%20it%20now-20BEFF?logo=kaggle)](https://www.kaggle.com/code/taylorsamarel/browsergraph-composable-browser-automation)
 
@@ -104,6 +104,104 @@ one plus a fallback. It refuses to run until you say what a good answer looks
 like — the default would be "nothing raised", and a route that returns an empty
 result passes that with full marks. The full command list is in
 [AGENTS.md](AGENTS.md#the-whole-loop-from-a-terminal).
+
+## Is my problem one of the known shapes?
+
+Engineering pipelines are not infinitely various. Backend request handling,
+front-end analytics, cleaning, geographic and temporal enrichment, model
+training, synthetic data, LLM harnesses — most of it falls into about forty
+shapes, and the shapes repeat across domains with nothing else in common.
+[**docs/PIPELINE_TAXONOMY.md**](docs/PIPELINE_TAXONOMY.md) is the map:
+**41 categories in 9 families**, classified by *shape and failure mode* rather
+than by subject, because that is the classification that helps.
+
+```bash
+browsergraph taxonomy --search address    # which category is this?
+browsergraph taxonomy enrich.geo          # its shape, and how it fails
+browsergraph taxonomy --coverage          # what has code, what does not
+```
+
+Every category records how it **fails while reporting success**, and that field
+is the load-bearing one — a category with no characteristic silent failure is a
+topic with a nice name, and a test refuses to let one exist. Coverage is counted
+from the registries on every run: 41 categories have a checkable shape, 13 have
+code that runs, and the 28 gaps are listed rather than rounded up.
+
+## Harnesses, and evaluations you could defend
+
+The obligations of an evaluation are usually habits. `duecare` makes them
+values: nine obligations, each **discharged with evidence, waived with a stated
+reason, failed, or visibly outstanding** — and a verdict computed while a
+blocking obligation is outstanding is `PROVISIONAL`, never a pass.
+
+```python
+from browsergraph import duecare
+
+ledger = duecare.Ledger.standard()
+ledger.discharge("holdout", "cases 0-199 were never used in development")
+ledger.record(duecare.check_negative_control(real=0.91, broken=0.89))
+print(ledger.verdict(0.91).text())
+# FAIL — 0.910  [50ed4cc56a8c]
+#   failed:      negative_control — a deliberately broken variant scored 0.890
+#                against 0.910: a gap of 0.020 does not clear 0.050. This
+#                harness cannot separate the system from a broken one, so its
+#                previous results do not mean what they appeared to
+```
+
+Three states, and the middle one is the point. **PASS** — every blocking
+obligation met. **PROVISIONAL** — the number exists and nobody may act on it
+yet; this is the honest description of most evaluations. **FAIL** — a check ran
+and came back no, which is worse news than not having run it, because it means
+the previous results were noise.
+
+"Could not check" is a fourth thing and is kept distinct from "checked and
+failed": a single-class human sample cannot validate a grader, and reporting
+that as the grader's fault would convict it of the evaluation's own sampling.
+
+A waiver **needs a reason** — `waive()` refuses an empty one — and waivers appear
+in the report as prominently as discharges. The ledger's digest is a hash of the
+standard rather than the score, so `duecare.compare()` will tell you two numbers
+are *not comparable* when the standard slipped between them.
+
+The other half is the loop: each round's failures become permanent regression
+cases, and the outcome folds into route evidence, so the search learns from the
+same observation that graded the output. It reports **new** failures per round
+rather than total, because a total that goes down is also what deleting the hard
+cases looks like.
+
+[**Example 09**](examples/09_due_care_evaluation.py) runs all of it.
+
+## Twelve domains with the code already written
+
+A **template** is a shape with typed ports and zero candidates. A **pack** is the
+other half: real candidates with real implementations, so a domain goes from
+expressible to runnable in two calls. Standard library only, and a test runs
+*every route of every pack* — not a sample.
+
+```bash
+browsergraph packs                    # the catalogue
+browsergraph packs harness --solve    # run one
+```
+
+| pack | the job | the finding it exists to show |
+|---|---|---|
+| `harness` | grade a system on cases | four graders, one measuring answer length — and only the controls can tell them apart |
+| `judge` | a model grading other models | 70% raw agreement, and a kappa below zero; and the *rubric* matters more than the judge |
+| `redteam` | attack a system on purpose | 32 attacks on one family found nothing; 20 across five found four holes |
+| `agents` | supervisor, workers, critic | the four-field answer to a three-field document is the best-looking output and the only wrong one |
+| `synth` | synthetic tabular data | five generators, five ways to score well; the copier tops fidelity *and* utility |
+| `models` | linear / tree / boosted / MLP / attention | no winner column — the answer depends on the data-generating process |
+| `geo` | addresses into checked places | a format check accepts `Denver, XZ 80202` and a nonexistent ZIP |
+| `spacetime` | place × time enrichment | the better rainfall figure is a leak; midnight in Denver lands in next year |
+| `quality` | a gate that may refuse | three adjudicators that disagree on purpose |
+| `migrate` | move data and prove it arrived | equal counts with swapped contents look identical |
+| `files` | do the same thing to every file | one parser per folder is not enough, and only a verifier that counts records knows |
+| `tabular` | fit a model on a table | the model has to carry its own encoding, or the wrong encoder wins |
+
+Each pack's docstring carries a table of **measured** numbers, and
+`tests/test_packs.py` turns every one of those sentences into arithmetic. A pack
+that argues something in prose and cannot demonstrate it is a pack making a
+claim, which is the thing this repository is arranged against.
 
 **Explore it in your browser, installing nothing:**
 [the live studio](https://aidonerightcorp.github.io/browsergraph/) — all 166
@@ -379,7 +477,9 @@ chromedriver/snap version skew, a dependency that ships broken source.
 | **Universal graph** | portable node manifests, atomic candidates, stage/route validation and a five-view studio — [UNIVERSAL_GRAPH_SYSTEM.md](UNIVERSAL_GRAPH_SYSTEM.md) |
 | **Evidence** | per-candidate, per-context posteriors; Thompson-samples a route at *sum* cost instead of enumerating, and reports how many **bits** of the choice remain |
 | **Pictures** | seven figures of any workbench — shape, route space, funnel, per-step evidence, run timeline, solve scoreboard, learning trend — as self-contained SVG, Mermaid, JSON or matplotlib. Domain-neutral: `viz` takes a graph and knows nothing else |
-| **Domain packs** | three non-browser domains with the code already written — batch a folder, gate data quality, fit a tabular model. Standard library only, every route executed by a test: `browsergraph packs tabular --solve` |
+| **Domain packs** | twelve non-browser domains with the code already written. Standard library only, every route of every pack executed by a test: `browsergraph packs harness --solve` |
+| **Taxonomy** | 41 pipeline categories in 9 families, classified by shape and silent failure; coverage counted from the registries, gaps listed — [docs/PIPELINE_TAXONOMY.md](docs/PIPELINE_TAXONOMY.md) |
+| **Due care** | what an evaluation owes, as values: nine obligations, `PASS`/`PROVISIONAL`/`FAIL`, waivers that need a reason, and a feedback loop whose regression cases are permanent |
 | **Route search** | policy gates first, then greedy / beam / exhaustive over the eligible space, reporting how much of it was actually examined |
 | **Capabilities** | each engine declares what it can do — press, select, upload, download, frames, cookies, viewport, PDF — checked against a graph *before* a browser launches, with the engines that could run it |
 | **Receipts** | every run writes durable evidence: route, engine, per-step timing, artifacts with content hashes, which steps verified, and a pasteable replay line — for failures too |
@@ -397,6 +497,7 @@ chromedriver/snap version skew, a dependency that ships broken source.
 | [docs/TOWARD_A_GENERAL_MODEL.md](docs/TOWARD_A_GENERAL_MODEL.md) | a critical review — what is still wrong, and what to fix first |
 | [QUICKSTART.md](QUICKSTART.md) | first graph, first real browser, first task |
 | [UNIVERSAL_GRAPH_SYSTEM.md](UNIVERSAL_GRAPH_SYSTEM.md) | stages, candidates, routes, contracts, feedback, optimization |
+| [docs/PIPELINE_TAXONOMY.md](docs/PIPELINE_TAXONOMY.md) | the 41 shapes engineering work comes in, and which have code |
 | [docs/ROUTE_SEARCH_REPORT.md](docs/ROUTE_SEARCH_REPORT.md) | policy gating and route search, measured end to end |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | the Protocol-vs-base-class seam |
 | [CONTRACTS.md](CONTRACTS.md) | what a node promises, and the three moments it is checked |
@@ -420,7 +521,7 @@ breaks something.
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                  # 884 tests; browser suites skip when absent
+pytest -q                                  # 1,848 tests; browser suites skip when absent
 mypy browsergraph --ignore-missing-imports
 ruff check browsergraph tests
 ```

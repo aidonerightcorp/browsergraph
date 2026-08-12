@@ -93,13 +93,22 @@ def test_the_anti_patterns_survive_into_the_instantiated_workbench(template):
 
 # --- the joins are the point ------------------------------------------------
 
-def test_a_multi_input_slot_is_wired_from_two_different_sources():
-    """A 'join' fed by one edge is a chain with extra ceremony."""
+def test_a_multi_input_slot_is_wired_from_more_than_one_edge():
+    """A 'join' fed by one edge is a chain with extra ceremony.
+
+    Counted over `(source, port)` rather than over sources. Two edges leaving
+    *different ports of the same node* is a real two-input step — `split` hands
+    `prepare` a training half and a validation half, and no single-port chain
+    can carry both. Counting distinct sources rejected that, which is stricter
+    than the sentence above and stricter than it should be: the thing being
+    forbidden is a slot that declares two inputs and receives one value.
+    """
     for template in T.CATALOG:
         for slot in template.slots:
             if len(slot.inputs) < 2:
                 continue
-            feeders = {e.source for e in template.edges if e.target == slot.id}
+            feeders = {(e.source, e.from_port) for e in template.edges
+                       if e.target == slot.id}
             assert len(feeders) >= 2, (
                 f"{template.id}.{slot.id} declares {len(slot.inputs)} inputs but "
                 f"is fed by {feeders}")
