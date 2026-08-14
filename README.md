@@ -164,7 +164,14 @@ printed by the command rather than typed into this page.
 validate a judge, and reporting that as the judge's fault convicts it of the
 evaluation's own sampling.
 
-[**Example 14**](examples/14_audit_a_judge.py) · [`assay/README.md`](assay/README.md)
+`assay` now lives in its own repository —
+[github.com/aidonerightcorp/assay](https://github.com/aidonerightcorp/assay) is
+the canonical home. The copy in this tree is vendored and frozen so the wheel
+stays self-contained and the published notebooks keep working;
+`from browsergraph import duecare` and `from browsergraph import taxonomy`
+still mean the same objects and will keep doing so.
+
+[**Example 14**](examples/14_audit_a_judge.py) · [`assay/README.md`](assay/README.md) · [canonical repo](https://github.com/aidonerightcorp/assay)
 
 ## Controls, and evaluations you could defend
 

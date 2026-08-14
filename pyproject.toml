@@ -60,7 +60,9 @@ packages = [
     # The domain-neutral core. browsergraph is one adapter on top of it.
     "solutiongraph", "solutiongraph.schemas",
     # Check the measurement, not just the thing measured. Imports neither of
-    # the above, and ships here only until it has somewhere else to live.
+    # the above. Canonical home: https://github.com/aidonerightcorp/assay —
+    # the copy in this tree is vendored and frozen so the wheel stays
+    # self-contained and the published notebooks keep working.
     "assay",
 ]
 
